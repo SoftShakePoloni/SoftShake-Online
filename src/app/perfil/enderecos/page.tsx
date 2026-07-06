@@ -34,24 +34,10 @@ export default function PaginaEnderecos() {
           
           let enderecosCarregados: Endereco[] = [];
           
-          if (dados.cliente?.enderecos_adicionais) {
-            if (Array.isArray(dados.cliente.enderecos_adicionais)) {
-              enderecosCarregados = dados.cliente.enderecos_adicionais as Endereco[];
-            } else if (typeof dados.cliente.enderecos_adicionais === 'string') {
-              try {
-                const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
-                if (Array.isArray(parsed)) {
-                  enderecosCarregados = parsed as Endereco[];
-                }
-              } catch {
-                // Ignora erro
-              }
-            }
-          }
-          
-          if (enderecosCarregados.length === 0 && dados.cliente?.endereco) {
+          // SEMPRE adiciona o endereço legado (principal) se existir
+          if (dados.cliente?.endereco) {
             enderecosCarregados.push({
-              id: 'endereco-principal',
+              id: 'endereco-legado',
               apelido: 'Principal',
               logradouro: dados.cliente.endereco.split(',')[0]?.trim() || '',
               numero: dados.cliente.endereco.split(',')[1]?.split('-')[0]?.trim() || '',
@@ -63,6 +49,34 @@ export default function PaginaEnderecos() {
               principal: true,
               created_at: new Date().toISOString(),
             });
+          }
+          
+          // Adiciona os endereços adicionais (se houver)
+          if (dados.cliente?.enderecos_adicionais) {
+            let enderecosAdicionais: Endereco[] = [];
+            
+            if (Array.isArray(dados.cliente.enderecos_adicionais)) {
+              enderecosAdicionais = dados.cliente.enderecos_adicionais as Endereco[];
+            } else if (typeof dados.cliente.enderecos_adicionais === 'string') {
+              try {
+                const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
+                if (Array.isArray(parsed)) {
+                  enderecosAdicionais = parsed as Endereco[];
+                }
+              } catch {
+                // Ignora erro
+              }
+            }
+            
+            // Se existe endereço legado, todos os adicionais têm principal: false
+            if (enderecosCarregados.length > 0) {
+              enderecosAdicionais = enderecosAdicionais.map(e => ({
+                ...e,
+                principal: false,
+              }));
+            }
+            
+            enderecosCarregados = [...enderecosCarregados, ...enderecosAdicionais];
           }
           
           setEnderecos(enderecosCarregados);
@@ -80,6 +94,12 @@ export default function PaginaEnderecos() {
   }, [cliente]);
 
   const handleRemover = async (enderecoId: string) => {
+    // Não permite remover o endereço legado
+    if (enderecoId === 'endereco-legado') {
+      toast.error('O endereço principal não pode ser removido');
+      return;
+    }
+    
     setRemovendo(enderecoId);
     
     try {
@@ -104,6 +124,13 @@ export default function PaginaEnderecos() {
   };
 
   const handleDefinirPrincipal = async (enderecoId: string) => {
+    // Não permite definir outro como principal se o legado existe
+    const temEnderecoLegado = enderecos.some(e => e.id === 'endereco-legado');
+    if (temEnderecoLegado) {
+      toast.error('O endereço principal não pode ser alterado');
+      return;
+    }
+    
     try {
       const resposta = await fetch('/api/enderecos/principal', {
         method: 'PUT',
@@ -197,7 +224,7 @@ export default function PaginaEnderecos() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  {!endereco.principal && (
+                  {!endereco.principal && endereco.id !== 'endereco-legado' && !enderecos.some(e => e.id === 'endereco-legado') && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -208,16 +235,18 @@ export default function PaginaEnderecos() {
                       Tornar Principal
                     </Button>
                   )}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleRemover(endereco.id)}
-                    disabled={removendo === endereco.id}
-                    className={!endereco.principal ? '' : 'flex-1'}
-                  >
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Remover
-                  </Button>
+                  {endereco.id !== 'endereco-legado' && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemover(endereco.id)}
+                      disabled={removendo === endereco.id}
+                      className={!endereco.principal && !enderecos.some(e => e.id === 'endereco-legado') ? '' : 'flex-1'}
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Remover
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

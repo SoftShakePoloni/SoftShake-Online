@@ -21,14 +21,7 @@ export default async function NovoEnderecoPage() {
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Adicionar Endereço
-            </h1>
-            <p className="text-muted-foreground">
-              Preencha os dados do novo endereço
-            </p>
-          </div>
+         
         </div>
 
         <FormularioEndereco />
