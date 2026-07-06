@@ -61,29 +61,13 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         if (resposta.ok) {
           const dados = await resposta.json();
           
-          // Processa endereços adicionais
+          // Processa endereços
           let enderecos: Endereco[] = [];
           
-          if (dados.cliente?.enderecos_adicionais) {
-            if (Array.isArray(dados.cliente.enderecos_adicionais)) {
-              enderecos = dados.cliente.enderecos_adicionais as Endereco[];
-            } else if (typeof dados.cliente.enderecos_adicionais === 'string') {
-              try {
-                const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
-                if (Array.isArray(parsed)) {
-                  enderecos = parsed as Endereco[];
-                }
-              } catch (e) {
-                // Ignora erro de parse
-              }
-            }
-          }
-          
-          // Se não tem endereços adicionais mas tem o campo endereco (endereço legado)
-          // Adiciona como primeiro endereço na lista
-          if (enderecos.length === 0 && dados.cliente?.endereco) {
+          // SEMPRE adiciona o endereço legado (principal) se existir
+          if (dados.cliente?.endereco) {
             enderecos.push({
-              id: 'endereco-principal',
+              id: 'endereco-legado',
               apelido: 'Principal',
               logradouro: dados.cliente.endereco.split(',')[0]?.trim() || '',
               numero: dados.cliente.endereco.split(',')[1]?.split('-')[0]?.trim() || '',
@@ -97,13 +81,38 @@ export function ModalSacola({ open, onOpenChange }: Props) {
             });
           }
           
+          // Adiciona endereços adicionais
+          if (dados.cliente?.enderecos_adicionais) {
+            let enderecosAdicionais: Endereco[] = [];
+            
+            if (Array.isArray(dados.cliente.enderecos_adicionais)) {
+              enderecosAdicionais = dados.cliente.enderecos_adicionais as Endereco[];
+            } else if (typeof dados.cliente.enderecos_adicionais === 'string') {
+              try {
+                const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
+                if (Array.isArray(parsed)) {
+                  enderecosAdicionais = parsed as Endereco[];
+                }
+              } catch (e) {
+                // Ignora erro de parse
+              }
+            }
+            
+            // Se existe endereço legado, todos os adicionais têm principal: false
+            if (enderecos.length > 0) {
+              enderecosAdicionais = enderecosAdicionais.map(e => ({
+                ...e,
+                principal: false,
+              }));
+            }
+            
+            enderecos = [...enderecos, ...enderecosAdicionais];
+          }
+          
           setEnderecosDisponiveis(enderecos);
           
-          // Seleciona o endereço principal por padrão
-          const principal = enderecos.find(e => e.principal);
-          if (principal) {
-            setEnderecoSelecionado(principal.id);
-          } else if (enderecos.length > 0) {
+          // Seleciona o endereço principal por padrão (sempre o primeiro se existe)
+          if (enderecos.length > 0) {
             setEnderecoSelecionado(enderecos[0].id);
           }
         }
