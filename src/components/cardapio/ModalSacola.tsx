@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useCarrinho, resumoOpcoes } from "@/context/CarrinhoContext";
+import { resolveSelectionsFromProduct } from "@/lib/utils/pedido";
 import { useLoja } from "@/hooks/useLoja";
 import { formatBRL } from "@/data/tipos";
 import { useAuth } from "@/context/AuthContext";
@@ -211,19 +212,26 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         subtotal,
         taxa_entrega: frete,
         total,
-        itens: itens.map(item => ({
-          uid: item.uid,
-          produto: {
-            id: item.produto.id,
-            name: item.produto.name,
-            price: item.produto.price,
-            image: item.produto.image,
-          },
-          qty: item.qty,
-          selections: item.selections,
-          observacoes: item.observacoes,
-          total: item.total,
-        })),
+        itens: itens.map(item => {
+          const adicionais = resolveSelectionsFromProduct(
+            item.produto,
+            item.selections
+          );
+          return {
+            uid: item.uid,
+            produto: {
+              id: item.produto.id,
+              name: item.produto.name,
+              price: item.produto.price,
+              image: item.produto.image,
+            },
+            qty: item.qty,
+            selections: item.selections,
+            adicionais,
+            observacoes: item.observacoes,
+            total: item.total,
+          };
+        }),
       };
       
       const resposta = await fetch('/api/pedidos/criar', {

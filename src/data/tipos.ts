@@ -10,6 +10,7 @@ export type OptionItem = {
   name: string;
   priceDelta?: number;
   tag?: Tag;
+  disponivel?: boolean;
 };
 
 export type OptionGroup = {
@@ -31,6 +32,7 @@ export type Product = {
   image?: string;
   tag?: Tag;
   optionGroups?: OptionGroup[];
+  disponivel?: boolean;
 };
 
 export type Category = {

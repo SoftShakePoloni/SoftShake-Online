@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { obterSessao } from '@/lib/auth';
 import { createServerClient } from '@/integrations/supabase/client.server';
+import {
+  enrichPedidoItens,
+  type OpcaoLookup,
+  type GrupoLookup,
+} from '@/lib/utils/pedido';
 
 export async function POST(request: NextRequest) {
   try {
-    // Verifica autenticação
     const sessao = await obterSessao();
-    
+
     if (!sessao) {
       return NextResponse.json(
         { erro: 'Não autenticado' },
@@ -29,7 +33,6 @@ export async function POST(request: NextRequest) {
       itens,
     } = body;
 
-    // Validações básicas
     if (!cliente_nome || !cliente_telefone || !tipo_entrega || !meio_pagamento) {
       return NextResponse.json(
         { erro: 'Campos obrigatórios faltando' },
@@ -51,9 +54,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Cria o pedido no banco
     const supabase = createServerClient();
-    
+
+    // Garante que opções (IDs) sejam gravadas com nomes legíveis
+    const [{ data: opcoes }, { data: grupos }] = await Promise.all([
+      supabase
+        .from('opcoes')
+        .select('id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)'),
+      supabase.from('grupos_opcoes').select('id, nome'),
+    ]);
+
+    const itensEnriquecidos = enrichPedidoItens(
+      itens,
+      (opcoes || []) as OpcaoLookup[],
+      (grupos || []) as GrupoLookup[]
+    ).map((item) => ({
+      ...item,
+      // Garante adicionais nomeados persistidos no JSON
+      adicionais: item.adicionais || item.selectionsResolved || [],
+    }));
+
     const { data: pedido, error } = await supabase
       .from('pedidos')
       .insert({
@@ -68,7 +88,7 @@ export async function POST(request: NextRequest) {
         subtotal,
         taxa_entrega,
         total,
-        itens,
+        itens: itensEnriquecidos,
         status: 'pendente',
       })
       .select()

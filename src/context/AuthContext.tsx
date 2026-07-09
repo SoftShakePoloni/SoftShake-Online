@@ -9,6 +9,9 @@ type ClienteData = {
   nome: string | null;
   telefone: string | null;
   endereco: string | null;
+  created_at?: string | null;
+  enderecos_adicionais?: unknown;
+  email?: string | null;
 };
 
 type AuthContextType = {

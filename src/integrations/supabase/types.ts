@@ -172,6 +172,7 @@ export type Database = {
           preco_adicional: number | null
           status: string | null
           tag_id: number | null
+          esta_disponivel: boolean | null
         }
         Insert: {
           grupo_id?: number | null
@@ -181,6 +182,7 @@ export type Database = {
           preco_adicional?: number | null
           status?: string | null
           tag_id?: number | null
+          esta_disponivel?: boolean | null
         }
         Update: {
           grupo_id?: number | null
@@ -190,6 +192,7 @@ export type Database = {
           preco_adicional?: number | null
           status?: string | null
           tag_id?: number | null
+          esta_disponivel?: boolean | null
         }
         Relationships: [
           {
