@@ -28,9 +28,11 @@ interface OrderSidePanelProps {
   onStatusChange?: (newStatus: Pedido["status"]) => void;
 }
 
-function formatMoney(value?: number | null) {
-  if (value == null || Number.isNaN(Number(value))) return null;
-  return `R$ ${Number(value).toFixed(2).replace(".", ",")}`;
+function formatMoney(value?: number | string | null) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (Number.isNaN(n)) return null;
+  return `R$ ${n.toFixed(2).replace(".", ",")}`;
 }
 
 function entregaLabel(tipo: string) {

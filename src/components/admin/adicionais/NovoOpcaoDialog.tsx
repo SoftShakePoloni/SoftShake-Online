@@ -94,7 +94,7 @@ export function NovoOpcaoDialog({
 
       const novaOpcao = {
         ...data,
-        grupo: (data as any).grupo,
+        grupo: (data as { grupo?: Opcao["grupo"] }).grupo,
       } as Opcao;
 
       onCreate(novaOpcao);

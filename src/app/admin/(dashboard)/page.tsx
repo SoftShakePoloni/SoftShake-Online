@@ -88,7 +88,10 @@ export default async function AdminDashboardPage() {
         {/* Revenue Chart - Takes 2 columns */}
         <div className="xl:col-span-2">
           <PremiumRevenueChart
-            data={data.monthlyData as any}
+            data={data.monthlyData.map((m) => ({
+              name: m.label,
+              receita: m.revenue,
+            }))}
             title="Evolução da Receita"
             description="Receita mensal dos últimos 6 meses"
           />

@@ -48,8 +48,8 @@ type Order = {
   cliente_nome: string;
   cliente_email: string;
   cliente_telefone: string;
-  endereco_entrega: any;
-  itens: any[];
+  endereco_entrega: string | Record<string, unknown> | null;
+  itens: Array<Record<string, unknown>>;
   total: number;
   status: string;
   metodo_pagamento: string;
@@ -171,10 +171,27 @@ export function OrdersTable({ initialOrders }: OrdersTableProps) {
           ${order.endereco_entrega ? `
             <div class="section">
               <div class="section-title">Endereço de Entrega</div>
-              <p>${order.endereco_entrega.rua}, ${order.endereco_entrega.numero}</p>
-              ${order.endereco_entrega.complemento ? `<p>${order.endereco_entrega.complemento}</p>` : ''}
-              <p>${order.endereco_entrega.bairro} - ${order.endereco_entrega.cidade}, ${order.endereco_entrega.estado}</p>
-              <p>CEP: ${order.endereco_entrega.cep}</p>
+              <p>${
+                typeof order.endereco_entrega === "string"
+                  ? order.endereco_entrega
+                  : [
+                      order.endereco_entrega.rua || order.endereco_entrega.logradouro || "",
+                      order.endereco_entrega.numero || "",
+                    ]
+                      .filter(Boolean)
+                      .join(", ")
+              }</p>
+              ${
+                typeof order.endereco_entrega !== "string" && order.endereco_entrega.complemento
+                  ? `<p>${String(order.endereco_entrega.complemento)}</p>`
+                  : ""
+              }
+              ${
+                typeof order.endereco_entrega !== "string"
+                  ? `<p>${String(order.endereco_entrega.bairro || "")} - ${String(order.endereco_entrega.cidade || "")}, ${String(order.endereco_entrega.estado || "")}</p>
+                     <p>CEP: ${String(order.endereco_entrega.cep || "")}</p>`
+                  : ""
+              }
             </div>
           ` : ''}
 
@@ -190,14 +207,19 @@ export function OrdersTable({ initialOrders }: OrdersTableProps) {
                 </tr>
               </thead>
               <tbody>
-                ${order.itens.map(item => `
+                ${order.itens.map((item) => {
+                  const nome = String(item.nome || "Item");
+                  const qtd = Number(item.quantidade ?? item.qty ?? 1);
+                  const preco = Number(item.preco ?? item.price ?? 0);
+                  return `
                   <tr>
-                    <td>${item.nome}</td>
-                    <td>${item.quantidade}</td>
-                    <td>R$ ${item.preco.toFixed(2).replace('.', ',')}</td>
-                    <td>R$ ${(item.quantidade * item.preco).toFixed(2).replace('.', ',')}</td>
+                    <td>${nome}</td>
+                    <td>${qtd}</td>
+                    <td>R$ ${preco.toFixed(2).replace('.', ',')}</td>
+                    <td>R$ ${(qtd * preco).toFixed(2).replace('.', ',')}</td>
                   </tr>
-                `).join('')}
+                `;
+                }).join('')}
               </tbody>
             </table>
           </div>

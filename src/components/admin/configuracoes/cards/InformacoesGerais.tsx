@@ -9,7 +9,10 @@ import { Store } from "lucide-react";
 
 interface InformacoesGeraisProps {
   config: ConfiguracaoLoja;
-  onChange: (field: keyof ConfiguracaoLoja, value: any) => void;
+  onChange: (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => void;
 }
 
 export function InformacoesGerais({ config, onChange }: InformacoesGeraisProps) {

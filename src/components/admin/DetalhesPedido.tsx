@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
@@ -69,28 +69,47 @@ const statusOpcoes = [
 
 export function DetalhesPedido({ pedido, onStatusChange, onClose }: DetalhesPedidoProps) {
   const statusAtual = statusOpcoes.find((s) => s.value === pedido.status) || statusOpcoes[0];
-  const [gruposOpcoes, setGruposOpcoes] = useState<Record<string, any>>({});
+  type GrupoMap = {
+    nome: string;
+    opcoes: Record<string, string>;
+  };
+
+  const [gruposOpcoes, setGruposOpcoes] = useState<Record<string, GrupoMap>>({});
 
   // Buscar nomes das opções selecionadas
   useEffect(() => {
     async function buscarOpcoes() {
-      const grupos: Record<string, any> = {};
+      const grupos: Record<string, GrupoMap> = {};
 
       for (const item of pedido.itens) {
+        const produtoId = Number(item.produto.id);
         const { data: produto } = await supabase
           .from("produtos")
           .select("*, grupos_opcoes(*, opcoes(*))")
-          .eq("id", item.produto.id)
+          .eq("id", Number.isFinite(produtoId) ? produtoId : item.produto.id as unknown as number)
           .single();
 
-        if (produto?.grupos_opcoes) {
-          produto.grupos_opcoes.forEach((grupo: any) => {
-            grupos[grupo.id] = {
+        type GrupoRow = {
+          id: string | number;
+          nome: string;
+          opcoes?: Array<{ id: string | number; nome: string }>;
+        };
+
+        const gruposList = (
+          produto as { grupos_opcoes?: GrupoRow[] } | null
+        )?.grupos_opcoes;
+
+        if (gruposList) {
+          gruposList.forEach((grupo) => {
+            grupos[String(grupo.id)] = {
               nome: grupo.nome,
-              opcoes: grupo.opcoes.reduce((acc: any, op: any) => {
-                acc[op.id] = op.nome;
-                return acc;
-              }, {}),
+              opcoes: (grupo.opcoes || []).reduce<Record<string, string>>(
+                (acc, op) => {
+                  acc[String(op.id)] = op.nome;
+                  return acc;
+                },
+                {}
+              ),
             };
           });
         }
@@ -106,7 +125,7 @@ export function DetalhesPedido({ pedido, onStatusChange, onClose }: DetalhesPedi
   const renderSelections = (selections: Record<string, string[]>) => {
     if (!selections || Object.keys(selections).length === 0) return null;
 
-    const items: JSX.Element[] = [];
+    const items: ReactElement[] = [];
 
     Object.entries(selections).forEach(([grupoId, opcaoIds]) => {
       const grupo = gruposOpcoes[grupoId];

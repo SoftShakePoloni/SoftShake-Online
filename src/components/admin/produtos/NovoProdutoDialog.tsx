@@ -195,7 +195,7 @@ export function NovoProdutoDialog({
                   </SelectTrigger>
                   <SelectContent>
                     {categorias.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
+                      <SelectItem key={cat.id} value={String(cat.id)}>
                         {cat.nome}
                       </SelectItem>
                     ))}

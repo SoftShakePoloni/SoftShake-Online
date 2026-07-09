@@ -103,7 +103,7 @@ export async function fetchMenu(): Promise<Category[]> {
           image: resolveImage(prod.imagem_url),
           tag: prod.tag_id ? tagsMap.get(prod.tag_id) : undefined,
           optionGroups: [...optionGroups, notesOptionGroup],
-          disponivel: prod.esta_disponivel,
+          disponivel: prod.esta_disponivel ?? undefined,
         };
       }),
     };

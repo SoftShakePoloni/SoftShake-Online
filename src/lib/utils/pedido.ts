@@ -149,7 +149,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 export function extractComplementos(
-  item: PedidoItemLike | Record<string, unknown> | null | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+  item: PedidoItemLike | Record<string, unknown> | object | null | undefined,
   lookup?: {
     opcoesById?: Map<string, OpcaoLookup>;
     gruposById?: Map<string, GrupoLookup>;

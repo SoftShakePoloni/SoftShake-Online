@@ -219,10 +219,13 @@ export function ChartPizza({
               </Pie>
               <Tooltip
                 contentStyle={tooltipStyle}
-                formatter={(value: number, name: string, props: any) => [
-                  `${value} (${props.payload.percent ?? 0}%)`,
-                  name,
-                ]}
+                formatter={(value, name, item) => {
+                  const payload = item?.payload as { percent?: number } | undefined;
+                  return [
+                    `${Number(value)} (${payload?.percent ?? 0}%)`,
+                    String(name),
+                  ];
+                }}
               />
               <Legend
                 verticalAlign="bottom"

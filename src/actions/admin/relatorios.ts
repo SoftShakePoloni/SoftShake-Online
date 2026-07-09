@@ -39,12 +39,12 @@ type PedidoRow = {
   cliente_nome: string;
   cliente_telefone: string | null;
   tipo_entrega: string;
-  endereco_completo: any;
+  endereco_completo: string | Record<string, unknown> | null;
   meio_pagamento: string;
   subtotal: number | string;
   taxa_entrega: number | string;
   total: number | string;
-  itens: any;
+  itens: unknown;
   status: string;
   created_at: string;
   updated_at: string;
@@ -159,17 +159,13 @@ function previousRange(from: Date, to: Date) {
   return { from: prevFrom, to: prevTo };
 }
 
-function isValido(p: PedidoRow) {
-  return p.status !== CANCELADO;
-}
-
-function getCidade(endereco: any): string {
+function getCidade(endereco: string | Record<string, unknown> | null): string {
   if (!endereco) return "";
   if (typeof endereco === "string") return "";
   return String(endereco.cidade || "").trim();
 }
 
-function getBairro(endereco: any): string {
+function getBairro(endereco: string | Record<string, unknown> | null): string {
   if (!endereco) return "";
   if (typeof endereco === "string") return "";
   return String(endereco.bairro || "").trim();
@@ -213,11 +209,12 @@ function matchesFilters(p: PedidoRow, f: RelatorioFiltros): boolean {
   if (f.produto) {
     const q = f.produto.toLowerCase();
     const itens = Array.isArray(p.itens) ? p.itens : [];
-    const hit = itens.some((i: any) =>
-      String(i?.produto?.name || i?.produto?.nome || "")
+    const hit = itens.some((raw) => {
+      const i = raw as { produto?: { name?: string; nome?: string } };
+      return String(i?.produto?.name || i?.produto?.nome || "")
         .toLowerCase()
-        .includes(q)
-    );
+        .includes(q);
+    });
     if (!hit) return false;
   }
   return true;
@@ -229,18 +226,30 @@ type ItemExtra = {
   groupName?: string;
 };
 
-function getAdicionais(item: any): ItemExtra[] {
+type ItemLike = {
+  qty?: number | string;
+  total?: number | string;
+  produto?: { name?: string; nome?: string; price?: number | string };
+  adicionais?: unknown;
+  selectionsResolved?: unknown;
+  selections?: unknown;
+};
+
+function getAdicionais(item: ItemLike): ItemExtra[] {
   const list =
     item?.adicionais ||
     item?.selectionsResolved ||
     (Array.isArray(item?.selections) ? item.selections : null);
   if (!Array.isArray(list)) return [];
   return list
-    .map((a: any) => ({
-      name: String(a?.name || a?.nome || "").trim(),
-      price: num(a?.price ?? a?.preco ?? 0),
-      groupName: String(a?.groupName || a?.group_name || a?.grupo || "").trim(),
-    }))
+    .map((raw) => {
+      const a = raw as Record<string, unknown>;
+      return {
+        name: String(a?.name || a?.nome || "").trim(),
+        price: num(a?.price ?? a?.preco ?? 0),
+        groupName: String(a?.groupName || a?.group_name || a?.grupo || "").trim(),
+      };
+    })
     .filter((a) => a.name);
 }
 
@@ -463,7 +472,7 @@ function aggregatePeriod(
       if (mins >= 0 && mins < 24 * 60) tempos.push(mins);
     }
 
-    const itens = Array.isArray(p.itens) ? p.itens : [];
+    const itens = Array.isArray(p.itens) ? (p.itens as ItemLike[]) : [];
     for (const item of itens) {
       const nome = String(item?.produto?.name || item?.produto?.nome || "").trim();
       const qty = num(item?.qty || 1);

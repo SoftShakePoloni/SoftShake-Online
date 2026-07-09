@@ -33,18 +33,19 @@ function mapPedido(
   grupos: GrupoLookup[]
 ): Pedido {
   const itensEnriquecidos = enrichPedidoItens(
-    (p.itens as any[]) || [],
+    Array.isArray(p.itens) ? p.itens : [],
     opcoes,
     grupos
-  );
+  ) as unknown as Pedido["itens"];
 
   return {
     id: p.id,
     cliente_nome: p.cliente_nome || "Cliente",
     cliente_telefone: p.cliente_telefone ?? undefined,
     tipo_entrega: (p.tipo_entrega as Pedido["tipo_entrega"]) || "delivery",
-    endereco_completo:
-      formatEndereco(p.endereco_completo as any) || undefined,
+    endereco_completo: formatEndereco(
+      p.endereco_completo as string | import("@/types/pedido").EnderecoObject | null | undefined
+    ) || undefined,
     meio_pagamento: p.meio_pagamento || "Não informado",
     troco_para: (() => {
       if (p.troco_para == null || p.troco_para === "") return undefined;

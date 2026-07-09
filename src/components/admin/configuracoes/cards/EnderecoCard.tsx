@@ -9,7 +9,10 @@ import { MapPin, ExternalLink } from "lucide-react";
 
 interface EnderecoCardProps {
   config: ConfiguracaoLoja;
-  onChange: (field: keyof ConfiguracaoLoja, value: any) => void;
+  onChange: (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => void;
 }
 
 export function EnderecoCard({ config, onChange }: EnderecoCardProps) {

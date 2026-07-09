@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Opcao, GrupoOpcoes } from "@/types/adicional";
+import { Opcao } from "@/types/adicional";
 import { toast } from "sonner";
 import { Loader2, Search, Plus, ChevronRight, ChevronDown, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -69,11 +69,19 @@ export function AdicionaisManager() {
       // Organizar dados hierarquicamente
       const produtosMap = new Map<string | number, ProdutoComGrupos>();
 
-      (produtoGrupos || []).forEach((pg: any) => {
-        const produtoId = pg.produto_id;
-        const grupoId = pg.grupo_id;
-        const produto = pg.produto;
-        const grupo = pg.grupo;
+      type ProdutoGrupoRow = {
+        produto_id: string | number;
+        grupo_id: string | number;
+        produto: { id: string | number; nome: string } | null;
+        grupo: { id: string | number; nome: string } | null;
+      };
+
+      (produtoGrupos || []).forEach((pg) => {
+        const row = pg as unknown as ProdutoGrupoRow;
+        const produtoId = row.produto_id;
+        const grupoId = row.grupo_id;
+        const produto = row.produto;
+        const grupo = row.grupo;
 
         if (!produto || !grupo) return;
 
@@ -89,7 +97,7 @@ export function AdicionaisManager() {
         const produtoData = produtosMap.get(produtoId)!;
 
         // Adicionar grupo se não existir
-        if (!produtoData.grupos.find(g => g.id === grupoId)) {
+        if (!produtoData.grupos.find((g) => g.id === grupoId)) {
           produtoData.grupos.push({
             id: grupoId,
             nome: grupo.nome,
@@ -99,13 +107,19 @@ export function AdicionaisManager() {
       });
 
       // Adicionar opções aos grupos
-      (opcoes || []).forEach((opcao: any) => {
+      (opcoes || []).forEach((opcao) => {
+        const opt = opcao as Opcao & {
+          grupo_id: string | number;
+          grupo?: Opcao["grupo"];
+        };
         produtosMap.forEach((produto) => {
-          const grupo = produto.grupos.find(g => String(g.id) === String(opcao.grupo_id));
+          const grupo = produto.grupos.find(
+            (g) => String(g.id) === String(opt.grupo_id)
+          );
           if (grupo) {
             grupo.opcoes.push({
-              ...opcao,
-              grupo: opcao.grupo,
+              ...opt,
+              grupo: opt.grupo,
             });
           }
         });

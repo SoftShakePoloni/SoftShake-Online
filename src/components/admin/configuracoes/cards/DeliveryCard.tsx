@@ -7,7 +7,10 @@ import { Truck } from "lucide-react";
 
 interface DeliveryCardProps {
   config: ConfiguracaoLoja;
-  onChange: (field: keyof ConfiguracaoLoja, value: any) => void;
+  onChange: (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => void;
 }
 
 export function DeliveryCard({ config, onChange }: DeliveryCardProps) {

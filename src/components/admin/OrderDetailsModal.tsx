@@ -39,8 +39,8 @@ type Order = {
   cliente_nome: string;
   cliente_email: string;
   cliente_telefone: string;
-  endereco_entrega: any;
-  itens: any[];
+  endereco_entrega: string | Record<string, unknown> | null;
+  itens: Array<Record<string, unknown>>;
   total: number;
   status: string;
   metodo_pagamento: string;
@@ -229,25 +229,43 @@ export function OrderDetailsModal({
                     Endereço de Entrega
                   </h3>
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="font-medium text-gray-900">
-                      {order.endereco_entrega.rua},{" "}
-                      {order.endereco_entrega.numero}
-                    </p>
-                    {order.endereco_entrega.complemento && (
-                      <p className="text-gray-600 mt-1">
-                        {order.endereco_entrega.complemento}
+                    {typeof order.endereco_entrega === "string" ? (
+                      <p className="font-medium text-gray-900">
+                        {order.endereco_entrega}
                       </p>
+                    ) : (
+                      <>
+                        <p className="font-medium text-gray-900">
+                          {String(
+                            order.endereco_entrega.rua ||
+                              order.endereco_entrega.logradouro ||
+                              ""
+                          )}
+                          {order.endereco_entrega.numero
+                            ? `, ${String(order.endereco_entrega.numero)}`
+                            : ""}
+                        </p>
+                        {order.endereco_entrega.complemento ? (
+                          <p className="text-gray-600 mt-1">
+                            {String(order.endereco_entrega.complemento)}
+                          </p>
+                        ) : null}
+                        <p className="text-gray-600 mt-1">
+                          {String(order.endereco_entrega.bairro || "")}
+                        </p>
+                        <p className="text-gray-600 mt-1">
+                          {String(order.endereco_entrega.cidade || "")}
+                          {order.endereco_entrega.estado
+                            ? `, ${String(order.endereco_entrega.estado)}`
+                            : ""}
+                        </p>
+                        {order.endereco_entrega.cep ? (
+                          <p className="text-gray-600 mt-1">
+                            CEP: {String(order.endereco_entrega.cep)}
+                          </p>
+                        ) : null}
+                      </>
                     )}
-                    <p className="text-gray-600 mt-1">
-                      {order.endereco_entrega.bairro}
-                    </p>
-                    <p className="text-gray-600 mt-1">
-                      {order.endereco_entrega.cidade},{" "}
-                      {order.endereco_entrega.estado}
-                    </p>
-                    <p className="text-gray-600 mt-1">
-                      CEP: {order.endereco_entrega.cep}
-                    </p>
                   </div>
                 </div>
               </>
@@ -261,33 +279,46 @@ export function OrderDetailsModal({
                 Itens do Pedido
               </h3>
               <div className="space-y-3">
-                {order.itens.map((item, index) => (
+                {order.itens.map((item, index) => {
+                  const nome = String(
+                    item.nome ||
+                      (item.produto as { name?: string } | undefined)?.name ||
+                      "Item"
+                  );
+                  const observacoes =
+                    typeof item.observacoes === "string"
+                      ? item.observacoes
+                      : null;
+                  const quantidade = Number(item.quantidade ?? item.qty ?? 1);
+                  const preco = Number(item.preco ?? item.price ?? 0);
+                  return (
                   <div
                     key={index}
                     className="flex items-center justify-between bg-gray-50 rounded-lg p-4"
                   >
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{item.nome}</p>
-                      {item.observacoes && (
+                      <p className="font-medium text-gray-900">{nome}</p>
+                      {observacoes && (
                         <p className="text-sm text-gray-500 mt-1">
-                          Obs: {item.observacoes}
+                          Obs: {observacoes}
                         </p>
                       )}
                       <p className="text-sm text-gray-600 mt-1">
-                        Quantidade: {item.quantidade} x R${" "}
-                        {item.preco.toFixed(2).replace(".", ",")}
+                        Quantidade: {quantidade} x R${" "}
+                        {preco.toFixed(2).replace(".", ",")}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">
                         R${" "}
-                        {(item.quantidade * item.preco)
+                        {(quantidade * preco)
                           .toFixed(2)
                           .replace(".", ",")}
                       </p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

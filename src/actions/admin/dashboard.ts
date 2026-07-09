@@ -120,9 +120,20 @@ export async function getDashboardData() {
     { id: string; nome: string; categoria: string; imagem?: string; quantidade: number; receita: number }
   > = {};
 
+  type DashItem = {
+    qty?: number;
+    total?: number;
+    produto?: {
+      id?: string | number;
+      name?: string;
+      categoria?: string;
+      image?: string;
+    };
+  };
+
   ordersThisMonth?.forEach((order) => {
-    const itens = order.itens || [];
-    itens.forEach((item: any) => {
+    const itens = (Array.isArray(order.itens) ? order.itens : []) as DashItem[];
+    itens.forEach((item) => {
       const produto = item.produto;
       if (produto && produto.id) {
         const produtoId = String(produto.id);
@@ -175,7 +186,7 @@ export async function getDashboardData() {
 
       return {
         id: cliente.id,
-        nome: cliente.nome,
+        nome: cliente.nome || "Cliente",
         email: cliente.email || "",
         totalPedidos,
         totalGasto,
@@ -228,15 +239,28 @@ export async function getDashboardData() {
     .order("created_at", { ascending: false })
     .limit(5);
 
-  const recentOrdersData = (recentOrders || []).map((order) => ({
-    id: order.id,
-    cliente: order.cliente_nome || "Cliente",
-    endereco: order.endereco_completo?.logradouro || "Endereço não informado",
-    pagamento: order.meio_pagamento || "Não informado",
-    status: order.status,
-    tempo: new Date(order.created_at),
-    valor: order.total,
-  }));
+  const recentOrdersData = (recentOrders || []).map((order) => {
+    const end = order.endereco_completo;
+    let enderecoLabel = "Endereço não informado";
+    if (typeof end === "string" && end.trim()) {
+      enderecoLabel = end;
+    } else if (end && typeof end === "object" && !Array.isArray(end)) {
+      const obj = end as { logradouro?: string; bairro?: string; cidade?: string };
+      enderecoLabel =
+        obj.logradouro ||
+        [obj.bairro, obj.cidade].filter(Boolean).join(", ") ||
+        "Endereço não informado";
+    }
+    return {
+      id: order.id,
+      cliente: order.cliente_nome || "Cliente",
+      endereco: enderecoLabel,
+      pagamento: order.meio_pagamento || "Não informado",
+      status: order.status,
+      tempo: new Date(order.created_at),
+      valor: order.total,
+    };
+  });
 
   return {
     revenue: {

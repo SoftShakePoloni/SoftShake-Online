@@ -34,7 +34,10 @@ export function ConfiguracoesForm({
     setLocalConfig(config);
   }, [config]);
 
-  const handleChange = (field: keyof ConfiguracaoLoja, value: any) => {
+  const handleChange = (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => {
     setLocalConfig((prev) => ({ ...prev, [field]: value }));
     // Preview + save via manager (já tem debounce)
     void onUpdate({ [field]: value });

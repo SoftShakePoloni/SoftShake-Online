@@ -1,7 +1,6 @@
 import { requireAdmin } from "@/lib/admin/auth";
 import { PremiumSidebar } from "@/components/admin/premium/PremiumSidebar";
 import { PremiumTopbar } from "@/components/admin/premium/PremiumTopbar";
-import { usePathname } from "next/navigation";
 
 export default async function AdminLayout({
   children,

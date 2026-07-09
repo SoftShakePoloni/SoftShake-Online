@@ -149,9 +149,11 @@ export function RelatoriosManager() {
           const result = await getRelatorios(f);
           setData(result);
           setLastUpdated(new Date());
-        } catch (e: any) {
+        } catch (e: unknown) {
           console.error(e);
-          setError(e?.message || "Erro ao carregar relatórios");
+          const msg =
+            e instanceof Error ? e.message : "Erro ao carregar relatórios";
+          setError(msg);
           toast.error("Erro ao carregar relatórios");
         }
       });
@@ -194,9 +196,9 @@ export function RelatoriosManager() {
       toast.success("PDF gerado com sucesso", {
         description: filename,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      toast.error(e?.message || "Erro ao gerar PDF");
+      toast.error(e instanceof Error ? e.message : "Erro ao gerar PDF");
     } finally {
       setExportingPdf(false);
     }

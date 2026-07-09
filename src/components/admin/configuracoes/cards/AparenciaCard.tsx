@@ -10,7 +10,10 @@ import Image from "next/image";
 
 interface AparenciaCardProps {
   config: ConfiguracaoLoja;
-  onChange: (field: keyof ConfiguracaoLoja, value: any) => void;
+  onChange: (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => void;
 }
 
 export function AparenciaCard({ config, onChange }: AparenciaCardProps) {

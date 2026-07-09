@@ -4,8 +4,6 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Plus, X } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns";
 import { DetalhesPedido } from "./DetalhesPedido";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 

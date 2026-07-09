@@ -75,19 +75,22 @@ export function OpcaoDetailPanel({
       try {
         const data = await updateOpcao(opcao.id, dadosAtualizados);
 
-        const opcaoAtualizada = {
-          ...data,
-          grupo: (data as any).grupo,
-        } as Opcao;
+        const row = data as Opcao & { grupo?: Opcao["grupo"] };
+        const opcaoAtualizada: Opcao = {
+          ...row,
+          grupo: row.grupo,
+        };
 
         setOpcao(opcaoAtualizada);
         onUpdate(opcaoAtualizada);
         toast.success("Adicional atualizado");
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro completo:", error);
         setOpcao(snapshot);
         onUpdate(snapshot);
-        toast.error(error?.message || "Erro ao atualizar adicional");
+        toast.error(
+          error instanceof Error ? error.message : "Erro ao atualizar adicional"
+        );
       } finally {
         setIsSaving(false);
       }
@@ -107,9 +110,11 @@ export function OpcaoDetailPanel({
       onDelete(opcao.id);
       setShowDeleteDialog(false);
       toast.success("Adicional excluído");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao excluir opção:", error);
-      toast.error(error?.message || "Erro ao excluir adicional");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao excluir adicional"
+      );
     }
   };
 

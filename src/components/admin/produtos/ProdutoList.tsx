@@ -148,7 +148,7 @@ export function ProdutoList({
             <SelectContent>
               <SelectItem value="todos">Todas as categorias</SelectItem>
               {categorias.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
+                <SelectItem key={cat.id} value={String(cat.id)}>
                   {cat.nome}
                 </SelectItem>
               ))}

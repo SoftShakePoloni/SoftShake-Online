@@ -78,20 +78,26 @@ export function ProdutoDetailPanel({
       try {
         const data = await updateProduto(produto.id, dadosAtualizados);
 
-        const produtoAtualizado = {
-          ...data,
-          categoria: (data as any).categoria,
-          tag: (data as any).tag,
-        } as Produto;
+        const row = data as Produto & {
+          categoria?: Produto["categoria"];
+          tag?: Produto["tag"];
+        };
+        const produtoAtualizado: Produto = {
+          ...row,
+          categoria: row.categoria,
+          tag: row.tag,
+        };
 
         setProduto(produtoAtualizado);
         onUpdate(produtoAtualizado);
         toast.success("Produto atualizado");
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro completo:", error);
         setProduto(snapshot);
         onUpdate(snapshot);
-        toast.error(error?.message || "Erro ao atualizar produto");
+        toast.error(
+          error instanceof Error ? error.message : "Erro ao atualizar produto"
+        );
       } finally {
         setIsSaving(false);
       }
@@ -162,7 +168,7 @@ export function ProdutoDetailPanel({
     try {
       const oldPath = produto.imagem_url.split("/").slice(-2).join("/");
       await supabase.storage.from("images").remove([oldPath]);
-      await handleSave({ imagem_url: null });
+      await handleSave({ imagem_url: undefined });
       setProduto({ ...produto, imagem_url: undefined });
       toast.success("Imagem removida");
     } catch (error) {
@@ -222,9 +228,11 @@ export function ProdutoDetailPanel({
       onDelete(produto.id);
       setShowDeleteDialog(false);
       toast.success("Produto excluído com sucesso");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao excluir produto:", error);
-      toast.error(error?.message || "Erro ao excluir produto");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao excluir produto"
+      );
     }
   };
 
@@ -489,7 +497,7 @@ export function ProdutoDetailPanel({
                   Categoria
                 </Label>
                 <Select
-                  value={produto.categoria_id}
+                  value={String(produto.categoria_id)}
                   onValueChange={(value) => {
                     setProduto({ ...produto, categoria_id: value });
                     handleSave({ categoria_id: value });
@@ -501,7 +509,7 @@ export function ProdutoDetailPanel({
                   </SelectTrigger>
                   <SelectContent>
                     {categorias.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
+                      <SelectItem key={cat.id} value={String(cat.id)}>
                         {cat.nome}
                       </SelectItem>
                     ))}

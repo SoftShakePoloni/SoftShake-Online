@@ -12,7 +12,10 @@ import { Clock } from "lucide-react";
 
 interface FuncionamentoCardProps {
   config: ConfiguracaoLoja;
-  onChange: (field: keyof ConfiguracaoLoja, value: any) => void;
+  onChange: (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => void;
 }
 
 export function FuncionamentoCard({ config, onChange }: FuncionamentoCardProps) {

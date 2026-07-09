@@ -1,7 +1,7 @@
 import { requireAdmin } from "@/lib/admin/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
 import { ClientesManager } from "@/components/admin/clientes/ClientesManager";
-import { Cliente } from "@/types/cliente";
+import type { Cliente } from "@/types/cliente";
 
 export default async function AdminClientsPage() {
   await requireAdmin();
@@ -25,7 +25,10 @@ export default async function AdminClientsPage() {
   }>();
 
   (pedidos || []).forEach((pedido) => {
-    const stats = estatisticasPorCliente.get(pedido.cliente_id) || {
+    const clienteId = pedido.cliente_id;
+    if (!clienteId) return;
+
+    const stats = estatisticasPorCliente.get(clienteId) || {
       total_pedidos: 0,
       total_gasto: 0,
       ultimo_pedido: pedido.created_at,
@@ -33,13 +36,13 @@ export default async function AdminClientsPage() {
 
     stats.total_pedidos++;
     stats.total_gasto += parseFloat(String(pedido.total || 0));
-    
+
     // Manter o pedido mais recente
     if (new Date(pedido.created_at) > new Date(stats.ultimo_pedido)) {
       stats.ultimo_pedido = pedido.created_at;
     }
 
-    estatisticasPorCliente.set(pedido.cliente_id, stats);
+    estatisticasPorCliente.set(clienteId, stats);
   });
 
   // Converter para o formato tipado com estatísticas
@@ -72,11 +75,12 @@ export default async function AdminClientsPage() {
       id: c.id,
       nome: c.nome || "Cliente",
       telefone: c.telefone || "",
-      email: c.email,
-      cpf: c.cpf,
+      email: c.email ?? undefined,
       created_at: c.created_at,
-      endereco: c.endereco,
-      enderecos_adicionais: c.enderecos_adicionais || [],
+      endereco: c.endereco ?? undefined,
+      enderecos_adicionais: Array.isArray(c.enderecos_adicionais)
+        ? (c.enderecos_adicionais as unknown as Cliente["enderecos_adicionais"])
+        : [],
       total_pedidos: totalPedidos,
       total_gasto: totalGasto,
       ticket_medio: totalPedidos > 0 ? totalGasto / totalPedidos : 0,

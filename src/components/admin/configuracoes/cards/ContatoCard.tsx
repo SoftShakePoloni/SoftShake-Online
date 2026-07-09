@@ -7,7 +7,10 @@ import { Phone, MessageCircle, Instagram, Facebook } from "lucide-react";
 
 interface ContatoCardProps {
   config: ConfiguracaoLoja;
-  onChange: (field: keyof ConfiguracaoLoja, value: any) => void;
+  onChange: (
+    field: keyof ConfiguracaoLoja,
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+  ) => void;
 }
 
 export function ContatoCard({ config, onChange }: ContatoCardProps) {
