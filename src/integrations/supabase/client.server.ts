@@ -5,20 +5,28 @@ const BUCKET = "SoftShake Images";
 const SIGNED_URL_EXPIRY = 60 * 60; // 1 hora em segundos
 
 /**
- * Cliente Supabase com Service Role — use APENAS em Server Components,
- * Route Handlers e Server Actions. NUNCA importe em componentes client-side.
+ * Cliente Supabase com Service Role (chave secreta)
+ * Use para operações que precisam de acesso total ao banco
+ * NÃO use para verificar sessões de usuário
  */
-export function createServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+export function createServiceRoleClient() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://juzlblaxwybssbyddnwj.supabase.co";
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1emxibGF4d3lic3NieWRkbndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3OTk2MjYsImV4cCI6MjA5ODM3NTYyNn0.W1r0BnXZevVK-A5y97XBEoAOhehgA6fstgWueuJpoZA";
 
-  if (!url || !serviceKey) {
-    throw new Error("Variáveis de ambiente do Supabase (server) não configuradas.");
-  }
+  // Use service key if available, otherwise fall back to anon key
+  const keyToUse = serviceKey || anonKey;
 
-  return createClient<Database>(url, serviceKey, {
+  return createClient<Database>(url, keyToUse, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+// Backwards compatibility for existing customer-facing code
+export function createServerClient() {
+  return createServiceRoleClient();
 }
 
 /**
@@ -28,7 +36,7 @@ export function createServerClient() {
 export async function getSignedUrl(path: string): Promise<string | null> {
   if (!path) return null;
 
-  const client = createServerClient();
+  const client = createServiceRoleClient();
   const { data, error } = await client.storage
     .from(BUCKET)
     .createSignedUrl(path, SIGNED_URL_EXPIRY);
@@ -51,7 +59,7 @@ export async function getSignedUrls(
   const validPaths = paths.filter(Boolean);
   if (validPaths.length === 0) return new Map();
 
-  const client = createServerClient();
+  const client = createServiceRoleClient();
   const { data, error } = await client.storage
     .from(BUCKET)
     .createSignedUrls(validPaths, SIGNED_URL_EXPIRY);

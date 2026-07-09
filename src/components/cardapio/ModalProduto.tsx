@@ -105,6 +105,12 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   };
 
   const toggle = (group: OptionGroup, itemId: string) => {
+    // Verifica se o item está disponível
+    const item = group.items.find(i => i.id === itemId);
+    if (item && item.disponivel === false) {
+      return; // Não permite selecionar itens indisponíveis
+    }
+
     setSelections((prev) => {
       const current = prev[group.id] ?? [];
       const has = current.includes(itemId);
@@ -338,34 +344,44 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                       .map((item) => {
                         const isSelected = false;
                         const totalSelected = isShared ? totalSharedSelected : selected.length;
-                        const disabled = !isSelected && g.max > 1 && totalSelected >= displayMax;
+                        const isUnavailable = item.disponivel === false;
+                        const disabled = isUnavailable || (!isSelected && g.max > 1 && totalSelected >= displayMax);
                         const isRadio = g.max === 1;
                         return (
-                          <li key={item.id}>
+                          <li key={item.id} className={isUnavailable ? "relative" : ""}>
                             <button
                               type="button"
                               disabled={disabled}
-                              onClick={() => toggle(g, item.id)}
+                              onClick={() => !isUnavailable && toggle(g, item.id)}
                               className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition disabled:opacity-50"
                             >
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm text-foreground">{item.name}</span>
-                                  {item.tag && <TagBadge tag={item.tag} />}
+                                  <span className={`text-sm ${isUnavailable ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
+                                    {item.name}
+                                  </span>
+                                  {isUnavailable && (
+                                    <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 border border-red-200">
+                                      Esgotado
+                                    </span>
+                                  )}
+                                  {item.tag && !isUnavailable && <TagBadge tag={item.tag} />}
                                 </div>
-                                {item.priceDelta ? (
+                                {item.priceDelta && !isUnavailable ? (
                                   <span className="text-xs text-muted-foreground">
                                     + {formatBRL(item.priceDelta)}
                                   </span>
                                 ) : null}
                               </div>
-                              <span
-                                className={[
-                                  "flex h-5 w-5 shrink-0 items-center justify-center border-2 transition",
-                                  isRadio ? "rounded-full" : "rounded",
-                                  "border-muted-foreground/40 bg-card",
-                                ].join(" ")}
-                              />
+                              {!isUnavailable && (
+                                <span
+                                  className={[
+                                    "flex h-5 w-5 shrink-0 items-center justify-center border-2 transition",
+                                    isRadio ? "rounded-full" : "rounded",
+                                    "border-muted-foreground/40 bg-card",
+                                  ].join(" ")}
+                                />
+                              )}
                             </button>
                           </li>
                         );

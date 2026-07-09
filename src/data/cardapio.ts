@@ -18,7 +18,6 @@ export async function fetchMenu(): Promise<Category[]> {
   const { data: produtos, error: prodError } = await supabase
     .from("produtos")
     .select("id, nome, descricao, preco_base, esta_disponivel, ordem, imagem_url, categoria_id, tag_id")
-    .eq("esta_disponivel", true)
     .order("ordem", { ascending: true });
   if (prodError) { console.error("[fetchMenu] erro produtos:", prodError); throw prodError; }
 
@@ -35,8 +34,7 @@ export async function fetchMenu(): Promise<Category[]> {
 
   const { data: opcoes, error: optError } = await supabase
     .from("opcoes")
-    .select("id, grupo_id, nome, preco_adicional, status, ordem, tag_id")
-    .neq("status", "inativo")
+    .select("id, grupo_id, nome, preco_adicional, status, esta_disponivel, ordem, tag_id")
     .order("ordem", { ascending: true });
   if (optError) { console.error("[fetchMenu] erro opcoes:", optError); throw optError; }
 
@@ -91,6 +89,7 @@ export async function fetchMenu(): Promise<Category[]> {
                   name: o.nome,
                   priceDelta: Number(o.preco_adicional ?? 0),
                   tag: o.tag_id ? tagsMap.get(o.tag_id) : undefined,
+                  disponivel: o.esta_disponivel !== false && o.status !== "inativo",
                 })),
             } as OptionGroup;
           })
@@ -104,6 +103,7 @@ export async function fetchMenu(): Promise<Category[]> {
           image: resolveImage(prod.imagem_url),
           tag: prod.tag_id ? tagsMap.get(prod.tag_id) : undefined,
           optionGroups: [...optionGroups, notesOptionGroup],
+          disponivel: prod.esta_disponivel ?? undefined,
         };
       }),
     };
