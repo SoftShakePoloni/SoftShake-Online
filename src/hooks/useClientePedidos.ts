@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   enrichPedidoItens,
@@ -25,7 +26,7 @@ export type ClientePedidoItem = {
     price: number;
     groupName?: string;
   }>;
-  selections?: any;
+  selections?: Record<string, string[]> | Array<{ name: string; price: number }>;
 };
 
 export type ClientePedido = {
@@ -33,7 +34,7 @@ export type ClientePedido = {
   cliente_nome: string;
   cliente_telefone: string;
   tipo_entrega: string;
-  endereco_completo: any;
+  endereco_completo: string | Record<string, unknown> | null;
   meio_pagamento: string;
   troco_para: string | number | null;
   subtotal: number;
@@ -50,20 +51,38 @@ type Catalogo = {
   grupos: GrupoLookup[];
 };
 
-function enrich(rows: any[], catalogo: Catalogo | null): ClientePedido[] {
-  return (rows || []).map((p) => ({
-    ...p,
-    subtotal: Number(p.subtotal || 0),
-    taxa_entrega: Number(p.taxa_entrega || 0),
-    total: Number(p.total || 0),
-    itens: catalogo
-      ? enrichPedidoItens(
-          (p.itens as any[]) || [],
+type PedidoRowRaw = Record<string, unknown> & {
+  id: string;
+  subtotal?: number | string;
+  taxa_entrega?: number | string;
+  total?: number | string;
+  itens?: unknown;
+  status?: string;
+  created_at?: string;
+};
+
+function enrich(rows: PedidoRowRaw[], catalogo: Catalogo | null): ClientePedido[] {
+  return (rows || []).map((p) => {
+    const itensRaw = Array.isArray(p.itens) ? p.itens : [];
+    const itens = catalogo
+      ? (enrichPedidoItens(
+          itensRaw,
           catalogo.opcoes,
           catalogo.grupos
-        )
-      : p.itens || [],
-  }));
+        ) as unknown as ClientePedidoItem[])
+      : (itensRaw as ClientePedidoItem[]);
+
+    return {
+      ...(p as unknown as ClientePedido),
+      id: String(p.id),
+      subtotal: Number(p.subtotal || 0),
+      taxa_entrega: Number(p.taxa_entrega || 0),
+      total: Number(p.total || 0),
+      itens,
+      status: String(p.status || "pendente"),
+      created_at: String(p.created_at || new Date().toISOString()),
+    };
+  });
 }
 
 export function useClientePedidos(clienteId: string | null | undefined) {
@@ -105,7 +124,7 @@ export function useClientePedidos(clienteId: string | null | undefined) {
         setError("Não foi possível carregar seus pedidos");
         return;
       }
-      const dados = await res.json();
+      const dados = (await res.json()) as { pedidos?: PedidoRowRaw[] };
       setPedidos(enrich(dados.pedidos || [], catalogoRef.current));
     } catch {
       setError("Erro de conexão ao carregar pedidos");
@@ -115,7 +134,6 @@ export function useClientePedidos(clienteId: string | null | undefined) {
     }
   }, [clienteId]);
 
-  // Catálogo opcional (melhora nomes de adicionais se o API já enriquecer, ok)
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
@@ -144,7 +162,6 @@ export function useClientePedidos(clienteId: string | null | undefined) {
     void load();
   }, [load]);
 
-  // Realtime — sem polling
   useEffect(() => {
     if (!clienteId) return;
 
@@ -159,9 +176,9 @@ export function useClientePedidos(clienteId: string | null | undefined) {
           table: "pedidos",
           filter: `cliente_id=eq.${clienteId}`,
         },
-        (payload) => {
+        (payload: RealtimePostgresChangesPayload<PedidoRowRaw>) => {
           if (payload.eventType === "INSERT") {
-            const row = payload.new as any;
+            const row = payload.new as PedidoRowRaw;
             setPedidos((prev) => {
               if (prev.some((p) => p.id === row.id)) return prev;
               const [mapped] = enrich([row], catalogoRef.current);
@@ -172,7 +189,7 @@ export function useClientePedidos(clienteId: string | null | undefined) {
               description: `#${String(row.id).slice(0, 8).toUpperCase()}`,
             });
           } else if (payload.eventType === "UPDATE") {
-            const row = payload.new as any;
+            const row = payload.new as PedidoRowRaw;
             setPedidos((prev) => {
               const idx = prev.findIndex((p) => p.id === row.id);
               const [mapped] = enrich([row], catalogoRef.current);
@@ -189,7 +206,7 @@ export function useClientePedidos(clienteId: string | null | undefined) {
               return copy;
             });
           } else if (payload.eventType === "DELETE") {
-            const id = (payload.old as any)?.id;
+            const id = (payload.old as Partial<PedidoRowRaw>)?.id;
             if (!id) return;
             setPedidos((prev) => prev.filter((p) => p.id !== id));
           }
@@ -204,7 +221,6 @@ export function useClientePedidos(clienteId: string | null | undefined) {
     };
   }, [clienteId, flash]);
 
-  // Revalida ao voltar para a aba (sem polling)
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === "visible") void load();

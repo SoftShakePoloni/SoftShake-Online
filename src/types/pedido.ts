@@ -33,11 +33,11 @@ export interface PedidoItem {
     image?: string;
   };
   /** Mapa original grupoId → optionIds (como vem do carrinho) */
-  selections?: Record<string, string[]> | PedidoComplemento[] | any;
+  selections?: Record<string, string[]> | PedidoComplemento[];
   /** Lista resolvida com nomes (preferencial para UI/impressão) */
   adicionais?: PedidoComplemento[];
   selectionsResolved?: PedidoComplemento[];
-  complementos?: any;
+  complementos?: PedidoComplemento[] | Record<string, unknown> | string | null;
 }
 
 export interface Pedido {

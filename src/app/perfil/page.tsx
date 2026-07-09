@@ -4,11 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { MeuPerfilView } from "@/components/cliente/perfil/MeuPerfilView";
+import type { Endereco } from "@/types/endereco";
+
+type ClienteFull = {
+  id: string;
+  nome: string | null;
+  telefone: string | null;
+  endereco: string | null;
+  enderecos_adicionais?: Endereco[] | string | null;
+  created_at?: string;
+  email?: string | null;
+};
 
 export default function PaginaPerfil() {
   const { cliente, loading, refreshCliente, signOut } = useAuth();
   const router = useRouter();
-  const [fullCliente, setFullCliente] = useState<any>(null);
+  const [fullCliente, setFullCliente] = useState<ClienteFull | null>(null);
   const [loadingFull, setLoadingFull] = useState(true);
 
   useEffect(() => {
@@ -28,13 +39,13 @@ export default function PaginaPerfil() {
       try {
         const res = await fetch("/api/auth/sessao");
         if (res.ok) {
-          const data = await res.json();
-          if (!cancelled) setFullCliente(data.cliente || cliente);
+          const data = (await res.json()) as { cliente?: ClienteFull };
+          if (!cancelled) setFullCliente(data.cliente || (cliente as ClienteFull));
         } else if (!cancelled) {
-          setFullCliente(cliente);
+          setFullCliente(cliente as ClienteFull);
         }
       } catch {
-        if (!cancelled) setFullCliente(cliente);
+        if (!cancelled) setFullCliente(cliente as ClienteFull);
       } finally {
         if (!cancelled) setLoadingFull(false);
       }
@@ -69,8 +80,8 @@ export default function PaginaPerfil() {
         await refreshCliente();
         const res = await fetch("/api/auth/sessao");
         if (res.ok) {
-          const data = await res.json();
-          setFullCliente(data.cliente || cliente);
+          const data = (await res.json()) as { cliente?: ClienteFull };
+          setFullCliente(data.cliente || (cliente as ClienteFull));
         }
       }}
       onSignOut={signOut}

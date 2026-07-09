@@ -10,15 +10,17 @@ export default async function AdminLayout({
 }) {
   // Require admin authentication
   const { admin } = await requireAdmin();
+  const adminEmail = admin.email || "";
+  const adminName = admin.nome || adminEmail.split("@")[0] || "Admin";
 
   return (
     <div className="min-h-screen bg-[#F7F8FC]">
       <div className="flex">
-        <PremiumSidebar adminEmail={(admin as any).email} />
+        <PremiumSidebar adminEmail={adminEmail} />
         <main className="flex-1 min-h-screen flex flex-col ml-[270px]">
-          <PremiumTopbar 
-            adminName={(admin as any).nome || (admin as any).email?.split('@')[0]} 
-            adminEmail={(admin as any).email}
+          <PremiumTopbar
+            adminName={adminName}
+            adminEmail={adminEmail}
           />
           <div className="flex-1">{children}</div>
         </main>

@@ -16,19 +16,7 @@ export async function getAdminUser() {
   }
 
   // For now, we'll just check if the user is authenticated
-  // We'll skip the admins table check temporarily to avoid type issues
-  // You can uncomment this once you add the admins table to your Supabase types
-  /*
-  const { data: admin, error } = await supabase
-    .from("admins" as any)
-    .select("*")
-    .eq("auth_user_id" as any, user.id)
-    .single();
-
-  if (error || !admin) {
-    return null;
-  }
-  */
+  // Admins table check can be re-enabled once typed in Database
 
   return {
     user,

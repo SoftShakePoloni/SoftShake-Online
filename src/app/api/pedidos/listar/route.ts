@@ -45,7 +45,7 @@ export async function GET() {
     const pedidosEnriquecidos = (pedidos || []).map((pedido) => ({
       ...pedido,
       itens: enrichPedidoItens(
-        (pedido.itens as any[]) || [],
+        Array.isArray(pedido.itens) ? pedido.itens : [],
         (opcoes || []) as OpcaoLookup[],
         (grupos || []) as GrupoLookup[]
       ),

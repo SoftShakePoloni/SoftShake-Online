@@ -106,7 +106,8 @@ function isNamedComplemento(value: unknown): value is ComplementoResolvido {
   return typeof v.name === "string" && v.name.length > 0;
 }
 
-function normalizeNamed(value: any): ComplementoResolvido {
+function normalizeNamed(value: Record<string, unknown>): ComplementoResolvido {
+  const grupo = value.grupo as { nome?: string } | undefined;
   return {
     id: value.id != null ? String(value.id) : undefined,
     name: String(value.name ?? value.nome ?? ""),
@@ -118,10 +119,10 @@ function normalizeNamed(value: any): ComplementoResolvido {
           ? String(value.group_id)
           : undefined,
     groupName:
-      value.groupName ??
-      value.group_name ??
-      value.grupo?.nome ??
-      value.grupoNome,
+      (value.groupName as string | undefined) ??
+      (value.group_name as string | undefined) ??
+      grupo?.nome ??
+      (value.grupoNome as string | undefined),
   };
 }
 
@@ -133,25 +134,42 @@ function normalizeNamed(value: any): ComplementoResolvido {
  * - selections: { grupoId: [opcaoId, ...] } (precisa de lookup)
  * - complementos: JSON legado
  */
+type PedidoItemLike = {
+  adicionais?: unknown;
+  selections?: unknown;
+  complementos?: unknown;
+  produto?: Product;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
 export function extractComplementos(
-  item: any,
+  item: PedidoItemLike | Record<string, unknown> | null | undefined,
   lookup?: {
     opcoesById?: Map<string, OpcaoLookup>;
     gruposById?: Map<string, GrupoLookup>;
   }
 ): ComplementoResolvido[] {
+  if (!item) return [];
   const complementos: ComplementoResolvido[] = [];
+  const row = item as PedidoItemLike;
 
   // 1) Campo adicionais (preferencial — gravado com nomes)
-  if (item?.adicionais) {
-    const list = Array.isArray(item.adicionais)
-      ? item.adicionais
-      : typeof item.adicionais === "string"
-        ? safeParseArray(item.adicionais)
+  if (row.adicionais) {
+    const list = Array.isArray(row.adicionais)
+      ? row.adicionais
+      : typeof row.adicionais === "string"
+        ? safeParseArray(row.adicionais)
         : [];
     for (const entry of list) {
-      if (isNamedComplemento(entry) || entry?.nome) {
-        const n = normalizeNamed(entry);
+      const rec = asRecord(entry);
+      if (rec && (isNamedComplemento(rec) || typeof rec.nome === "string")) {
+        const n = normalizeNamed(rec);
         if (n.name) complementos.push(n);
       }
     }
@@ -159,10 +177,11 @@ export function extractComplementos(
   }
 
   // 2) selections como array de objetos nomeados
-  if (Array.isArray(item?.selections)) {
-    for (const entry of item.selections) {
-      if (isNamedComplemento(entry) || entry?.nome) {
-        const n = normalizeNamed(entry);
+  if (Array.isArray(row.selections)) {
+    for (const entry of row.selections) {
+      const rec = asRecord(entry);
+      if (rec && (isNamedComplemento(rec) || typeof rec.nome === "string")) {
+        const n = normalizeNamed(rec);
         if (n.name) complementos.push(n);
       }
     }
@@ -171,12 +190,13 @@ export function extractComplementos(
 
   // 3) selections como mapa grupoId → optionIds
   if (
-    item?.selections &&
-    typeof item.selections === "object" &&
-    !Array.isArray(item.selections)
+    row.selections &&
+    typeof row.selections === "object" &&
+    !Array.isArray(row.selections)
   ) {
-    const keys = Object.keys(item.selections);
-    const values = Object.values(item.selections);
+    const map = row.selections as Record<string, string[] | number[]>;
+    const keys = Object.keys(map);
+    const values = Object.values(map);
     const looksLikeIdMap =
       keys.length > 0 &&
       values.every(
@@ -188,44 +208,51 @@ export function extractComplementos(
     if (looksLikeIdMap) {
       if (lookup?.opcoesById) {
         return resolveSelectionsFromLookup(
-          item.selections,
+          map,
           lookup.opcoesById,
           lookup.gruposById
         );
       }
-      // Sem lookup: tenta achar nomes embutidos no produto do item
-      if (item.produto?.optionGroups) {
-        return resolveSelectionsFromProduct(item.produto, item.selections);
+      if (row.produto?.optionGroups) {
+        return resolveSelectionsFromProduct(
+          row.produto,
+          map as Record<string, string[]>
+        );
       }
     }
   }
 
   // 4) complementos JSONB legado
-  if (item?.complementos) {
+  if (row.complementos) {
     const parsed =
-      typeof item.complementos === "string"
-        ? safeParse(item.complementos)
-        : item.complementos;
+      typeof row.complementos === "string"
+        ? safeParse(row.complementos)
+        : row.complementos;
 
     if (Array.isArray(parsed)) {
       for (const entry of parsed) {
-        if (isNamedComplemento(entry) || entry?.nome) {
-          const n = normalizeNamed(entry);
+        const rec = asRecord(entry);
+        if (rec && (isNamedComplemento(rec) || typeof rec.nome === "string")) {
+          const n = normalizeNamed(rec);
           if (n.name) complementos.push(n);
         }
       }
     } else if (parsed && typeof parsed === "object") {
-      Object.values(parsed).forEach((grupo: any) => {
+      Object.values(parsed as Record<string, unknown>).forEach((grupo) => {
         if (Array.isArray(grupo)) {
           for (const entry of grupo) {
-            if (isNamedComplemento(entry) || entry?.nome) {
-              const n = normalizeNamed(entry);
+            const rec = asRecord(entry);
+            if (rec && (isNamedComplemento(rec) || typeof rec.nome === "string")) {
+              const n = normalizeNamed(rec);
               if (n.name) complementos.push(n);
             }
           }
-        } else if (isNamedComplemento(grupo) || grupo?.nome) {
-          const n = normalizeNamed(grupo);
-          if (n.name) complementos.push(n);
+        } else {
+          const rec = asRecord(grupo);
+          if (rec && (isNamedComplemento(rec) || typeof rec.nome === "string")) {
+            const n = normalizeNamed(rec);
+            if (n.name) complementos.push(n);
+          }
         }
       });
     }
@@ -261,17 +288,22 @@ function safeParse(value: string): unknown {
   }
 }
 
-function safeParseArray(value: string): any[] {
+function safeParseArray(value: string): unknown[] {
   const parsed = safeParse(value);
   return Array.isArray(parsed) ? parsed : [];
 }
 
+export type EnrichedPedidoItem = Record<string, unknown> & {
+  adicionais: ComplementoResolvido[];
+  selectionsResolved: ComplementoResolvido[];
+};
+
 /** Enriquece itens de pedido resolvendo IDs de opções para nomes. */
 export function enrichPedidoItens(
-  itens: any[],
+  itens: unknown[],
   opcoes: OpcaoLookup[],
   grupos?: GrupoLookup[]
-): any[] {
+): EnrichedPedidoItem[] {
   const opcoesById = new Map(
     opcoes.map((o) => [String(o.id), o] as const)
   );
@@ -289,12 +321,12 @@ export function enrichPedidoItens(
     }
   }
 
-  return (itens ?? []).map((item) => {
+  return (itens ?? []).map((raw) => {
+    const item = (asRecord(raw) ?? {}) as PedidoItemLike & Record<string, unknown>;
     const adicionais = extractComplementos(item, { opcoesById, gruposById });
     return {
       ...item,
       adicionais,
-      // Mantém selections originais, mas garante array nomeado para consumidores antigos
       selectionsResolved: adicionais,
     };
   });
