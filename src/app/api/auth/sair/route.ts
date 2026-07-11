@@ -1,21 +1,35 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { cookies } from "next/headers";
+import { withApiGuard } from "@/lib/security/with-api-guard";
+import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import { apiOk } from "@/lib/security/api-response";
+import { securityLog } from "@/lib/security/logger";
+import { obterSessao } from "@/lib/auth";
 
-export async function POST() {
-  try {
+export const POST = withApiGuard(
+  {
+    methods: ["POST"],
+    rateLimit: RATE_LIMITS.apiStrict,
+    checkOrigin: true,
+  },
+  async (_request, { ip }) => {
+    const sessao = await obterSessao();
     const cookieStore = await cookies();
-    
-    // Remove o cookie de sessão
-    cookieStore.delete('session');
-
-    return NextResponse.json({
-      mensagem: 'Logout realizado com sucesso',
+    cookieStore.set("session", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
     });
-  } catch (erro) {
-    console.error('Erro no logout:', erro);
-    return NextResponse.json(
-      { erro: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+
+    securityLog({
+      event: "auth.logout",
+      ip,
+      userId: sessao?.id,
+      path: "/api/auth/sair",
+      result: "ok",
+    });
+
+    return apiOk({ mensagem: "Sessão encerrada" });
   }
-}
+);

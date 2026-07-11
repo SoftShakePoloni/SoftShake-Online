@@ -1,32 +1,46 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getSignedUrl } from "@/integrations/supabase/client.server";
+import { withApiGuard } from "@/lib/security/with-api-guard";
+import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import {
+  apiError,
+  apiOk,
+  apiValidation,
+} from "@/lib/security/api-response";
+import {
+  isAllowedImagePath,
+  sanitizeStoragePath,
+} from "@/lib/security/sanitize";
 
 /**
  * GET /api/imagem?path=Produtos/acai.webp
- *
- * Gera uma signed URL para um path no bucket privado.
- * O Service Role Key NUNCA sai do servidor.
+ * Service Role fica só no servidor. Path sanitizado anti path-traversal.
  */
-export async function GET(request: NextRequest) {
-  const path = request.nextUrl.searchParams.get("path");
+export const GET = withApiGuard(
+  {
+    methods: ["GET"],
+    rateLimit: RATE_LIMITS.imagem,
+    checkOrigin: false, // <img src> não manda Origin de forma confiável
+  },
+  async (request: NextRequest) => {
+    const raw = request.nextUrl.searchParams.get("path");
+    const path = sanitizeStoragePath(raw);
 
-  if (!path || typeof path !== "string" || path.includes("..")) {
-    return NextResponse.json({ error: "Path inválido." }, { status: 400 });
-  }
+    if (!path || !isAllowedImagePath(path)) {
+      return apiValidation("Path inválido.");
+    }
 
-  const signedUrl = await getSignedUrl(path);
+    const signedUrl = await getSignedUrl(path);
+    if (!signedUrl) {
+      return apiError("Imagem não encontrada.", 404, { codigo: "NOT_FOUND" });
+    }
 
-  if (!signedUrl) {
-    return NextResponse.json({ error: "Imagem não encontrada." }, { status: 404 });
-  }
-
-  // Cache por 55 minutos (signed URL dura 1h, damos margem de segurança)
-  return NextResponse.json(
-    { url: signedUrl },
-    {
-      headers: {
+    return apiOk(
+      { url: signedUrl },
+      200,
+      {
         "Cache-Control": "private, max-age=3300",
-      },
-    },
-  );
-}
+      }
+    );
+  }
+);

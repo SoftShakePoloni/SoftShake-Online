@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Bucket privado — imagens são servidas via signed URL pelo Route Handler /api/imagem
-  // O domínio do Supabase Storage ainda precisa estar liberado para o <img> funcionar
+  // Bucket privado — imagens via signed URL /api/imagem
   images: {
     remotePatterns: [
       {
@@ -10,17 +9,47 @@ const nextConfig: NextConfig = {
         hostname: "juzlblaxwybssbyddnwj.supabase.co",
         pathname: "/storage/v1/**",
       },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        pathname: "/**",
+      },
     ],
   },
-  // Reutiliza o payload RSC de rotas já visitadas por alguns segundos.
-  // Sem isso (default 0 em páginas dinâmicas), toda troca da sidebar
-  // refaz o fetch completo e a navegação parece “travada”.
   experimental: {
     staleTimes: {
       dynamic: 30,
       static: 180,
     },
   },
+  // Headers adicionais (também aplicados no middleware)
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Permissions-Policy",
+            value:
+              "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+          },
+          {
+            key: "X-DNS-Prefetch-Control",
+            value: "on",
+          },
+        ],
+      },
+    ];
+  },
+  // Não embutir service role no client bundle
+  serverExternalPackages: ["@supabase/supabase-js"],
+  poweredByHeader: false,
 };
 
 export default nextConfig;

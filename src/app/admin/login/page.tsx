@@ -1,385 +1,527 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Loader2,
+  Mail,
+  Lock,
   Eye,
   EyeOff,
-  ShieldCheck,
-  LayoutDashboard,
-  Package,
-  TrendingUp,
-  CheckCircle2,
+  Loader2,
+  ArrowLeft,
   AlertCircle,
-  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
-type LoginPhase = "idle" | "authenticating" | "success" | "error";
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, "Informe um e-mail válido.")
+    .email("Informe um e-mail válido.")
+    .max(160),
+  password: z.string().min(1, "Senha obrigatória.").max(128),
+  remember: z.boolean().optional(),
+});
 
-const FEATURES = [
-  {
-    icon: LayoutDashboard,
-    title: "Painel completo",
-    description: "Pedidos, clientes e indicadores em um só lugar",
-  },
-  {
-    icon: Package,
-    title: "Cardápio ao vivo",
-    description: "Produtos e adicionais com status em tempo real",
-  },
-  {
-    icon: TrendingUp,
-    title: "Visão do negócio",
-    description: "Receitas e performance para decidir com clareza",
-  },
-];
+type LoginForm = z.infer<typeof loginSchema>;
+
+type Phase = "idle" | "loading" | "success" | "error";
+
+/** Imagem da loja (coluna esquerda) */
+const HERO_IMAGE =
+  "https://juzlblaxwybssbyddnwj.supabase.co/storage/v1/object/sign/SoftShake%20Images/Sorveteria/SoftShake_local.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lNmM0NGQwYS0xYmQ0LTRlZmUtYmEzMy02MWIxYmMxYmU2NTYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJTb2Z0U2hha2UgSW1hZ2VzL1NvcnZldGVyaWEvU29mdFNoYWtlX2xvY2FsLnBuZyIsInNjb3BlIjoiZG93bmxvYWQiLCJpYXQiOjE3ODM3OTEyMjEsImV4cCI6MjA5OTE1MTIyMX0.fvSwYnrCDKc06hbeuzHa7qOB87ncNJ3bXsDYMdvDLZk";
+
+/** Logo tipográfica SoftShake */
+const LOGO_TEXT_URL =
+  "https://juzlblaxwybssbyddnwj.supabase.co/storage/v1/object/sign/SoftShake%20Images/Sorveteria/softshake_text.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lNmM0NGQwYS0xYmQ0LTRlZmUtYmEzMy02MWIxYmMxYmU2NTYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJTb2Z0U2hha2UgSW1hZ2VzL1NvcnZldGVyaWEvc29mdHNoYWtlX3RleHQucG5nIiwic2NvcGUiOiJkb3dubG9hZCIsImlhdCI6MTc4Mzc5MTI4NywiZXhwIjoyMDk5MTUxMjg3fQ.YgN8TKxPsJG9N65nD8LGTGjrveREnMS-RgXmF_WNkw4";
+
+const REMEMBER_KEY = "softshake-admin-email";
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [phase, setPhase] = useState<LoginPhase>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+      remember: true,
+    },
+  });
+
+  const remember = watch("remember");
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    try {
+      const saved = localStorage.getItem(REMEMBER_KEY);
+      if (saved) {
+        setValue("email", saved);
+        setValue("remember", true);
+      }
+    } catch {
+      // ignore
+    }
+  }, [setValue]);
 
-  const isLoading = phase === "authenticating" || phase === "success";
+  const busy = phase === "loading" || phase === "success";
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLoading) return;
-
-    setPhase("authenticating");
-    setError(null);
+  const onSubmit = async (data: LoginForm) => {
+    if (busy) return;
+    setPhase("loading");
+    setFormError(null);
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      const { error } = await supabase.auth.signInWithPassword({
+        email: data.email.trim().toLowerCase(),
+        password: data.password,
       });
 
-      if (authError) {
+      if (error) {
         setPhase("error");
-        setError(
-          authError.message === "Invalid login credentials"
-            ? "E-mail ou senha incorretos. Verifique e tente novamente."
-            : authError.message
-        );
+        // Anti-enumeração: mensagem única
+        setFormError("E-mail ou senha inválidos.");
         return;
       }
 
+      try {
+        if (data.remember) {
+          localStorage.setItem(REMEMBER_KEY, data.email.trim().toLowerCase());
+        } else {
+          localStorage.removeItem(REMEMBER_KEY);
+        }
+      } catch {
+        // ignore
+      }
+
       setPhase("success");
-      // Pequeno delay para a animação de sucesso
-      await new Promise((r) => setTimeout(r, 900));
+      await new Promise((r) => setTimeout(r, 1100));
       router.push("/admin");
       router.refresh();
-    } catch (err) {
+    } catch {
       setPhase("error");
-      setError(
-        err instanceof Error ? err.message : "Ocorreu um erro inesperado"
-      );
+      setFormError("E-mail ou senha inválidos.");
     }
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#0B0618]">
-      {/* Ambient background */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-32 -top-32 h-[420px] w-[420px] rounded-full bg-[#4C258C]/40 blur-[100px] animate-pulse" />
-        <div
-          className="absolute -bottom-40 -right-20 h-[480px] w-[480px] rounded-full bg-[#7C3AED]/30 blur-[120px]"
-          style={{ animation: "pulse 4s ease-in-out infinite" }}
-        />
-        <div className="absolute left-1/2 top-1/3 h-[280px] w-[280px] -translate-x-1/2 rounded-full bg-[#EC4899]/15 blur-[90px]" />
-        <div
-          className="absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.35) 1px, transparent 0)",
-            backgroundSize: "28px 28px",
-          }}
-        />
-      </div>
-
-      <div
-        className={cn(
-          "relative z-10 grid min-h-screen transition-all duration-700 lg:grid-cols-2",
-          mounted ? "opacity-100" : "opacity-0"
-        )}
-      >
-        {/* Left brand panel */}
-        <section className="relative hidden flex-col justify-between p-10 lg:flex xl:p-14">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#4C258C] shadow-lg shadow-purple-900/40">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-lg font-bold tracking-tight text-white">
-                SoftShake
-              </p>
-              <p className="text-xs text-white/50">Admin Console</p>
-            </div>
-          </div>
-
-          <div className="max-w-lg space-y-8">
-            <div
-              className={cn(
-                "space-y-4 transition-all duration-700 delay-150",
-                mounted
-                  ? "translate-y-0 opacity-100"
-                  : "translate-y-4 opacity-0"
-              )}
-            >
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 backdrop-blur">
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-                Área restrita · Acesso seguro
-              </div>
-              <h1 className="text-4xl font-bold leading-tight tracking-tight text-white xl:text-5xl">
-                Gerencie sua loja com{" "}
-                <span className="bg-gradient-to-r from-[#C4B5FD] to-[#F0ABFC] bg-clip-text text-transparent">
-                  clareza e estilo
-                </span>
-              </h1>
-              <p className="text-base leading-relaxed text-white/60">
-                Pedidos, cardápio, clientes e configurações em um painel moderno
-                pensado para o dia a dia da SoftShake.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {FEATURES.map((feature, index) => (
-                <div
-                  key={feature.title}
-                  className={cn(
-                    "flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur transition-all duration-700",
-                    mounted
-                      ? "translate-x-0 opacity-100"
-                      : "-translate-x-4 opacity-0"
-                  )}
-                  style={{ transitionDelay: `${250 + index * 100}ms` }}
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#4C258C] to-[#7C3AED]">
-                    <feature.icon className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-white">{feature.title}</p>
-                    <p className="text-sm text-white/55">{feature.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="text-sm text-white/35">
-            © {new Date().getFullYear()} SoftShake · Painel administrativo
-          </p>
-        </section>
-
-        {/* Right form panel */}
-        <section className="flex items-center justify-center p-6 sm:p-10">
-          <div
-            className={cn(
-              "relative w-full max-w-[440px] transition-all duration-700 delay-100",
-              mounted ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0"
-            )}
+    <div className="relative min-h-screen w-full bg-white">
+      {/* Overlay de carregamento / sucesso */}
+      <AnimatePresence>
+        {(phase === "loading" || phase === "success") && (
+          <motion.div
+            key="login-loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 backdrop-blur-md"
+            aria-live="polite"
+            aria-busy="true"
           >
-            {/* Mobile logo */}
-            <div className="mb-8 flex items-center gap-3 lg:hidden">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#4C258C]">
-                <Sparkles className="h-5 w-5 text-white" />
+            <div className="flex w-full max-w-xs flex-col items-center px-6 text-center">
+              {/* Anel animado + logo */}
+              <div className="relative mb-8 flex h-28 w-28 items-center justify-center">
+                {/* Anel externo */}
+                <motion.div
+                  className="absolute inset-0 rounded-full border-[3px] border-[#EEE8FA]"
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                />
+                <motion.div
+                  className="absolute inset-0 rounded-full border-[3px] border-transparent border-t-[#4C258C] border-r-[#7C3AED]/40"
+                  animate={
+                    phase === "loading"
+                      ? { rotate: 360 }
+                      : { rotate: 0, scale: 1.05 }
+                  }
+                  transition={
+                    phase === "loading"
+                      ? { duration: 0.9, repeat: Infinity, ease: "linear" }
+                      : { duration: 0.35 }
+                  }
+                />
+                {/* Centro */}
+                <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-[#F8F5FC]">
+                  <AnimatePresence mode="wait">
+                    {phase === "loading" ? (
+                      <motion.div
+                        key="logo-load"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="relative h-10 w-[72px]"
+                      >
+                        <Image
+                          src={LOGO_TEXT_URL}
+                          alt=""
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="ok"
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 320,
+                          damping: 18,
+                        }}
+                      >
+                        <CheckCircle2 className="h-10 w-10 text-[#4C258C]" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-white">SoftShake</p>
-                <p className="text-xs text-white/50">Admin Console</p>
+
+              <AnimatePresence mode="wait">
+                {phase === "loading" ? (
+                  <motion.div
+                    key="txt-loading"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="space-y-2"
+                  >
+                    <p className="text-base font-semibold text-[#111827]">
+                      Autenticando…
+                    </p>
+                    <p className="text-sm text-[#6B7280]">
+                      Validando suas credenciais
+                    </p>
+                    {/* Barra de progresso indeterminada */}
+                    <div className="mx-auto mt-4 h-1 w-40 overflow-hidden rounded-full bg-[#EEE8FA]">
+                      <motion.div
+                        className="h-full w-1/2 rounded-full bg-gradient-to-r from-[#4C258C] to-[#7C3AED]"
+                        animate={{ x: ["-100%", "200%"] }}
+                        transition={{
+                          duration: 1.1,
+                          repeat: Infinity,
+                          ease: "easeInOut",
+                        }}
+                      />
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="txt-ok"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-2"
+                  >
+                    <p className="text-base font-semibold text-[#111827]">
+                      Acesso liberado
+                    </p>
+                    <p className="text-sm text-[#6B7280]">
+                      Entrando no painel administrativo…
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.35 }}
+        className="grid min-h-screen w-full lg:grid-cols-[55%_45%]"
+      >
+        {/* ── Coluna esquerda: imagem ── */}
+        <div className="relative hidden min-h-screen overflow-hidden lg:block">
+          <Image
+            src={HERO_IMAGE}
+            alt="SoftShake — açaí e sobremesas artesanais"
+            fill
+            priority
+            className="object-cover object-center"
+            sizes="55vw"
+            quality={90}
+          />
+          {/* Overlay sutil */}
+          <div className="absolute inset-0 bg-black/25" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#4C258C]/50 via-transparent to-black/20" />
+
+          <div className="absolute bottom-0 left-0 right-0 p-10 xl:p-12">
+            <p className="text-sm font-medium tracking-wide text-white/80">
+              SoftShake
+            </p>
+            <p className="mt-1 max-w-sm text-lg font-semibold leading-snug text-white">
+              Gestão da loja com a mesma qualidade dos nossos produtos.
+            </p>
+          </div>
+        </div>
+
+        {/* ── Coluna direita: formulário ── */}
+        <div className="flex min-h-screen flex-col items-center justify-center px-5 py-10 sm:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.08, ease: "easeOut" }}
+            className="w-full max-w-[450px]"
+          >
+            {/* Logo oficial (imagem) */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4, delay: 0.12 }}
+              className="mb-8 flex justify-center"
+            >
+              <div className="relative h-[68px] w-[200px] sm:h-[76px] sm:w-[300px]">
+                <Image
+                  src={LOGO_TEXT_URL}
+                  alt="SoftShake"
+                  fill
+                  priority
+                  className="object-contain object-center"
+                  sizes="300px"
+                  unoptimized
+                />
               </div>
+            </motion.div>
+
+            <div className="mb-7 text-center sm:text-left">
+              <h1 className="text-2xl font-bold tracking-tight text-[#111827] sm:text-[28px]">
+                Painel Administrativo
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">
+                Entre com seu e-mail e senha para acessar o painel
+                administrativo da SoftShake.
+              </p>
             </div>
 
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/95 p-7 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-8">
-              {/* Success / loading overlay */}
-              {isLoading && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm animate-in fade-in duration-300">
-                  {phase === "authenticating" ? (
-                    <div className="flex flex-col items-center gap-5">
-                      <div className="relative">
-                        <div className="h-16 w-16 rounded-full border-4 border-[#EEE8FA]" />
-                        <div className="absolute inset-0 h-16 w-16 animate-spin rounded-full border-4 border-transparent border-t-[#4C258C]" />
-                        <div className="absolute inset-2 flex items-center justify-center">
-                          <ShieldCheck className="h-6 w-6 text-[#4C258C] animate-pulse" />
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-semibold text-[#111827]">
-                          Autenticando...
-                        </p>
-                        <p className="mt-1 text-sm text-[#6B7280]">
-                          Validando suas credenciais
-                        </p>
-                      </div>
-                      <div className="flex gap-1.5">
-                        {[0, 1, 2].map((i) => (
-                          <span
-                            key={i}
-                            className="h-1.5 w-1.5 rounded-full bg-[#4C258C]"
-                            style={{
-                              animation: "bounce 1s ease-in-out infinite",
-                              animationDelay: `${i * 150}ms`,
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-4 animate-in zoom-in-95 duration-300">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
-                        <CheckCircle2 className="h-9 w-9 text-emerald-500" />
-                      </div>
-                      <div className="text-center">
-                        <p className="font-semibold text-[#111827]">
-                          Acesso liberado!
-                        </p>
-                        <p className="mt-1 text-sm text-[#6B7280]">
-                          Entrando no painel...
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mb-7">
-                <h2 className="text-2xl font-bold tracking-tight text-[#111827]">
-                  Bem-vindo de volta
-                </h2>
-                <p className="mt-1.5 text-sm text-[#6B7280]">
-                  Entre com suas credenciais de administrador
-                </p>
-              </div>
-
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="email"
-                    className="text-sm font-medium text-[#374151]"
-                  >
-                    E-mail
-                  </Label>
-                  <Input
-                    id="email"
+            <form
+              onSubmit={handleSubmit(onSubmit)}
+              className="space-y-5"
+              noValidate
+            >
+              {/* E-mail */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="admin-email"
+                  className="block text-sm font-medium text-[#374151]"
+                >
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                  <input
+                    id="admin-email"
                     type="email"
                     autoComplete="email"
-                    placeholder="admin@softshake.com"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (error) setError(null);
-                      if (phase === "error") setPhase("idle");
-                    }}
-                    required
-                    disabled={isLoading}
-                    className="h-12 rounded-xl border-[#E5E7EB] bg-[#F9FAFB] px-4 text-[#111827] transition-all focus-visible:border-[#4C258C] focus-visible:ring-[#4C258C]/20"
+                    disabled={busy}
+                    placeholder="Digite seu e-mail"
+                    className={cn(
+                      "h-12 w-full rounded-xl border bg-white pl-11 pr-4 text-sm text-[#111827]",
+                      "placeholder:text-[#9CA3AF] outline-none transition-all duration-150",
+                      "focus:border-[#4C258C] focus:ring-2 focus:ring-[#4C258C]/15",
+                      "disabled:opacity-60",
+                      errors.email
+                        ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+                        : "border-[#E5E7EB]"
+                    )}
+                    {...register("email")}
                   />
                 </div>
+                {errors.email && (
+                  <p className="text-xs text-red-600">{errors.email.message}</p>
+                )}
+              </div>
 
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="password"
-                    className="text-sm font-medium text-[#374151]"
-                  >
-                    Senha
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      autoComplete="current-password"
-                      placeholder="••••••••"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (error) setError(null);
-                        if (phase === "error") setPhase("idle");
-                      }}
-                      required
-                      disabled={isLoading}
-                      className="h-12 rounded-xl border-[#E5E7EB] bg-[#F9FAFB] px-4 pr-11 text-[#111827] transition-all focus-visible:border-[#4C258C] focus-visible:ring-[#4C258C]/20"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      disabled={isLoading}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#4C258C]"
-                      aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  <Checkbox
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={(checked) =>
-                      setRememberMe(checked as boolean)
+              {/* Senha */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="admin-password"
+                  className="block text-sm font-medium text-[#374151]"
+                >
+                  Senha
+                </label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                  <input
+                    id="admin-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    disabled={busy}
+                    placeholder="Digite sua senha"
+                    className={cn(
+                      "h-12 w-full rounded-xl border bg-white pl-11 pr-12 text-sm text-[#111827]",
+                      "placeholder:text-[#9CA3AF] outline-none transition-all duration-150",
+                      "focus:border-[#4C258C] focus:ring-2 focus:ring-[#4C258C]/15",
+                      "disabled:opacity-60",
+                      errors.password
+                        ? "border-red-300 focus:border-red-400 focus:ring-red-100"
+                        : "border-[#E5E7EB]"
+                    )}
+                    {...register("password")}
+                  />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    disabled={busy}
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#9CA3AF] transition-colors duration-150 hover:bg-[#F3F4F6] hover:text-[#4C258C]"
+                    aria-label={
+                      showPassword ? "Ocultar senha" : "Mostrar senha"
                     }
-                    disabled={isLoading}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {errors.password && (
+                  <p className="text-xs text-red-600">
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Opções */}
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex cursor-pointer items-center gap-2 select-none">
+                  <Checkbox
+                    checked={Boolean(remember)}
+                    onCheckedChange={(v) =>
+                      setValue("remember", v === true, {
+                        shouldDirty: true,
+                      })
+                    }
+                    disabled={busy}
                     className="border-[#D1D5DB] data-[state=checked]:border-[#4C258C] data-[state=checked]:bg-[#4C258C]"
                   />
-                  <Label
-                    htmlFor="remember"
-                    className="cursor-pointer text-sm font-medium text-[#4B5563]"
-                  >
-                    Manter-me conectado
-                  </Label>
-                </div>
-
-                {error && (
-                  <div className="flex items-start gap-2.5 rounded-xl border border-red-100 bg-red-50 px-3.5 py-3 text-sm text-red-700 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  disabled={isLoading || !email || !password}
-                  className="group relative h-12 w-full overflow-hidden rounded-xl bg-gradient-to-r from-[#4C258C] to-[#7C3AED] text-base font-semibold text-white shadow-lg shadow-purple-500/25 transition-all hover:shadow-xl hover:shadow-purple-500/30 disabled:opacity-60"
+                  <span className="text-sm text-[#4B5563]">
+                    Lembrar de mim
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    // Placeholder — recuperação via Supabase resetPasswordForEmail no futuro
+                    setFormError(
+                      "Fale com o administrador do sistema para redefinir a senha."
+                    );
+                  }}
+                  className="text-sm font-medium text-[#4C258C] transition-colors duration-150 hover:text-[#5E35B1] hover:underline"
                 >
-                  <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/15 to-white/0 opacity-0 transition-opacity group-hover:opacity-100" />
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Entrando...
-                    </>
-                  ) : (
-                    "Entrar no painel"
-                  )}
-                </Button>
-              </form>
+                  Esqueci minha senha
+                </button>
+              </div>
 
-              <p className="mt-6 text-center text-xs text-[#9CA3AF]">
-                Acesso exclusivo para administradores autorizados
-              </p>
-            </div>
-          </div>
-        </section>
-      </div>
+              {/* Erro global */}
+              <AnimatePresence mode="wait">
+                {formError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 px-3.5 py-3 text-sm text-red-700"
+                    role="alert"
+                  >
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{formError}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Botão principal */}
+              <button
+                type="submit"
+                disabled={busy}
+                className={cn(
+                  "relative flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-semibold text-white transition-all duration-150",
+                  "bg-[#4C258C] hover:bg-[#3d1d70] active:bg-[#351966]",
+                  "disabled:cursor-not-allowed disabled:opacity-70",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40 focus-visible:ring-offset-2"
+                )}
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  {phase === "loading" && (
+                    <motion.span
+                      key="loading"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="inline-flex items-center gap-2"
+                    >
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Entrando…
+                    </motion.span>
+                  )}
+                  {phase === "success" && (
+                    <motion.span
+                      key="success"
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="inline-flex items-center gap-2"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Acesso liberado
+                    </motion.span>
+                  )}
+                  {(phase === "idle" || phase === "error") && (
+                    <motion.span
+                      key="idle"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      Entrar
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </button>
+
+              {/* Botão secundário */}
+              <Link
+                href="/"
+                className={cn(
+                  "flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-white text-sm font-semibold text-[#374151]",
+                  "transition-colors duration-150 hover:border-[#D4C4F0] hover:bg-[#F9FAFB] hover:text-[#4C258C]",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/20"
+                )}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Voltar para o site
+              </Link>
+            </form>
+
+            <footer className="mt-10 text-center text-[11px] text-[#9CA3AF]">
+              <p>© 2026 SoftShake</p>
+              <p className="mt-0.5">Versão 1.0</p>
+            </footer>
+          </motion.div>
+        </div>
+      </motion.div>
     </div>
   );
 }

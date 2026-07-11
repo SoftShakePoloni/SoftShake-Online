@@ -10,14 +10,29 @@ const SIGNED_URL_EXPIRY = 60 * 60; // 1 hora em segundos
  * NÃO use para verificar sessões de usuário
  */
 export function createServiceRoleClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://juzlblaxwybssbyddnwj.supabase.co";
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp1emxibGF4d3lic3NieWRkbndqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3OTk2MjYsImV4cCI6MjA5ODM3NTYyNn0.W1r0BnXZevVK-A5y97XBEoAOhehgA6fstgWueuJpoZA";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Use service key if available, otherwise fall back to anon key
+  if (!url) {
+    throw new Error(
+      "[security] NEXT_PUBLIC_SUPABASE_URL não configurada"
+    );
+  }
+
+  // Prefer service role no servidor; se ausente, anon (com RLS)
   const keyToUse = serviceKey || anonKey;
+  if (!keyToUse) {
+    throw new Error(
+      "[security] SUPABASE_SERVICE_ROLE_KEY ou NEXT_PUBLIC_SUPABASE_ANON_KEY obrigatória"
+    );
+  }
+
+  if (process.env.NODE_ENV === "production" && !serviceKey) {
+    console.warn(
+      "[security] SUPABASE_SERVICE_ROLE_KEY ausente em produção — usando anon key"
+    );
+  }
 
   return createClient<Database>(url, keyToUse, {
     auth: { persistSession: false, autoRefreshToken: false },
