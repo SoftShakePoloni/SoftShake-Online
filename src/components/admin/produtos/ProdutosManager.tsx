@@ -9,6 +9,7 @@ import { EmptyState } from "./EmptyState";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
+
 interface ProdutosManagerProps {
   produtosIniciais: Produto[];
   categoriasIniciais: Categoria[];
@@ -121,8 +122,7 @@ export function ProdutosManager({
   };
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#F8F9FC]">
-      {/* Lista de Produtos - Esquerda */}
+    <div className="h-[calc(100vh-3.5rem)] flex overflow-hidden bg-[#F8F9FC]">
       <ProdutoList
         produtos={produtos}
         categorias={categorias}
@@ -130,7 +130,6 @@ export function ProdutosManager({
         onSelect={handleSelect}
       />
 
-      {/* Painel de Detalhes - Centro com Animação */}
       <div
         className={`flex-1 transition-opacity duration-200 ${
           isTransitioning ? "opacity-0" : "opacity-100"
@@ -148,7 +147,6 @@ export function ProdutosManager({
         )}
       </div>
 
-      {/* Painel Lateral - Direita com Animação */}
       {selectedProduto && (
         <div
           className={`transition-all duration-200 ${

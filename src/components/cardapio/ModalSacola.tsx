@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useCarrinho, resumoOpcoes } from "@/context/CarrinhoContext";
 import { resolveSelectionsFromProduct } from "@/lib/utils/pedido";
 import { useLoja } from "@/hooks/useLoja";
-import { formatBRL } from "@/data/tipos";
+import { formatBRL, getProductUnitPrice } from "@/data/tipos";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,6 +169,13 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   };
 
   const handleConfirmarInfo = () => {
+    if (!lojaAberta) {
+      toast.error('Loja fechada', {
+        description: 'No momento não estamos aceitando pedidos.',
+      });
+      return;
+    }
+
     // Se ainda está carregando, não faz nada
     if (loading) {
       toast.info('Aguarde, carregando suas informações...');
@@ -195,7 +202,16 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     setStep('payment');
   };
 
+  const lojaAberta = Boolean(loja?.esta_aberto);
+
   const handleFinalizarPedido = async () => {
+    if (!lojaAberta) {
+      toast.error("Loja fechada", {
+        description: "No momento não estamos aceitando pedidos.",
+      });
+      return;
+    }
+
     setEnviandoPedido(true);
     
     try {
@@ -222,7 +238,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
             produto: {
               id: item.produto.id,
               name: item.produto.name,
-              price: item.produto.price,
+              // Preço unitário cobrado (promo se ativa)
+              price: getProductUnitPrice(item.produto),
               image: item.produto.image,
             },
             qty: item.qty,
@@ -675,19 +692,29 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               <span className="text-primary">{formatBRL(total)}</span>
             </div>
             
+            {!lojaAberta && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                A loja está fechada e não está aceitando pedidos no momento.
+              </div>
+            )}
+
             {step === 'cart' ? (
               <button 
                 onClick={handleConfirmarInfo}
-                disabled={loading}
+                disabled={loading || !lojaAberta}
                 className="mt-1 w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'Carregando...' : 'Confirmar informações'}
+                {loading
+                  ? 'Carregando...'
+                  : !lojaAberta
+                    ? 'Loja fechada'
+                    : 'Confirmar informações'}
               </button>
             ) : step === 'info' ? (
               <div className="space-y-2 mt-2">
                 <button 
                   onClick={handleAvancarParaPagamento}
-                  disabled={!nome || !telefone || (tipoEntrega === 'entrega' && !enderecoSelecionado)}
+                  disabled={!lojaAberta || !nome || !telefone || (tipoEntrega === 'entrega' && !enderecoSelecionado)}
                   className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Avançar para pagamento
@@ -703,10 +730,14 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               <div className="space-y-2 mt-2">
                 <button 
                   onClick={handleFinalizarPedido}
-                  disabled={enviandoPedido}
+                  disabled={enviandoPedido || !lojaAberta}
                   className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {enviandoPedido ? 'Enviando pedido...' : 'Finalizar pedido'}
+                  {enviandoPedido
+                    ? 'Enviando pedido...'
+                    : !lojaAberta
+                      ? 'Loja fechada'
+                      : 'Finalizar pedido'}
                 </button>
                 <button 
                   onClick={handleVoltar}

@@ -1,5 +1,6 @@
 export { PremiumSidebar } from "./PremiumSidebar";
 export { PremiumTopbar } from "./PremiumTopbar";
+export { StoreStatusCard } from "./StoreStatusCard";
 export { PremiumStatCard } from "./PremiumStatCard";
 export { PremiumRevenueChart } from "./PremiumRevenueChart";
 export { PremiumDonutChart } from "./PremiumDonutChart";

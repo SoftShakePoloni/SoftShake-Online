@@ -39,13 +39,15 @@ export default async function AdminDashboardPage() {
     <div className="p-8">
       <div className="space-y-8 max-w-[1800px] mx-auto">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-[#111827] tracking-tight">
-          Dashboard
-        </h1>
-        <p className="text-[#6B7280] mt-2">
-          Acompanhe em tempo real o desempenho do seu delivery.
-        </p>
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#111827] tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-sm text-[#6B7280] mt-1">
+            Visão geral do desempenho do delivery
+          </p>
+        </div>
       </div>
 
       {/* Primary Stats - 4 Column Grid */}

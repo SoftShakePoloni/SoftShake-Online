@@ -1,9 +1,14 @@
 "use server";
 
+import { cache } from "react";
 import { createServerSupabaseClient } from "@/integrations/supabase/server";
 import { redirect } from "next/navigation";
 
-export async function getAdminUser() {
+/**
+ * Deduplicated per request via React.cache so layout + page + actions
+ * share a single auth.getUser() round-trip instead of repeating it.
+ */
+export const getAdminUser = cache(async () => {
   const supabase = await createServerSupabaseClient();
 
   const {
@@ -28,7 +33,7 @@ export async function getAdminUser() {
       created_at: user.created_at || new Date().toISOString(),
     },
   };
-}
+});
 
 export async function requireAdmin() {
   const adminUser = await getAdminUser();

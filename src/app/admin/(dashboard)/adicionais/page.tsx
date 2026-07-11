@@ -1,8 +1,6 @@
-import { requireAdmin } from "@/lib/admin/auth";
-import { AdicionaisManager } from "@/components/admin/adicionais/AdicionaisManager";
+import { redirect } from "next/navigation";
 
-export default async function AdicionaisPage() {
-  await requireAdmin();
-  
-  return <AdicionaisManager />;
+/** Adicionais/complementos ficam dentro do Catálogo unificado. */
+export default function AdicionaisPage() {
+  redirect("/admin/produtos");
 }

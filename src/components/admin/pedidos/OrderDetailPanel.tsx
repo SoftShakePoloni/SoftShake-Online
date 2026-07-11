@@ -36,8 +36,7 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/formatters";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { toast } from "sonner";
+import { useState, useEffect } from "react";
 
 interface OrderDetailPanelProps {
   pedido: Pedido;
@@ -50,32 +49,16 @@ export function OrderDetailPanel({
 }: OrderDetailPanelProps) {
   const [copying, setCopying] = useState(false);
   const [printTipo, setPrintTipo] = useState<OrderPrintTipo | null>(null);
-  const acceptedThisPrintRef = useRef(false);
   const statusInfo = statusConfig[pedido.status];
   const tempoDecorrido = formatDistanceToNow(new Date(pedido.created_at), {
     addSuffix: true,
     locale: ptBR,
   });
 
-  const finishPrint = useCallback(() => {
-    setPrintTipo(null);
-    if (
-      !acceptedThisPrintRef.current &&
-      pedido.status === "pendente" &&
-      onStatusChange
-    ) {
-      acceptedThisPrintRef.current = true;
-      onStatusChange("preparando");
-      toast.success("Pedido aceito", {
-        description: "Status alterado para Preparando",
-      });
-    }
-  }, [pedido.status, onStatusChange]);
-
+  // Impressão NÃO altera status — aceite é só pelo botão/auto-aceite.
   useEffect(() => {
     if (!printTipo) return;
 
-    acceptedThisPrintRef.current = false;
     let printed = false;
     let finished = false;
 
@@ -88,11 +71,11 @@ export function OrderDetailPanel({
     const done = () => {
       if (finished) return;
       finished = true;
-      finishPrint();
+      setPrintTipo(null);
     };
 
     const t1 = window.setTimeout(runPrint, 250);
-    const t2 = window.setTimeout(done, 5000);
+    const t2 = window.setTimeout(done, 8000);
 
     window.addEventListener("afterprint", done);
     return () => {
@@ -100,7 +83,7 @@ export function OrderDetailPanel({
       window.clearTimeout(t2);
       window.removeEventListener("afterprint", done);
     };
-  }, [printTipo, finishPrint]);
+  }, [printTipo]);
 
   const handlePrint = (tipo: OrderPrintTipo) => {
     setPrintTipo(tipo);

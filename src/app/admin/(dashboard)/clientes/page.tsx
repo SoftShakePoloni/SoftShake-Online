@@ -7,15 +7,16 @@ export default async function AdminClientsPage() {
   await requireAdmin();
   const supabase = createServerClient();
 
-  const { data: clientes } = await supabase
-    .from("clientes")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  // Buscar pedidos para calcular estatísticas
-  const { data: pedidos } = await supabase
-    .from("pedidos")
-    .select("cliente_id, total, status, created_at");
+  const [{ data: clientes }, { data: pedidos }] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    // Só os campos usados nas estatísticas (payload menor = mais rápido)
+    supabase
+      .from("pedidos")
+      .select("cliente_id, total, created_at"),
+  ]);
 
   // Calcular estatísticas por cliente
   const estatisticasPorCliente = new Map<string, {

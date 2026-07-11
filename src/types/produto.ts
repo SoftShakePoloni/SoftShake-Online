@@ -4,6 +4,8 @@ export interface Produto {
   nome: string;
   descricao?: string;
   preco_base: number;
+  /** Se preenchido e menor que preco_base, valor cobrado no cardápio */
+  preco_promocional?: number | null;
   esta_disponivel: boolean;
   ordem: number;
   imagem_url?: string;
@@ -18,6 +20,8 @@ export interface Produto {
   tag?: {
     id: string | number;
     nome: string;
+    cor_fundo?: string;
+    cor_texto?: string | null;
   };
 }
 
@@ -30,6 +34,8 @@ export interface Categoria {
 export interface Tag {
   id: string | number;
   nome: string;
+  cor_fundo?: string;
+  cor_texto?: string | null;
 }
 
 export type ProdutoFormData = Omit<Produto, "id" | "created_at" | "updated_at">;

@@ -64,6 +64,8 @@ export type Database = {
       }
       configuracoes_loja: {
         Row: {
+          aceitar_pedidos_automaticamente: boolean | null
+          aceitando_pedidos: boolean | null
           banner_url: string | null
           cidade: string | null
           descricao: string | null
@@ -86,6 +88,8 @@ export type Database = {
           whatsapp: string | null
         }
         Insert: {
+          aceitar_pedidos_automaticamente?: boolean | null
+          aceitando_pedidos?: boolean | null
           banner_url?: string | null
           cidade?: string | null
           descricao?: string | null
@@ -108,6 +112,8 @@ export type Database = {
           whatsapp?: string | null
         }
         Update: {
+          aceitar_pedidos_automaticamente?: boolean | null
+          aceitando_pedidos?: boolean | null
           banner_url?: string | null
           cidade?: string | null
           descricao?: string | null
@@ -322,6 +328,7 @@ export type Database = {
           nome: string
           ordem: number | null
           preco_base: number
+          preco_promocional: number | null
           tag_id: number | null
         }
         Insert: {
@@ -333,6 +340,7 @@ export type Database = {
           nome: string
           ordem?: number | null
           preco_base: number
+          preco_promocional?: number | null
           tag_id?: number | null
         }
         Update: {
@@ -344,6 +352,7 @@ export type Database = {
           nome?: string
           ordem?: number | null
           preco_base?: number
+          preco_promocional?: number | null
           tag_id?: number | null
         }
         Relationships: [

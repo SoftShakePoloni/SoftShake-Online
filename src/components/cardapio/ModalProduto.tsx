@@ -4,9 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { Minus, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { formatBRL, notesOptionGroup, type OptionGroup, type Product } from "@/data/tipos";
+import {
+  formatBRL,
+  getProductUnitPrice,
+  notesOptionGroup,
+  type OptionGroup,
+  type Product,
+} from "@/data/tipos";
+import { PrecoProduto } from "./PrecoProduto";
 import { useCarrinho } from "@/context/CarrinhoContext";
 import { TagBadge } from "@/components/ui/TagBadge";
+import { useLoja } from "@/hooks/useLoja";
+import { toast } from "sonner";
 
 type Props = {
   product: Product | null;
@@ -16,6 +25,8 @@ type Props = {
 
 export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const { adicionarItem } = useCarrinho();
+  const { loja, isLoading } = useLoja();
+  const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
   const groups = product?.optionGroups ?? [notesOptionGroup];
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);
@@ -156,7 +167,8 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
     );
   }, 0);
 
-  const total = (product.price + extras) * qty;
+  const unitPrice = getProductUnitPrice(product);
+  const total = (unitPrice + extras) * qty;
 
   const canAdd = groups.every((g) => {
     if (!g.required) return true;
@@ -165,6 +177,13 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   });
 
   const handleAdicionar = () => {
+    if (!lojaAberta) {
+      toast.error("Loja fechada", {
+        description: "No momento não estamos aceitando pedidos.",
+      });
+      return;
+    }
+
     adicionarItem({
       produto: product,
       qty,
@@ -202,9 +221,9 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
               {product.tag && <TagBadge tag={product.tag} />}
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
-            <p className="pt-1 text-base font-semibold text-foreground">
-              {formatBRL(product.price)}
-            </p>
+            <div className="pt-1">
+              <PrecoProduto product={product} size="lg" />
+            </div>
           </div>
 
           {/* Option groups */}
@@ -416,11 +435,11 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
           </div>
           <button
             type="button"
-            disabled={!canAdd}
+            disabled={!canAdd || !lojaAberta}
             onClick={handleAdicionar}
             className="flex flex-1 items-center justify-between gap-3 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span>Adicionar</span>
+            <span>{lojaAberta ? "Adicionar" : "Loja fechada"}</span>
             <span>{formatBRL(total)}</span>
           </button>
         </div>

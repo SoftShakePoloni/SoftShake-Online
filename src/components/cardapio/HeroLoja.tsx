@@ -77,6 +77,19 @@ export function StoreHero() {
             </button>
           </div>
         </div>
+
+        {!estaAberto && (
+          <div
+            role="status"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          >
+            <p className="font-semibold">Loja fechada no momento</p>
+            <p className="mt-0.5 text-red-700/90">
+              Não estamos aceitando pedidos agora.
+              {horario ? ` ${horario}.` : " Volte mais tarde."}
+            </p>
+          </div>
+        )}
       </section>
 
       <ModalInfoLoja open={infoOpen} onOpenChange={setInfoOpen} />

@@ -1,488 +1,1182 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Opcao } from "@/types/adicional";
+import type { Opcao, GrupoOpcoes } from "@/types/adicional";
+import {
+  createGrupoOpcoes,
+  updateGrupoOpcoes,
+  deleteGrupoOpcoes,
+  createOpcaoInGrupo,
+  setProdutoGrupos,
+  getProdutoGrupoIds,
+} from "@/actions/admin/grupos-opcoes";
+import { updateOpcao, deleteOpcao } from "@/actions/admin/adicionais";
 import { toast } from "sonner";
-import { Loader2, Search, Plus, ChevronRight, ChevronDown, Package } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import {
+  Layers,
+  Plus,
+  Loader2,
+  FolderOpen,
+  Link2,
+  Trash2,
+  Pencil,
+  Check,
+  X,
+  Package,
+  Search,
+  ChevronRight,
+  Info,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { OpcaoDetailPanel } from "./OpcaoDetailPanel";
-import { NovoOpcaoDialog } from "./NovoOpcaoDialog";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-interface ProdutoComGrupos {
-  id: string | number;
-  nome: string;
-  grupos: {
-    id: string | number;
-    nome: string;
-    opcoes: Opcao[];
-  }[];
-}
+type Tab = "grupos" | "itens" | "produtos";
+type ProdutoMini = { id: number; nome: string };
+
+const STEPS = [
+  {
+    n: 1,
+    tab: "grupos" as Tab,
+    title: "Grupos",
+    desc: "Ex.: Cremes, Frutas, Coberturas",
+  },
+  {
+    n: 2,
+    tab: "itens" as Tab,
+    title: "Itens",
+    desc: "Ex.: Granola, Morango…",
+  },
+  {
+    n: 3,
+    tab: "produtos" as Tab,
+    title: "Produtos",
+    desc: "Quais produtos usam cada grupo",
+  },
+];
 
 export function AdicionaisManager() {
-  const [produtos, setProdutos] = useState<ProdutoComGrupos[]>([]);
-  const [selectedOpcao, setSelectedOpcao] = useState<Opcao | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "ativo" | "inativo">("all");
-  const [showNovoDialog, setShowNovoDialog] = useState(false);
-  const [expandedProdutos, setExpandedProdutos] = useState<Set<string | number>>(new Set());
-  const [expandedGrupos, setExpandedGrupos] = useState<Set<string | number>>(new Set());
+  const [tab, setTab] = useState<Tab>("grupos");
+  const [grupos, setGrupos] = useState<GrupoOpcoes[]>([]);
+  const [opcoes, setOpcoes] = useState<Opcao[]>([]);
+  const [produtos, setProdutos] = useState<ProdutoMini[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState(false);
   const supabase = createClient();
 
-  // Buscar estrutura completa: Produtos > Grupos > Opções
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      // Buscar produtos com seus grupos
-      const { data: produtoGrupos, error: pgError } = await supabase
-        .from("produto_grupos")
-        .select(`
-          produto_id,
-          grupo_id,
-          produto:produtos(id, nome),
-          grupo:grupos_opcoes(id, nome)
-        `)
-        .order("ordem", { ascending: true });
-
-      if (pgError) throw pgError;
-
-      // Buscar todas as opções
-      let opcoesQuery = supabase
-        .from("opcoes")
-        .select(`
-          *,
-          grupo:grupos_opcoes(id, nome)
-        `)
-        .order("ordem", { ascending: true });
-
-      if (statusFilter !== "all") {
-        opcoesQuery = opcoesQuery.eq("status", statusFilter);
-      }
-
-      const { data: opcoes, error: opcoesError } = await opcoesQuery;
-      if (opcoesError) throw opcoesError;
-
-      // Organizar dados hierarquicamente
-      const produtosMap = new Map<string | number, ProdutoComGrupos>();
-
-      type ProdutoGrupoRow = {
-        produto_id: string | number;
-        grupo_id: string | number;
-        produto: { id: string | number; nome: string } | null;
-        grupo: { id: string | number; nome: string } | null;
-      };
-
-      (produtoGrupos || []).forEach((pg) => {
-        const row = pg as unknown as ProdutoGrupoRow;
-        const produtoId = row.produto_id;
-        const grupoId = row.grupo_id;
-        const produto = row.produto;
-        const grupo = row.grupo;
-
-        if (!produto || !grupo) return;
-
-        // Criar produto se não existir
-        if (!produtosMap.has(produtoId)) {
-          produtosMap.set(produtoId, {
-            id: produtoId,
-            nome: produto.nome,
-            grupos: [],
-          });
-        }
-
-        const produtoData = produtosMap.get(produtoId)!;
-
-        // Adicionar grupo se não existir
-        if (!produtoData.grupos.find((g) => g.id === grupoId)) {
-          produtoData.grupos.push({
-            id: grupoId,
-            nome: grupo.nome,
-            opcoes: [],
-          });
-        }
-      });
-
-      // Adicionar opções aos grupos
-      (opcoes || []).forEach((opcao) => {
-        const opt = opcao as Opcao & {
-          grupo_id: string | number;
-          grupo?: Opcao["grupo"];
-        };
-        produtosMap.forEach((produto) => {
-          const grupo = produto.grupos.find(
-            (g) => String(g.id) === String(opt.grupo_id)
-          );
-          if (grupo) {
-            grupo.opcoes.push({
-              ...opt,
-              grupo: opt.grupo,
-            });
-          }
-        });
-      });
-
-      setProdutos(Array.from(produtosMap.values()));
-
-      // Auto-expandir primeiro produto
-      if (produtosMap.size > 0 && expandedProdutos.size === 0) {
-        const primeiroProdutoId = Array.from(produtosMap.keys())[0];
-        setExpandedProdutos(new Set([primeiroProdutoId]));
-      }
-    } catch (error) {
-      console.error("Erro ao buscar dados:", error);
-      toast.error("Erro ao carregar adicionais");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [statusFilter]);
-
-  // Realtime
-  useEffect(() => {
-    const channel = supabase
-      .channel("opcoes-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "opcoes",
-        },
-        () => {
-          fetchData();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [statusFilter]);
-
-  const toggleProduto = (produtoId: string | number) => {
-    const newExpanded = new Set(expandedProdutos);
-    if (newExpanded.has(produtoId)) {
-      newExpanded.delete(produtoId);
-    } else {
-      newExpanded.add(produtoId);
-    }
-    setExpandedProdutos(newExpanded);
-  };
-
-  const toggleGrupo = (grupoId: string | number) => {
-    const newExpanded = new Set(expandedGrupos);
-    if (newExpanded.has(grupoId)) {
-      newExpanded.delete(grupoId);
-    } else {
-      newExpanded.add(grupoId);
-    }
-    setExpandedGrupos(newExpanded);
-  };
-
-  // Filtrar por busca
-  const filteredProdutos = produtos
-    .map((produto) => ({
-      ...produto,
-      grupos: produto.grupos
-        .map((grupo) => ({
-          ...grupo,
-          opcoes: grupo.opcoes.filter((opcao) =>
-            opcao.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            grupo.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            produto.nome.toLowerCase().includes(searchTerm.toLowerCase())
-          ),
-        }))
-        .filter((grupo) => grupo.opcoes.length > 0),
-    }))
-    .filter((produto) => produto.grupos.length > 0);
-
-  const totalOpcoes = produtos.reduce(
-    (total, p) => total + p.grupos.reduce((t, g) => t + g.opcoes.length, 0),
-    0
+  // Grupos
+  const [novoGrupoNome, setNovoGrupoNome] = useState("");
+  const [novoGrupoMin, setNovoGrupoMin] = useState(0);
+  const [novoGrupoMax, setNovoGrupoMax] = useState(1);
+  const [editGrupoId, setEditGrupoId] = useState<string | number | null>(null);
+  const [editGrupo, setEditGrupo] = useState({
+    nome: "",
+    min_escolha: 0,
+    max_escolha: 1,
+  });
+  const [deleteGrupoId, setDeleteGrupoId] = useState<string | number | null>(
+    null
   );
 
-  const handleUpdate = (updatedOpcao: Opcao) => {
-    setSelectedOpcao(updatedOpcao);
-    // Atualiza a árvore local imediatamente (evita race com fetch enquanto o DB salva)
-    setProdutos((prev) =>
-      prev.map((produto) => ({
-        ...produto,
-        grupos: produto.grupos.map((grupo) => ({
-          ...grupo,
-          opcoes: grupo.opcoes.map((o) =>
-            String(o.id) === String(updatedOpcao.id)
-              ? { ...o, ...updatedOpcao }
-              : o
-          ),
-        })),
-      }))
+  // Itens
+  const [novoAdNome, setNovoAdNome] = useState("");
+  const [novoAdPreco, setNovoAdPreco] = useState(0);
+  const [novoAdGrupo, setNovoAdGrupo] = useState("");
+  const [filtroGrupo, setFiltroGrupo] = useState("todos");
+  const [editOpcaoId, setEditOpcaoId] = useState<string | number | null>(null);
+  const [editOpcao, setEditOpcao] = useState({
+    nome: "",
+    preco_adicional: 0,
+    grupo_id: "",
+    esta_disponivel: true,
+  });
+  const [deleteOpcaoId, setDeleteOpcaoId] = useState<string | number | null>(
+    null
+  );
+
+  // Produtos
+  const [produtoLinkId, setProdutoLinkId] = useState("");
+  const [gruposDoProduto, setGruposDoProduto] = useState<number[]>([]);
+  const [loadingLink, setLoadingLink] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [g, o, p] = await Promise.all([
+        supabase.from("grupos_opcoes").select("*").order("nome"),
+        supabase
+          .from("opcoes")
+          .select("*, grupo:grupos_opcoes(id, nome)")
+          .order("ordem"),
+        supabase.from("produtos").select("id, nome").order("nome"),
+      ]);
+      if (g.error) throw g.error;
+      if (o.error) throw o.error;
+      if (p.error) throw p.error;
+
+      const gs = (g.data || []) as GrupoOpcoes[];
+      setGrupos(gs);
+      setOpcoes((o.data || []) as Opcao[]);
+      setProdutos((p.data || []) as ProdutoMini[]);
+
+      setNovoAdGrupo((prev) => {
+        if (prev) return prev;
+        return gs[0] ? String(gs[0].id) : "";
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao carregar");
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!produtoLinkId) {
+      setGruposDoProduto([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingLink(true);
+    void getProdutoGrupoIds(produtoLinkId)
+      .then((ids) => {
+        if (!cancelled) setGruposDoProduto(ids.map(Number));
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Erro ao carregar vínculos");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLink(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [produtoLinkId]);
+
+  const countItens = useCallback(
+    (grupoId: string | number) =>
+      opcoes.filter((o) => String(o.grupo_id) === String(grupoId)).length,
+    [opcoes]
+  );
+
+  const gruposFiltrados = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q || tab !== "grupos") return grupos;
+    return grupos.filter((g) => g.nome.toLowerCase().includes(q));
+  }, [grupos, search, tab]);
+
+  const opcoesAgrupadas = useMemo(() => {
+    let list = opcoes;
+    if (filtroGrupo !== "todos") {
+      list = list.filter((o) => String(o.grupo_id) === filtroGrupo);
+    }
+    const q = search.trim().toLowerCase();
+    if (q && tab === "itens") {
+      list = list.filter(
+        (o) =>
+          o.nome.toLowerCase().includes(q) ||
+          o.grupo?.nome?.toLowerCase().includes(q)
+      );
+    }
+
+    const map = new Map<string, { grupo: GrupoOpcoes | null; itens: Opcao[] }>();
+    for (const o of list) {
+      const key = String(o.grupo_id ?? "sem");
+      if (!map.has(key)) {
+        const g =
+          grupos.find((x) => String(x.id) === key) ||
+          (o.grupo
+            ? ({
+                id: o.grupo.id,
+                nome: o.grupo.nome,
+                min_escolha: 0,
+                max_escolha: 1,
+              } as GrupoOpcoes)
+            : null);
+        map.set(key, { grupo: g, itens: [] });
+      }
+      map.get(key)!.itens.push(o);
+    }
+    return Array.from(map.values());
+  }, [opcoes, filtroGrupo, search, tab, grupos]);
+
+  // --- handlers grupos ---
+  const handleCreateGrupo = async () => {
+    if (!novoGrupoNome.trim()) {
+      toast.error("Digite o nome do grupo");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createGrupoOpcoes({
+        nome: novoGrupoNome,
+        min_escolha: novoGrupoMin,
+        max_escolha: novoGrupoMax,
+      });
+      setNovoGrupoNome("");
+      setNovoGrupoMin(0);
+      setNovoGrupoMax(1);
+      toast.success("Grupo criado");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveGrupo = async () => {
+    if (editGrupoId == null) return;
+    setBusy(true);
+    try {
+      await updateGrupoOpcoes(editGrupoId, editGrupo);
+      toast.success("Grupo atualizado");
+      setEditGrupoId(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteGrupo = async () => {
+    if (deleteGrupoId == null) return;
+    setBusy(true);
+    try {
+      await deleteGrupoOpcoes(deleteGrupoId);
+      toast.success("Grupo excluído");
+      setDeleteGrupoId(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- handlers itens ---
+  const handleCreateOpcao = async () => {
+    if (!novoAdNome.trim()) {
+      toast.error("Digite o nome do item");
+      return;
+    }
+    if (!novoAdGrupo) {
+      toast.error("Selecione um grupo");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createOpcaoInGrupo({
+        nome: novoAdNome,
+        grupo_id: novoAdGrupo,
+        preco_adicional: novoAdPreco,
+      });
+      setNovoAdNome("");
+      setNovoAdPreco(0);
+      toast.success("Item criado");
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSaveOpcao = async () => {
+    if (editOpcaoId == null) return;
+    setBusy(true);
+    try {
+      await updateOpcao(editOpcaoId, {
+        nome: editOpcao.nome,
+        preco_adicional: editOpcao.preco_adicional,
+        grupo_id: editOpcao.grupo_id,
+        esta_disponivel: editOpcao.esta_disponivel,
+      });
+      toast.success("Item atualizado");
+      setEditOpcaoId(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteOpcao = async () => {
+    if (deleteOpcaoId == null) return;
+    setBusy(true);
+    try {
+      await deleteOpcao(deleteOpcaoId);
+      toast.success("Item excluído");
+      setDeleteOpcaoId(null);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // --- produtos ---
+  const toggleGrupoProduto = (grupoId: number) => {
+    setGruposDoProduto((prev) =>
+      prev.includes(grupoId)
+        ? prev.filter((id) => id !== grupoId)
+        : [...prev, grupoId]
     );
   };
 
-  const handleDelete = (opcaoId: string | number) => {
-    setSelectedOpcao(null);
-    setProdutos((prev) =>
-      prev.map((produto) => ({
-        ...produto,
-        grupos: produto.grupos.map((grupo) => ({
-          ...grupo,
-          opcoes: grupo.opcoes.filter((o) => String(o.id) !== String(opcaoId)),
-        })),
-      }))
-    );
+  const handleSaveVinculos = async () => {
+    if (!produtoLinkId) {
+      toast.error("Selecione um produto");
+      return;
+    }
+    setBusy(true);
+    try {
+      await setProdutoGrupos(produtoLinkId, gruposDoProduto);
+      toast.success("Salvo! O produto exibirá os grupos marcados.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleCreate = (novaOpcao: Opcao) => {
-    fetchData();
-    setSelectedOpcao(novaOpcao);
-    setShowNovoDialog(false);
+  const goTab = (t: Tab) => {
+    setSearch("");
+    setTab(t);
   };
-
-  if (isLoading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-[#F8F9FC]">
-        <Loader2 className="w-8 h-8 text-[#4C258C] animate-spin" />
-      </div>
-    );
-  }
 
   return (
-    <div className="h-screen overflow-hidden bg-[#F8F9FC] flex">
-      {/* Lista Hierárquica - Esquerda */}
-      <div className="w-[380px] flex-shrink-0 bg-white border-r border-[#E5E7EB] flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-[#E5E7EB]">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#111827]">Adicionais</h2>
-              <p className="text-sm text-[#6B7280]">
-                {totalOpcoes} {totalOpcoes === 1 ? "adicional" : "adicionais"}
-              </p>
-            </div>
-            <Button
-              size="sm"
-              onClick={() => setShowNovoDialog(true)}
-              className="bg-[#4C258C] hover:bg-[#5E35B1]"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Novo
-            </Button>
-          </div>
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col overflow-hidden bg-[#F7F8FC]">
+      {/* Header + passos */}
+      <div className="bg-white border-b border-[#E5E7EB] px-6 py-5 shrink-0">
+        <h1 className="text-2xl font-bold text-[#111827] tracking-tight">
+          Adicionais
+        </h1>
+        <p className="text-sm text-[#6B7280] mt-1 max-w-2xl leading-relaxed">
+          Complementos que o cliente escolhe no pedido (granola, cremes, frutas…).
+          Configure em 3 passos simples:
+        </p>
 
-          {/* Busca */}
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-            <Input
-              placeholder="Buscar adicionais..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 h-10"
-            />
-          </div>
+      </div>
 
-          {/* Filtros */}
-          <div className="flex gap-2">
-            <Button
-              variant={statusFilter === "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter("all")}
-              className={statusFilter === "all" ? "bg-[#4C258C] hover:bg-[#5E35B1]" : ""}
-            >
-              Todos
-            </Button>
-            <Button
-              variant={statusFilter === "ativo" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter("ativo")}
-              className={statusFilter === "ativo" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
-            >
-              Ativos
-            </Button>
-            <Button
-              variant={statusFilter === "inativo" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter("inativo")}
-              className={statusFilter === "inativo" ? "bg-red-600 hover:bg-red-700" : ""}
-            >
-              Inativos
-            </Button>
+      {/* Layout vertical: passos à esquerda + conteúdo à direita */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* Navegação vertical dos passos */}
+        <aside className="w-[240px] shrink-0 border-r border-[#E5E7EB] bg-white flex flex-col">
+          <div className="px-4 pt-4 pb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+              Passos
+            </p>
           </div>
-
-          {/* Expandir/Recolher Tudo */}
-          <div className="flex gap-2 mt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const todosProdutosIds = produtos.map(p => p.id);
-                const todosGruposIds = produtos.flatMap(p => p.grupos.map(g => g.id));
-                setExpandedProdutos(new Set(todosProdutosIds));
-                setExpandedGrupos(new Set(todosGruposIds));
-              }}
-              className="flex-1 text-xs"
-            >
-              Expandir Tudo
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setExpandedProdutos(new Set());
-                setExpandedGrupos(new Set());
-              }}
-              className="flex-1 text-xs"
-            >
-              Recolher Tudo
-            </Button>
-          </div>
-        </div>
-
-        {/* Lista Hierárquica */}
-        <ScrollArea className="flex-1">
-          <div className="p-2">
-            {filteredProdutos.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-8 text-center">
-                <Package className="w-12 h-12 text-[#9CA3AF] mb-3" />
-                <p className="text-sm text-[#6B7280]">Nenhum adicional encontrado</p>
-              </div>
-            ) : (
-              filteredProdutos.map((produto) => (
-                <div key={produto.id} className="mb-2">
-                  {/* Produto */}
+          <nav className="flex-1 px-3 pb-4 space-y-1.5 overflow-y-auto">
+            {STEPS.map((s, idx) => {
+              const active = tab === s.tab;
+              return (
+                <div key={s.tab}>
                   <button
-                    onClick={() => toggleProduto(produto.id)}
-                    className="w-full flex items-center gap-2 p-3 rounded-lg hover:bg-[#F8F9FC] transition-colors"
-                  >
-                    {expandedProdutos.has(produto.id) ? (
-                      <ChevronDown className="w-4 h-4 text-[#6B7280] flex-shrink-0" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 text-[#6B7280] flex-shrink-0" />
+                    type="button"
+                    onClick={() => goTab(s.tab)}
+                    className={cn(
+                      "w-full text-left rounded-xl border px-3 py-3 transition-all",
+                      active
+                        ? "border-[#4C258C] bg-[#FBF9FE] shadow-sm"
+                        : "border-transparent hover:bg-[#F9FAFB] hover:border-[#E5E7EB]"
                     )}
-                    <Package className="w-4 h-4 text-[#4C258C] flex-shrink-0" />
-                    <span className="text-sm font-semibold text-[#111827] truncate">
-                      {produto.nome}
-                    </span>
-                    <span className="ml-auto text-xs text-[#6B7280] bg-[#F8F9FC] px-2 py-0.5 rounded-full">
-                      {produto.grupos.reduce((t, g) => t + g.opcoes.length, 0)}
-                    </span>
-                  </button>
-
-                  {/* Grupos (quando produto expandido) */}
-                  {expandedProdutos.has(produto.id) && (
-                    <div className="ml-6 mt-1 space-y-1">
-                      {produto.grupos.map((grupo) => (
-                        <div key={grupo.id}>
-                          {/* Grupo */}
-                          <button
-                            onClick={() => toggleGrupo(grupo.id)}
-                            className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-[#F8F9FC] transition-colors"
-                          >
-                            {expandedGrupos.has(grupo.id) ? (
-                              <ChevronDown className="w-3 h-3 text-[#6B7280] flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-3 h-3 text-[#6B7280] flex-shrink-0" />
-                            )}
-                            <span className="text-xs font-medium text-[#6B7280] truncate">
-                              {grupo.nome}
-                            </span>
-                            <span className="ml-auto text-[10px] text-[#9CA3AF] bg-[#F8F9FC] px-1.5 py-0.5 rounded">
-                              {grupo.opcoes.length}
-                            </span>
-                          </button>
-
-                          {/* Opções (quando grupo expandido) */}
-                          {expandedGrupos.has(grupo.id) && (
-                            <div className="ml-5 mt-1 space-y-1">
-                              {grupo.opcoes.map((opcao) => {
-                                const isSelected = selectedOpcao?.id === opcao.id;
-                                const isAtivo = opcao.status === "ativo";
-
-                                return (
-                                  <button
-                                    key={opcao.id}
-                                    onClick={() => setSelectedOpcao(opcao)}
-                                    className={cn(
-                                      "w-full p-2 rounded-lg text-left transition-all duration-200 relative",
-                                      isSelected
-                                        ? "bg-[#EEE8FA] shadow-sm"
-                                        : "hover:bg-[#F8F9FC]"
-                                    )}
-                                  >
-                                    {isSelected && (
-                                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#4C258C] rounded-l-lg" />
-                                    )}
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span
-                                        className={cn(
-                                          "text-xs font-medium truncate",
-                                          isSelected ? "text-[#4C258C]" : "text-[#111827]"
-                                        )}
-                                      >
-                                        {opcao.nome}
-                                      </span>
-                                      <div className="flex items-center gap-1 flex-shrink-0">
-                                        <span className="text-[10px] font-semibold text-[#111827]">
-                                          +R$ {opcao.preco_adicional.toFixed(2)}
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "text-[9px] px-1.5 py-0.5 rounded-full font-medium",
-                                            opcao.esta_disponivel
-                                              ? "bg-emerald-50 text-emerald-700"
-                                              : "bg-red-50 text-red-700"
-                                          )}
-                                        >
-                                          {opcao.esta_disponivel ? "Disp" : "Esg"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span
+                        className={cn(
+                          "w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5",
+                          active
+                            ? "bg-[#4C258C] text-white"
+                            : "bg-[#F3F4F6] text-[#6B7280]"
+                        )}
+                      >
+                        {s.n}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            "text-sm font-bold leading-tight",
+                            active ? "text-[#4C258C]" : "text-[#111827]"
                           )}
-                        </div>
-                      ))}
+                        >
+                          {s.title}
+                        </p>
+                        <p className="text-[11px] text-[#9CA3AF] mt-0.5 leading-snug">
+                          {s.desc}
+                        </p>
+                      </div>
+                      {active && (
+                        <ChevronRight className="w-4 h-4 text-[#4C258C] shrink-0 mt-1" />
+                      )}
+                    </div>
+                  </button>
+                  {idx < STEPS.length - 1 && (
+                    <div className="flex justify-start pl-[22px] py-0.5">
+                      <div className="w-px h-3 bg-[#E5E7EB]" />
                     </div>
                   )}
                 </div>
-              ))
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Conteúdo do passo ativo */}
+        <ScrollArea className="flex-1">
+          <div className="max-w-2xl mx-auto p-6 space-y-5">
+            {loading ? (
+              <div className="flex justify-center py-20">
+                <Loader2 className="w-7 h-7 text-[#4C258C] animate-spin" />
+              </div>
+            ) : tab === "grupos" ? (
+              <>
+                <HelpCard
+                  title="O que é um grupo?"
+                  text="É o título da seção de escolhas no produto. Exemplo: no açaí, o grupo “Frutas” agrupa banana, morango e kiwi."
+                />
+
+                <Card title="Criar grupo">
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <Label className="text-xs text-[#6B7280]">
+                        Nome do grupo
+                      </Label>
+                      <Input
+                        value={novoGrupoNome}
+                        onChange={(e) => setNovoGrupoNome(e.target.value)}
+                        placeholder="Ex.: Cremes, Frutas, Coberturas..."
+                        className="h-11 rounded-xl mt-1"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void handleCreateGrupo();
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-[#6B7280]">
+                        Mínimo de escolhas
+                      </Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={novoGrupoMin}
+                        onChange={(e) =>
+                          setNovoGrupoMin(parseInt(e.target.value, 10) || 0)
+                        }
+                        className="h-11 rounded-xl mt-1"
+                      />
+                      <p className="text-[11px] text-[#9CA3AF] mt-1">
+                        0 = opcional
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-[#6B7280]">
+                        Máximo de escolhas
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={novoGrupoMax}
+                        onChange={(e) =>
+                          setNovoGrupoMax(parseInt(e.target.value, 10) || 1)
+                        }
+                        className="h-11 rounded-xl mt-1"
+                      />
+                      <p className="text-[11px] text-[#9CA3AF] mt-1">
+                        Quantos o cliente pode marcar
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => void handleCreateGrupo()}
+                    disabled={busy || !novoGrupoNome.trim()}
+                    className="mt-4 h-11 rounded-xl bg-[#4C258C] hover:bg-[#5E35B1] w-full"
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Criar grupo
+                  </Button>
+                </Card>
+
+                <Card
+                  title="Grupos cadastrados"
+                  badge={String(gruposFiltrados.length)}
+                >
+                  {grupos.length > 3 && (
+                    <SearchField
+                      value={search}
+                      onChange={setSearch}
+                      placeholder="Buscar grupo..."
+                    />
+                  )}
+                  {gruposFiltrados.length === 0 ? (
+                    <Empty
+                      icon={FolderOpen}
+                      title="Nenhum grupo ainda"
+                      text="Crie o primeiro grupo acima (ex.: Frutas)"
+                    />
+                  ) : (
+                    <ul className="divide-y divide-[#F3F4F6] -mx-5">
+                      {gruposFiltrados.map((g) => {
+                        const editing = String(editGrupoId) === String(g.id);
+                        const n = countItens(g.id);
+                        return (
+                          <li key={g.id} className="px-5 py-3.5">
+                            {editing ? (
+                              <div className="space-y-2">
+                                <Input
+                                  value={editGrupo.nome}
+                                  onChange={(e) =>
+                                    setEditGrupo((s) => ({
+                                      ...s,
+                                      nome: e.target.value,
+                                    }))
+                                  }
+                                  className="h-10 rounded-xl"
+                                />
+                                <div className="flex flex-col gap-2">
+                                  <Input
+                                    type="number"
+                                    value={editGrupo.min_escolha}
+                                    onChange={(e) =>
+                                      setEditGrupo((s) => ({
+                                        ...s,
+                                        min_escolha:
+                                          parseInt(e.target.value, 10) || 0,
+                                      }))
+                                    }
+                                    className="h-10 rounded-xl"
+                                    placeholder="Mínimo"
+                                  />
+                                  <Input
+                                    type="number"
+                                    value={editGrupo.max_escolha}
+                                    onChange={(e) =>
+                                      setEditGrupo((s) => ({
+                                        ...s,
+                                        max_escolha:
+                                          parseInt(e.target.value, 10) || 1,
+                                      }))
+                                    }
+                                    className="h-10 rounded-xl"
+                                    placeholder="Máximo"
+                                  />
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="icon"
+                                      className="h-10 w-10 rounded-xl bg-[#4C258C] hover:bg-[#5E35B1]"
+                                      disabled={busy}
+                                      onClick={() => void handleSaveGrupo()}
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-10 w-10 rounded-xl"
+                                      onClick={() => setEditGrupoId(null)}
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-[#EEE8FA] flex items-center justify-center shrink-0">
+                                  <FolderOpen className="w-5 h-5 text-[#4C258C]" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-[#111827]">
+                                    {g.nome}
+                                  </p>
+                                  <p className="text-xs text-[#9CA3AF] mt-0.5">
+                                    {n} item{n !== 1 ? "s" : ""} · cliente
+                                    escolhe {g.min_escolha ?? 0} a{" "}
+                                    {g.max_escolha ?? 1}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="w-9 h-9 rounded-xl text-[#6B7280] hover:bg-[#F3F4F6] flex items-center justify-center"
+                                  onClick={() => {
+                                    setEditGrupoId(g.id);
+                                    setEditGrupo({
+                                      nome: g.nome,
+                                      min_escolha: g.min_escolha ?? 0,
+                                      max_escolha: g.max_escolha ?? 1,
+                                    });
+                                  }}
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-9 h-9 rounded-xl text-[#9CA3AF] hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                                  onClick={() => setDeleteGrupoId(g.id)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </Card>
+
+                {grupos.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="w-full h-11 rounded-xl border-[#E5E7EB] text-[#4C258C] font-semibold"
+                    onClick={() => goTab("itens")}
+                  >
+                    Próximo: cadastrar itens
+                    <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                )}
+              </>
+            ) : tab === "itens" ? (
+              <>
+                <HelpCard
+                  title="O que é um item?"
+                  text="É cada opção dentro do grupo. Exemplo: no grupo “Frutas”, os itens são banana, morango e kiwi — cada um com seu preço."
+                />
+
+                {grupos.length === 0 ? (
+                  <Card title="Cadastre um grupo primeiro">
+                    <p className="text-sm text-[#6B7280] mb-3">
+                      Os itens precisam ficar dentro de um grupo.
+                    </p>
+                    <Button
+                      className="rounded-xl bg-[#4C258C] hover:bg-[#5E35B1] w-full"
+                      onClick={() => goTab("grupos")}
+                    >
+                      Ir para grupos
+                    </Button>
+                  </Card>
+                ) : (
+                  <>
+                    <Card title="Adicionar item">
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <Label className="text-xs text-[#6B7280]">Nome</Label>
+                          <Input
+                            value={novoAdNome}
+                            onChange={(e) => setNovoAdNome(e.target.value)}
+                            placeholder="Ex.: Granola"
+                            className="h-11 rounded-xl mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#6B7280]">
+                            Em qual grupo?
+                          </Label>
+                          <Select
+                            value={novoAdGrupo}
+                            onValueChange={setNovoAdGrupo}
+                          >
+                            <SelectTrigger className="h-11 rounded-xl mt-1">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {grupos.map((g) => (
+                                <SelectItem key={g.id} value={String(g.id)}>
+                                  {g.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-[#6B7280]">
+                            Preço extra (R$)
+                          </Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            value={novoAdPreco}
+                            onChange={(e) =>
+                              setNovoAdPreco(parseFloat(e.target.value) || 0)
+                            }
+                            className="h-11 rounded-xl mt-1"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => void handleCreateOpcao()}
+                        disabled={busy || !novoAdNome.trim() || !novoAdGrupo}
+                        className="mt-4 h-11 rounded-xl bg-[#4C258C] hover:bg-[#5E35B1] w-full"
+                      >
+                        <Plus className="w-4 h-4 mr-1.5" />
+                        Adicionar item
+                      </Button>
+                    </Card>
+
+                    <div className="flex flex-col gap-2">
+                      <SearchField
+                        value={search}
+                        onChange={setSearch}
+                        placeholder="Buscar item..."
+                      />
+                      <Select value={filtroGrupo} onValueChange={setFiltroGrupo}>
+                        <SelectTrigger className="h-10 w-full rounded-xl bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todos">Todos os grupos</SelectItem>
+                          {grupos.map((g) => (
+                            <SelectItem key={g.id} value={String(g.id)}>
+                              {g.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {opcoesAgrupadas.length === 0 ? (
+                      <Card title="Itens">
+                        <Empty
+                          icon={Layers}
+                          title="Nenhum item ainda"
+                          text="Adicione o primeiro item no formulário acima"
+                        />
+                      </Card>
+                    ) : (
+                      opcoesAgrupadas.map(({ grupo, itens }) => (
+                        <Card
+                          key={String(grupo?.id ?? "x")}
+                          title={grupo?.nome || "Sem grupo"}
+                          badge={`${itens.length}`}
+                        >
+                          <ul className="divide-y divide-[#F3F4F6] -mx-5">
+                            {itens.map((o) => {
+                              const editing =
+                                String(editOpcaoId) === String(o.id);
+                              return (
+                                <li key={o.id} className="px-5 py-3">
+                                  {editing ? (
+                                    <div className="space-y-2">
+                                      <div className="flex flex-col gap-2">
+                                        <Input
+                                          value={editOpcao.nome}
+                                          onChange={(e) =>
+                                            setEditOpcao((s) => ({
+                                              ...s,
+                                              nome: e.target.value,
+                                            }))
+                                          }
+                                          className="h-10 rounded-xl"
+                                        />
+                                        <Select
+                                          value={editOpcao.grupo_id}
+                                          onValueChange={(v) =>
+                                            setEditOpcao((s) => ({
+                                              ...s,
+                                              grupo_id: v,
+                                            }))
+                                          }
+                                        >
+                                          <SelectTrigger className="h-10 rounded-xl">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {grupos.map((g) => (
+                                              <SelectItem
+                                                key={g.id}
+                                                value={String(g.id)}
+                                              >
+                                                {g.nome}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          value={editOpcao.preco_adicional}
+                                          onChange={(e) =>
+                                            setEditOpcao((s) => ({
+                                              ...s,
+                                              preco_adicional:
+                                                parseFloat(e.target.value) || 0,
+                                            }))
+                                          }
+                                          className="h-10 rounded-xl"
+                                        />
+                                      </div>
+                                      <div className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2">
+                                          <Switch
+                                            checked={editOpcao.esta_disponivel}
+                                            onCheckedChange={(v) =>
+                                              setEditOpcao((s) => ({
+                                                ...s,
+                                                esta_disponivel: v,
+                                              }))
+                                            }
+                                            className="data-[state=checked]:bg-[#4C258C]"
+                                          />
+                                          <span className="text-xs text-[#6B7280]">
+                                            Disponível
+                                          </span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            className="rounded-xl bg-[#4C258C] hover:bg-[#5E35B1] flex-1"
+                                            disabled={busy}
+                                            onClick={() => void handleSaveOpcao()}
+                                          >
+                                            Salvar
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="rounded-xl flex-1"
+                                            onClick={() => setEditOpcaoId(null)}
+                                          >
+                                            Cancelar
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-[#111827]">
+                                          {o.nome}
+                                        </p>
+                                        <p className="text-xs text-[#9CA3AF]">
+                                          +R${" "}
+                                          {Number(o.preco_adicional || 0)
+                                            .toFixed(2)
+                                            .replace(".", ",")}
+                                          {!o.esta_disponivel && (
+                                            <span className="text-red-500">
+                                              {" "}
+                                              · esgotado
+                                            </span>
+                                          )}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="w-9 h-9 rounded-xl text-[#6B7280] hover:bg-[#F3F4F6] flex items-center justify-center"
+                                        onClick={() => {
+                                          setEditOpcaoId(o.id);
+                                          setEditOpcao({
+                                            nome: o.nome,
+                                            preco_adicional: Number(
+                                              o.preco_adicional || 0
+                                            ),
+                                            grupo_id: String(o.grupo_id),
+                                            esta_disponivel: Boolean(
+                                              o.esta_disponivel
+                                            ),
+                                          });
+                                        }}
+                                      >
+                                        <Pencil className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="w-9 h-9 rounded-xl text-[#9CA3AF] hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                                        onClick={() => setDeleteOpcaoId(o.id)}
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </Card>
+                      ))
+                    )}
+
+                    {opcoes.length > 0 && (
+                      <Button
+                        variant="outline"
+                        className="w-full h-11 rounded-xl border-[#E5E7EB] text-[#4C258C] font-semibold"
+                        onClick={() => goTab("produtos")}
+                      >
+                        Próximo: vincular aos produtos
+                        <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <HelpCard
+                  title="Por que vincular?"
+                  text="Um produto só mostra os grupos que você marcar aqui. Ex.: o açaí pode ter “Frutas” e “Cremes”; o milkshake, só “Coberturas”."
+                />
+
+                <Card title="Escolha o produto">
+                  <Select
+                    value={produtoLinkId}
+                    onValueChange={setProdutoLinkId}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl w-full">
+                      <SelectValue placeholder="Selecione um produto..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {produtos.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Card>
+
+                {!produtoLinkId ? (
+                  <Empty
+                    icon={Package}
+                    title="Selecione um produto"
+                    text="Depois marque quais grupos ele deve mostrar no cardápio"
+                  />
+                ) : loadingLink ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#4C258C]" />
+                  </div>
+                ) : grupos.length === 0 ? (
+                  <Card title="Sem grupos">
+                    <p className="text-sm text-[#6B7280] mb-3">
+                      Crie grupos e itens antes de vincular.
+                    </p>
+                    <Button
+                      className="rounded-xl bg-[#4C258C] hover:bg-[#5E35B1] w-full"
+                      onClick={() => goTab("grupos")}
+                    >
+                      Ir para grupos
+                    </Button>
+                  </Card>
+                ) : (
+                  <Card
+                    title="Quais grupos este produto usa?"
+                    badge={`${gruposDoProduto.length}/${grupos.length}`}
+                  >
+                    <div className="flex flex-col gap-2">
+                      {grupos.map((g) => {
+                        const checked = gruposDoProduto.includes(Number(g.id));
+                        const n = countItens(g.id);
+                        return (
+                          <label
+                            key={g.id}
+                            className={cn(
+                              "flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors",
+                              checked
+                                ? "border-[#4C258C]/40 bg-[#FBF9FE]"
+                                : "border-[#E5E7EB] hover:bg-[#F9FAFB]"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-[#D1D5DB] text-[#4C258C] focus:ring-[#4C258C]"
+                              checked={checked}
+                              onChange={() => toggleGrupoProduto(Number(g.id))}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-[#111827]">
+                                {g.nome}
+                              </p>
+                              <p className="text-xs text-[#9CA3AF]">
+                                {n} item{n !== 1 ? "s" : ""}
+                                {n === 0 && " · grupo vazio"}
+                              </p>
+                            </div>
+                            {checked && (
+                              <Check className="w-4 h-4 text-[#4C258C] shrink-0" />
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      onClick={() => void handleSaveVinculos()}
+                      disabled={busy}
+                      className="mt-4 h-11 rounded-xl bg-[#4C258C] hover:bg-[#5E35B1] w-full"
+                    >
+                      {busy ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Link2 className="w-4 h-4 mr-2" />
+                      )}
+                      Salvar no produto
+                    </Button>
+                  </Card>
+                )}
+              </>
             )}
           </div>
         </ScrollArea>
       </div>
 
-      {/* Painel de Detalhes */}
-      {selectedOpcao ? (
-        <OpcaoDetailPanel
-          opcao={selectedOpcao}
-          onUpdate={handleUpdate}
-          onDelete={handleDelete}
-        />
-      ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <Package className="w-16 h-16 text-[#9CA3AF] mx-auto mb-4" />
-            <p className="text-[#6B7280] mb-2">Selecione um adicional para ver os detalhes</p>
-            <p className="text-sm text-[#9CA3AF]">
-              Navegue pela estrutura Produto → Grupo → Adicional
-            </p>
-          </div>
-        </div>
-      )}
+      <AlertDialog
+        open={deleteGrupoId != null}
+        onOpenChange={(o) => !o && setDeleteGrupoId(null)}
+      >
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este grupo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os itens do grupo e os vínculos com produtos serão
+              removidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 rounded-xl"
+              onClick={() => void handleDeleteGrupo()}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
-      {/* Dialog Novo Adicional */}
-      <NovoOpcaoDialog
-        open={showNovoDialog}
-        onOpenChange={setShowNovoDialog}
-        onCreate={handleCreate}
+      <AlertDialog
+        open={deleteOpcaoId != null}
+        onOpenChange={(o) => !o && setDeleteOpcaoId(null)}
+      >
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Ele deixa de aparecer em todos os produtos que usam o grupo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 rounded-xl"
+              onClick={() => void handleDeleteOpcao()}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+/* ——— UI helpers ——— */
+
+function HelpCard({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-2xl border border-[#E8E0F5] bg-[#FBF9FE] px-4 py-3.5 flex gap-3">
+      <div className="w-8 h-8 rounded-lg bg-white border border-[#EEE8FA] flex items-center justify-center shrink-0">
+        <Info className="w-4 h-4 text-[#4C258C]" />
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-[#111827]">{title}</p>
+        <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function Card({
+  title,
+  badge,
+  children,
+}: {
+  title: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-[#F3F4F6] flex items-center justify-between">
+        <h2 className="text-sm font-bold text-[#111827]">{title}</h2>
+        {badge != null && (
+          <span className="text-xs font-medium text-[#9CA3AF] tabular-nums">
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
+
+function Empty({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="text-center py-10">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-[#F3F4F6] flex items-center justify-center">
+        <Icon className="w-6 h-6 text-[#D1D5DB]" />
+      </div>
+      <p className="text-sm font-medium text-[#374151]">{title}</p>
+      <p className="text-xs text-[#9CA3AF] mt-1">{text}</p>
+    </div>
+  );
+}
+
+function SearchField({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("relative", className)}>
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pl-9 h-10 rounded-xl bg-white"
       />
     </div>
   );

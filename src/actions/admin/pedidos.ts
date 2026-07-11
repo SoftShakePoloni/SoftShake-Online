@@ -5,6 +5,7 @@ import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 const STATUS_VALIDOS = [
   "pendente",
+  "confirmado",
   "preparando",
   "saiu_entrega",
   "entregue",
