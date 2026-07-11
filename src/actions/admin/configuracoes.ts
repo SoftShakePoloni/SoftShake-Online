@@ -24,6 +24,8 @@ export type ConfiguracoesUpdate = {
   tempo_entrega_min?: number | null;
   tempo_entrega_max?: number | null;
   esta_aberto?: boolean;
+  aceitar_pedidos_automaticamente?: boolean;
+  aceitando_pedidos?: boolean;
 };
 
 function toNumericId(id: string | number): number {
@@ -100,8 +102,81 @@ function sanitizeUpdates(updates: ConfiguracoesUpdate) {
   if (updates.esta_aberto !== undefined) {
     payload.esta_aberto = Boolean(updates.esta_aberto);
   }
+  if (updates.aceitar_pedidos_automaticamente !== undefined) {
+    payload.aceitar_pedidos_automaticamente = Boolean(
+      updates.aceitar_pedidos_automaticamente
+    );
+  }
+  if (updates.aceitando_pedidos !== undefined) {
+    payload.aceitando_pedidos = Boolean(updates.aceitando_pedidos);
+  }
 
   return payload;
+}
+
+/**
+ * Abre ou fecha a loja rapidamente (sidebar).
+ * Atualiza `esta_aberto` (sempre). Se a coluna existir, também `aceitando_pedidos`.
+ */
+export async function setLojaAberta(aberta: boolean) {
+  await requireAdmin();
+  const supabase = createServiceRoleClient();
+
+  const { data: current, error: fetchError } = await supabase
+    .from("configuracoes_loja")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError || !current) {
+    console.error("setLojaAberta: fetch falhou", fetchError);
+    throw new Error("Configurações da loja não encontradas");
+  }
+
+  const configId = current.id;
+
+  // 1) Atualização mínima — só campos que já existem no banco
+  const { data, error } = await supabase
+    .from("configuracoes_loja")
+    .update({ esta_aberto: aberta } as never)
+    .eq("id", configId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    console.error("setLojaAberta: update esta_aberto falhou", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      configId,
+      aberta,
+    });
+    throw new Error(
+      error.message || "Não foi possível atualizar o status da loja"
+    );
+  }
+
+  if (!data) {
+    console.error("setLojaAberta: update sem retorno", { configId, aberta });
+    throw new Error("Configuração não encontrada ou não atualizada");
+  }
+
+  // 2) Opcional: alinhar aceitando_pedidos (ignora se a coluna ainda não existe)
+  const { error: aceitandoError } = await supabase
+    .from("configuracoes_loja")
+    .update({ aceitando_pedidos: aberta } as never)
+    .eq("id", configId);
+
+  if (aceitandoError) {
+    // Coluna ausente ou RLS — não bloqueia abrir/fechar
+    console.warn(
+      "setLojaAberta: não foi possível atualizar aceitando_pedidos (migration 0006?)",
+      aceitandoError.message
+    );
+  }
+
+  return data;
 }
 
 export async function getConfiguracoesLoja() {

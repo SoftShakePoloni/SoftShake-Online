@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState } from "react";
 import { OrderPrint, type OrderPrintTipo } from "./OrderPrint";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -42,12 +42,10 @@ function entregaLabel(tipo: string) {
 
 export function OrderSidePanel({
   pedido,
-  onStatusChange,
 }: OrderSidePanelProps) {
   const [printTipo, setPrintTipo] = useState<OrderPrintTipo | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [copied, setCopied] = useState(false);
-  const acceptedThisPrintRef = useRef(false);
 
   const statusInfo = statusConfig[pedido.status];
   const tempoDecorrido = formatDistanceToNow(new Date(pedido.created_at), {
@@ -57,29 +55,11 @@ export function OrderSidePanel({
   const isDelivery =
     pedido.tipo_entrega === "delivery" || pedido.tipo_entrega === "entrega";
 
-  const finishPrint = useCallback(() => {
-    setPrintTipo(null);
-    setIsPrinting(false);
-
-    if (
-      !acceptedThisPrintRef.current &&
-      pedido.status === "pendente" &&
-      onStatusChange
-    ) {
-      acceptedThisPrintRef.current = true;
-      onStatusChange("preparando");
-      toast.success("Pedido aceito", {
-        description: "Status alterado para Preparando",
-      });
-    }
-  }, [pedido.status, onStatusChange]);
-
-  // Dispara impressão quando o cupom monta no DOM
+  // Impressão NÃO altera status — aceite é só pelo botão/auto-aceite.
   useEffect(() => {
     if (!printTipo) return;
 
     setIsPrinting(true);
-    acceptedThisPrintRef.current = false;
     let printed = false;
     let finished = false;
 
@@ -92,13 +72,12 @@ export function OrderSidePanel({
     const done = () => {
       if (finished) return;
       finished = true;
-      finishPrint();
+      setPrintTipo(null);
+      setIsPrinting(false);
     };
 
-    // Aguarda o React pintar o HTML de impressão
     const t1 = window.setTimeout(runPrint, 250);
-    // Fallback se afterprint não disparar em alguns browsers
-    const t2 = window.setTimeout(done, 5000);
+    const t2 = window.setTimeout(done, 8000);
 
     window.addEventListener("afterprint", done);
 
@@ -107,7 +86,7 @@ export function OrderSidePanel({
       window.clearTimeout(t2);
       window.removeEventListener("afterprint", done);
     };
-  }, [printTipo, finishPrint]);
+  }, [printTipo]);
 
   const handlePrint = (tipo: OrderPrintTipo) => {
     if (isPrinting) return;
@@ -289,8 +268,8 @@ export function OrderSidePanel({
             </Button>
 
             <p className="text-[10px] text-center text-[#9CA3AF] leading-relaxed px-1">
-              Completo imprime cozinha + entrega. Ao imprimir, o pedido pendente
-              é aceito automaticamente.
+              Completo imprime cozinha + entrega. A impressão não altera o status
+              do pedido.
             </p>
           </div>
         </div>

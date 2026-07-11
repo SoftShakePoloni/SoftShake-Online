@@ -17,7 +17,7 @@ export async function fetchMenu(): Promise<Category[]> {
 
   const { data: produtos, error: prodError } = await supabase
     .from("produtos")
-    .select("id, nome, descricao, preco_base, esta_disponivel, ordem, imagem_url, categoria_id, tag_id")
+    .select("id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id")
     .order("ordem", { ascending: true });
   if (prodError) { console.error("[fetchMenu] erro produtos:", prodError); throw prodError; }
 
@@ -95,11 +95,20 @@ export async function fetchMenu(): Promise<Category[]> {
           })
           .filter((g): g is OptionGroup => g !== null);
 
+        const precoPromo =
+          prod.preco_promocional != null
+            ? Number(prod.preco_promocional)
+            : null;
+
         return {
           id: String(prod.id),
           name: prod.nome,
           description: prod.descricao ?? "",
           price: Number(prod.preco_base),
+          precoPromocional:
+            precoPromo != null && Number.isFinite(precoPromo)
+              ? precoPromo
+              : null,
           image: resolveImage(prod.imagem_url),
           tag: prod.tag_id ? tagsMap.get(prod.tag_id) : undefined,
           optionGroups: [...optionGroups, notesOptionGroup],

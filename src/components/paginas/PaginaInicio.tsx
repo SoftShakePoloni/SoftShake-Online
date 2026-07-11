@@ -9,8 +9,11 @@ import { getFeaturedProducts } from "@/data/cardapio";
 import { useMenu } from "@/hooks/useCardapio";
 
 export default function PaginaInicio() {
-  const { categories, isLoading, error } = useMenu();
-  const featuredProducts = useMemo(() => getFeaturedProducts(categories), [categories]);
+  const { categories, isLoading, error, live } = useMenu();
+  const featuredProducts = useMemo(
+    () => getFeaturedProducts(categories),
+    [categories]
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 lg:px-6">
@@ -32,7 +35,15 @@ export default function PaginaInicio() {
             Nenhum produto disponível no cardápio.
           </div>
         )}
-        {featuredProducts.length > 0 && <FeaturedCarousel products={featuredProducts} />}
+        {/* Indicador discreto de sincronização ao vivo */}
+        {live && !isLoading && !error && (
+          <p className="sr-only" aria-live="polite">
+            Cardápio sincronizado em tempo real
+          </p>
+        )}
+        {featuredProducts.length > 0 && (
+          <FeaturedCarousel products={featuredProducts} />
+        )}
         {categories.map((c) => (
           <ProductSection key={c.id} category={c} />
         ))}
@@ -40,3 +51,4 @@ export default function PaginaInicio() {
     </div>
   );
 }
+

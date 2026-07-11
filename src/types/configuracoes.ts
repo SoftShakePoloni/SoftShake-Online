@@ -20,6 +20,10 @@ export interface ConfiguracaoLoja {
   tempo_entrega_min?: number | null;
   tempo_entrega_max?: number | null;
   esta_aberto: boolean;
+  /** Novos pedidos entram direto em preparo quando true */
+  aceitar_pedidos_automaticamente?: boolean;
+  /** Recebendo pedidos (pode pausar sem fechar a loja) */
+  aceitando_pedidos?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -117,6 +121,13 @@ export function normalizeConfiguracao(
     tempo_entrega_max:
       r.tempo_entrega_max == null ? null : Number(r.tempo_entrega_max),
     esta_aberto: Boolean(r.esta_aberto),
+    aceitar_pedidos_automaticamente: Boolean(
+      r.aceitar_pedidos_automaticamente
+    ),
+    aceitando_pedidos:
+      r.aceitando_pedidos === undefined || r.aceitando_pedidos === null
+        ? Boolean(r.esta_aberto)
+        : Boolean(r.aceitando_pedidos),
     created_at: r.created_at as string | undefined,
     updated_at: r.updated_at as string | undefined,
   };

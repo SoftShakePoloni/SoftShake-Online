@@ -56,6 +56,62 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
+    // Preferências da loja (status aberto + auto-aceite) em uma query.
+    // Fallback se colunas novas ainda não existirem no banco.
+    type ConfigRow = {
+      esta_aberto?: boolean | null;
+      aceitar_pedidos_automaticamente?: boolean | null;
+      aceitando_pedidos?: boolean | null;
+    };
+
+    let configLoja: ConfigRow | null = null;
+    {
+      const full = await supabase
+        .from('configuracoes_loja')
+        .select('esta_aberto, aceitar_pedidos_automaticamente, aceitando_pedidos')
+        .order('id', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (!full.error && full.data) {
+        configLoja = full.data as ConfigRow;
+      } else {
+        const basic = await supabase
+          .from('configuracoes_loja')
+          .select('esta_aberto, aceitar_pedidos_automaticamente')
+          .order('id', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (!basic.error && basic.data) {
+          configLoja = basic.data as ConfigRow;
+        } else if (full.error || basic.error) {
+          console.warn(
+            'configuracoes_loja indisponível na criação do pedido:',
+            full.error?.message || basic.error?.message
+          );
+        }
+      }
+    }
+
+    if (configLoja) {
+      const lojaAberta = configLoja.esta_aberto !== false;
+      const aceitando =
+        configLoja.aceitando_pedidos !== undefined &&
+        configLoja.aceitando_pedidos !== null
+          ? Boolean(configLoja.aceitando_pedidos)
+          : lojaAberta;
+
+      if (!lojaAberta || !aceitando) {
+        return NextResponse.json(
+          {
+            erro:
+              'A loja está fechada no momento e não está aceitando pedidos.',
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     // Garante que opções (IDs) sejam gravadas com nomes legíveis
     const [{ data: opcoes }, { data: grupos }] = await Promise.all([
       supabase
@@ -74,6 +130,12 @@ export async function POST(request: NextRequest) {
       adicionais: item.adicionais || item.selectionsResolved || [],
     }));
 
+    // Aceite automático: lê direto da config (sem server action / dynamic import)
+    const autoAceite = Boolean(configLoja?.aceitar_pedidos_automaticamente);
+    const initialStatus: 'pendente' | 'preparando' = autoAceite
+      ? 'preparando'
+      : 'pendente';
+
     const { data: pedido, error } = await supabase
       .from('pedidos')
       .insert({
@@ -89,7 +151,7 @@ export async function POST(request: NextRequest) {
         taxa_entrega,
         total,
         itens: itensEnriquecidos,
-        status: 'pendente',
+        status: initialStatus,
       })
       .select()
       .single();
@@ -105,6 +167,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       mensagem: 'Pedido criado com sucesso',
       pedido,
+      auto_aceito: autoAceite,
     }, { status: 201 });
 
   } catch (erro) {

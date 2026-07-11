@@ -30,32 +30,100 @@ export type PedidoRow = {
 const CHANNEL_NAME = "admin-pedidos";
 const HIGHLIGHT_MS = 6000;
 
-function playNewOrderSound() {
+/** Flag global de som (evita re-subscrever o canal a cada toggle) */
+let pedidosSoundEnabled = true;
+
+/** AudioContext reutilizável — precisa de gesto do usuário para sair de "suspended" */
+let sharedAudioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
   try {
     const AudioCtx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext })
         .webkitAudioContext;
-    if (!AudioCtx) return;
-
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(880, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.3);
-    osc.onended = () => {
-      void ctx.close();
-    };
+    if (!AudioCtx) return null;
+    if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
+      sharedAudioCtx = new AudioCtx();
+    }
+    return sharedAudioCtx;
   } catch {
-    // som opcional
+    return null;
+  }
+}
+
+async function ensureAudioUnlocked(): Promise<AudioContext | null> {
+  const ctx = getAudioContext();
+  if (!ctx) return null;
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {
+      return null;
+    }
+  }
+  return ctx.state === "running" ? ctx : null;
+}
+
+/**
+ * Chamar em clique do admin (ex.: botão de som) para liberar o áudio no browser.
+ * Sem isso, o Chrome/Edge bloqueiam som até haver interação.
+ */
+export async function unlockPedidosAudio(): Promise<boolean> {
+  const ctx = await ensureAudioUnlocked();
+  return Boolean(ctx);
+}
+
+export function setPedidosSoundEnabled(enabled: boolean) {
+  pedidosSoundEnabled = enabled;
+  if (enabled) {
+    // Tenta desbloquear no mesmo stack do clique (gesto do usuário)
+    void unlockPedidosAudio();
+  }
+}
+
+export function getPedidosSoundEnabled() {
+  return pedidosSoundEnabled;
+}
+
+/** Dois bipes curtos e mais audíveis (notificação de pedido) */
+function playTone(
+  ctx: AudioContext,
+  freq: number,
+  startAt: number,
+  duration: number,
+  peak = 0.22
+) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(freq, startAt);
+
+  // linearRamp evita erro do exponential com valores ~0
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.linearRampToValueAtTime(peak, startAt + 0.02);
+  gain.gain.linearRampToValueAtTime(0.0001, startAt + duration);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + duration + 0.02);
+}
+
+export async function playNewOrderSound() {
+  if (!pedidosSoundEnabled) return;
+  try {
+    const ctx = await ensureAudioUnlocked();
+    if (!ctx) return;
+
+    const t = ctx.currentTime;
+    // Bipe 1 + bipe 2 (estilo alerta de pedido)
+    playTone(ctx, 880, t, 0.14, 0.25);
+    playTone(ctx, 1175, t + 0.16, 0.18, 0.28);
+    playTone(ctx, 1319, t + 0.36, 0.22, 0.22);
+  } catch {
+    // som opcional — não quebra o fluxo
   }
 }
 
@@ -68,7 +136,7 @@ function playNewOrderSound() {
  */
 export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
   // Snapshot inicial do SSR/RSC; daqui pra frente só payload Realtime
-  const [pedidos, setPedidos] = useState<PedidoRow[]>(() => pedidosIniciais);
+  const [pedidos, setPedidosState] = useState<PedidoRow[]>(() => pedidosIniciais);
   const [status, setStatus] =
     useState<RealtimeConnectionStatus>("connecting");
   const [highlightedIds, setHighlightedIds] = useState<Set<string>>(
@@ -133,7 +201,7 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
           const row = payload.new as PedidoRow;
           if (!row?.id) return;
 
-          setPedidos((prev) => {
+          setPedidosState((prev) => {
             // idempotência: se já existe, substitui; senão, topo da lista
             const idx = prev.findIndex((p) => p.id === row.id);
             if (idx !== -1) {
@@ -145,14 +213,22 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
           });
 
           markHighlight(row.id);
-          playNewOrderSound();
-          toast.success("Novo pedido recebido!", {
-            description: row.cliente_nome
-              ? `${row.cliente_nome} · R$ ${Number(row.total || 0)
-                  .toFixed(2)
-                  .replace(".", ",")}`
-              : undefined,
-          });
+          void playNewOrderSound();
+          const autoAceito = row.status === "preparando";
+          toast.success(
+            autoAceito
+              ? "Novo pedido (aceito automaticamente)"
+              : "Novo pedido recebido!",
+            {
+              description: row.cliente_nome
+                ? `${row.cliente_nome} · R$ ${Number(row.total || 0)
+                    .toFixed(2)
+                    .replace(".", ",")}${autoAceito ? " · Em preparo" : ""}`
+                : autoAceito
+                  ? "Já entrou em preparo"
+                  : undefined,
+            }
+          );
         }
       )
       .on(
@@ -166,7 +242,7 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
           const row = payload.new as PedidoRow;
           if (!row?.id) return;
 
-          setPedidos((prev) => {
+          setPedidosState((prev) => {
             const idx = prev.findIndex((p) => p.id === row.id);
             if (idx === -1) {
               // pedido ainda não estava na lista (ex.: filtro de página) → inclui
@@ -192,7 +268,7 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
           const id = old?.id;
           if (!id) return;
 
-          setPedidos((prev) => {
+          setPedidosState((prev) => {
             const next = prev.filter((p) => p.id !== id);
             return next.length === prev.length ? prev : next;
           });
@@ -227,7 +303,7 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
 
   /** Atualização local otimista (ex.: mudança de status pelo admin) */
   const patchPedido = useCallback((id: string, patch: Partial<PedidoRow>) => {
-    setPedidos((prev) => {
+    setPedidosState((prev) => {
       const idx = prev.findIndex((p) => p.id === id);
       if (idx === -1) return prev;
       const copy = prev.slice();
@@ -237,7 +313,7 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
   }, []);
 
   const replacePedido = useCallback((row: PedidoRow) => {
-    setPedidos((prev) => {
+    setPedidosState((prev) => {
       const idx = prev.findIndex((p) => p.id === row.id);
       if (idx === -1) return [row, ...prev];
       const copy = prev.slice();
@@ -246,11 +322,16 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
     });
   }, []);
 
+  const setPedidos = useCallback((next: PedidoRow[]) => {
+    setPedidosState(next);
+  }, []);
+
   return {
     pedidos,
     status,
     highlightedIds,
     patchPedido,
     replacePedido,
+    setPedidos,
   };
 }

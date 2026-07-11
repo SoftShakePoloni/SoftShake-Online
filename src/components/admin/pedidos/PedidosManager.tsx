@@ -1,11 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Pedido } from "@/types/pedido";
-import { OrderList } from "./OrderList";
-import { OrderDetailPanel } from "./OrderDetailPanel";
-import { OrderSidePanel } from "./OrderSidePanel";
-import { EmptyState } from "./EmptyState";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import type { Pedido } from "@/types/pedido";
 import { formatEndereco } from "@/lib/utils/formatters";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -15,16 +11,29 @@ import {
 } from "@/lib/utils/pedido";
 import {
   updatePedidoStatus,
+  listPedidosAdmin,
   type PedidoStatusUpdate,
 } from "@/actions/admin/pedidos";
 import {
+  getStoreSettings,
+  setAutoAcceptOrders,
+} from "@/actions/admin/store-settings";
+import {
   usePedidosRealtime,
   type PedidoRow,
+  setPedidosSoundEnabled,
+  unlockPedidosAudio,
+  playNewOrderSound,
 } from "@/hooks/usePedidosRealtime";
 import { toast } from "sonner";
+import { OrdersPanel, SOUND_KEY } from "./OrdersPanel";
+import { OrderDetailView } from "./OrderDetailView";
+import { OrdersEmptyDetail } from "./OrdersEmptyDetail";
+import { OrdersSkeleton } from "./OrdersSkeleton";
 
 interface PedidosManagerProps {
   pedidosIniciais: PedidoRow[];
+  autoAcceptInicial?: boolean;
 }
 
 function mapPedido(
@@ -38,14 +47,21 @@ function mapPedido(
     grupos
   ) as unknown as Pedido["itens"];
 
+  const rawStatus = (p.status as Pedido["status"]) || "pendente";
+
   return {
     id: p.id,
     cliente_nome: p.cliente_nome || "Cliente",
     cliente_telefone: p.cliente_telefone ?? undefined,
     tipo_entrega: (p.tipo_entrega as Pedido["tipo_entrega"]) || "delivery",
-    endereco_completo: formatEndereco(
-      p.endereco_completo as string | import("@/types/pedido").EnderecoObject | null | undefined
-    ) || undefined,
+    endereco_completo:
+      formatEndereco(
+        p.endereco_completo as
+          | string
+          | import("@/types/pedido").EnderecoObject
+          | null
+          | undefined
+      ) || undefined,
     meio_pagamento: p.meio_pagamento || "Não informado",
     troco_para: (() => {
       if (p.troco_para == null || p.troco_para === "") return undefined;
@@ -56,18 +72,26 @@ function mapPedido(
     taxa_entrega: Number(p.taxa_entrega || 0),
     total: Number(p.total || 0),
     itens: itensEnriquecidos,
-    status: (p.status as Pedido["status"]) || "pendente",
+    status: rawStatus,
     observacoes: p.observacoes ?? undefined,
     created_at: p.created_at || new Date().toISOString(),
     updated_at: p.updated_at || p.created_at || new Date().toISOString(),
   };
 }
 
-export function PedidosManager({ pedidosIniciais }: PedidosManagerProps) {
+export function PedidosManager({
+  pedidosIniciais,
+  autoAcceptInicial = false,
+}: PedidosManagerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [opcoes, setOpcoes] = useState<OpcaoLookup[]>([]);
   const [grupos, setGrupos] = useState<GrupoLookup[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const [autoAccept, setAutoAccept] = useState(autoAcceptInicial);
+  const [autoAcceptLoading, setAutoAcceptLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const {
     pedidos: pedidosRows,
@@ -75,30 +99,85 @@ export function PedidosManager({ pedidosIniciais }: PedidosManagerProps) {
     highlightedIds,
     patchPedido,
     replacePedido,
+    setPedidos,
   } = usePedidosRealtime(pedidosIniciais);
 
-  const selectedIdRef = useRef<string | null>(null);
+  // Preferência de som
   useEffect(() => {
-    selectedIdRef.current = selectedId;
-  }, [selectedId]);
+    try {
+      const stored = localStorage.getItem(SOUND_KEY);
+      if (stored != null) {
+        const enabled = stored === "1" || stored === "true";
+        setSoundEnabled(enabled);
+        setPedidosSoundEnabled(enabled);
+      } else {
+        setPedidosSoundEnabled(true);
+      }
+    } catch {
+      setPedidosSoundEnabled(true);
+    }
+  }, []);
 
-  // Catálogo de opções — 1x no mount (só para resolver nomes de adicionais)
+  // Navegadores bloqueiam áudio até o admin interagir com a página
+  useEffect(() => {
+    const unlock = () => {
+      void unlockPedidosAudio();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
+  const handleSoundChange = useCallback(async (value: boolean) => {
+    setSoundEnabled(value);
+    setPedidosSoundEnabled(value);
+    try {
+      localStorage.setItem(SOUND_KEY, value ? "1" : "0");
+    } catch {
+      // ignore
+    }
+
+    // Clique do admin = gesto do usuário: libera o áudio no browser
+    if (value) {
+      const unlocked = await unlockPedidosAudio();
+      if (unlocked) {
+        // Preview curto para confirmar que o som funciona
+        void playNewOrderSound();
+        toast.success("Som de novos pedidos ativado");
+      } else {
+        toast.error("Não foi possível ativar o som", {
+          description: "Clique novamente no autofalante ou permita áudio no navegador",
+        });
+      }
+    } else {
+      toast.message("Som de novos pedidos desativado");
+    }
+  }, []);
+
+  // Catálogo de opções (adicionais)
   useEffect(() => {
     let cancelled = false;
     const supabase = createClient();
 
     async function loadCatalogo() {
-      const [{ data: ops }, { data: grps }] = await Promise.all([
-        supabase
-          .from("opcoes")
-          .select(
-            "id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)"
-          ),
-        supabase.from("grupos_opcoes").select("id, nome"),
-      ]);
-      if (cancelled) return;
-      setOpcoes((ops || []) as OpcaoLookup[]);
-      setGrupos((grps || []) as GrupoLookup[]);
+      try {
+        const [{ data: ops }, { data: grps }] = await Promise.all([
+          supabase
+            .from("opcoes")
+            .select(
+              "id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)"
+            ),
+          supabase.from("grupos_opcoes").select("id, nome"),
+        ]);
+        if (cancelled) return;
+        setOpcoes((ops || []) as OpcaoLookup[]);
+        setGrupos((grps || []) as GrupoLookup[]);
+      } finally {
+        if (!cancelled) setCatalogReady(true);
+      }
     }
 
     void loadCatalogo();
@@ -107,7 +186,21 @@ export function PedidosManager({ pedidosIniciais }: PedidosManagerProps) {
     };
   }, []);
 
-  // Mapeia rows → UI; só recalcula quando rows/catálogo mudam
+  // Garante auto_accept sincronizado (caso SSR falhe ou multi-admin)
+  useEffect(() => {
+    let cancelled = false;
+    void getStoreSettings()
+      .then((s) => {
+        if (!cancelled) setAutoAccept(Boolean(s.auto_accept_orders));
+      })
+      .catch(() => {
+        // migration ainda não aplicada
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const pedidos: Pedido[] = useMemo(
     () => pedidosRows.map((p) => mapPedido(p, opcoes, grupos)),
     [pedidosRows, opcoes, grupos]
@@ -118,7 +211,7 @@ export function PedidosManager({ pedidosIniciais }: PedidosManagerProps) {
     [pedidos, selectedId]
   );
 
-  // Se o pedido selecionado for deletado via Realtime, limpa seleção
+  // Se pedido sumir, limpa seleção
   useEffect(() => {
     if (!selectedId) return;
     if (!pedidosRows.some((p) => p.id === selectedId)) {
@@ -127,20 +220,20 @@ export function PedidosManager({ pedidosIniciais }: PedidosManagerProps) {
   }, [pedidosRows, selectedId]);
 
   const handleSelect = useCallback((pedido: Pedido) => {
-    setIsTransitioning(true);
-    window.setTimeout(() => {
-      setSelectedId(pedido.id);
-      setIsTransitioning(false);
-    }, 120);
+    setSelectedId(pedido.id);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setSelectedId(null);
   }, []);
 
   const handleStatusChange = useCallback(
     async (newStatus: Pedido["status"]) => {
-      if (!selectedId) return;
+      if (!selectedId) return false;
 
       const previous = pedidosRows.find((p) => p.id === selectedId);
+      setStatusBusy(true);
 
-      // Otimista local (Realtime confirmará o UPDATE para todos os admins)
       patchPedido(selectedId, {
         status: newStatus,
         updated_at: new Date().toISOString(),
@@ -152,55 +245,119 @@ export function PedidosManager({ pedidosIniciais }: PedidosManagerProps) {
           newStatus as PedidoStatusUpdate
         );
         replacePedido(updated as PedidoRow);
-        toast.success("Status atualizado");
+        toast.success("Status atualizado", {
+          description: `Pedido atualizado com sucesso`,
+        });
+        return true;
       } catch (error) {
         console.error("Erro ao atualizar status:", error);
         if (previous) replacePedido(previous);
         toast.error("Erro ao atualizar status");
+        return false;
+      } finally {
+        setStatusBusy(false);
       }
     },
     [selectedId, pedidosRows, patchPedido, replacePedido]
   );
 
-  return (
-    <div className="h-screen flex overflow-hidden">
-      <OrderList
-        pedidos={pedidos}
-        selectedId={selectedPedido?.id}
-        onSelect={handleSelect}
-        realtimeStatus={realtimeStatus}
-        highlightedIds={highlightedIds}
-      />
+  const handleAutoAcceptChange = useCallback(async (value: boolean) => {
+    setAutoAcceptLoading(true);
+    const previous = autoAccept;
+    setAutoAccept(value);
+    try {
+      await setAutoAcceptOrders(value);
+      toast.success(
+        value
+          ? "Aceite automático ativado"
+          : "Aceite automático desativado",
+        {
+          description: value
+            ? "Novos pedidos já chegam em Em preparo (sem passo manual)"
+            : "Novos pedidos ficam em Novos até você aceitar",
+        }
+      );
+    } catch (error) {
+      console.error(error);
+      setAutoAccept(previous);
+      toast.error("Não foi possível salvar a configuração", {
+        description:
+          "Verifique se a coluna aceitar_pedidos_automaticamente existe em configuracoes_loja",
+      });
+    } finally {
+      setAutoAcceptLoading(false);
+    }
+  }, [autoAccept]);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const data = await listPedidosAdmin(150);
+      setPedidos(data as PedidoRow[]);
+      toast.success("Lista atualizada");
+    } catch (error) {
+      console.error(error);
+      toast.error("Falha ao atualizar pedidos");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [setPedidos]);
+
+  // Mobile: esconde lista quando tem seleção? For now side-by-side with min widths
+
+  if (!catalogReady && pedidosIniciais.length === 0) {
+    return (
+      <div className="h-[calc(100vh-3.5rem)]">
+        <OrdersSkeleton />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-[calc(100vh-3.5rem)] flex overflow-hidden bg-[#F7F8FC]">
+      {/* Lista: oculta no mobile quando há pedido selecionado */}
       <div
-        className={`flex-1 transition-opacity duration-200 ${
-          isTransitioning ? "opacity-0" : "opacity-100"
-        }`}
+        className={
+          selectedPedido
+            ? "hidden lg:flex lg:h-full"
+            : "flex h-full w-full lg:w-auto"
+        }
       >
-        {selectedPedido ? (
-          <OrderDetailPanel
-            pedido={selectedPedido}
-            onStatusChange={handleStatusChange}
-          />
-        ) : (
-          <EmptyState />
-        )}
+        <OrdersPanel
+          pedidos={pedidos}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          realtimeStatus={realtimeStatus}
+          highlightedIds={highlightedIds}
+          autoAccept={autoAccept}
+          autoAcceptLoading={autoAcceptLoading}
+          onAutoAcceptChange={handleAutoAcceptChange}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
+          soundEnabled={soundEnabled}
+          onSoundChange={handleSoundChange}
+        />
       </div>
 
-      {selectedPedido && (
-        <div
-          className={`transition-all duration-200 ${
-            isTransitioning
-              ? "opacity-0 translate-x-4"
-              : "opacity-100 translate-x-0"
-          }`}
-        >
-          <OrderSidePanel
+      {/* Detalhe: full width no mobile quando selecionado */}
+      <div
+        className={
+          selectedPedido
+            ? "flex flex-1 min-w-0 h-full"
+            : "hidden lg:flex flex-1 min-w-0 h-full"
+        }
+      >
+        {selectedPedido ? (
+          <OrderDetailView
             pedido={selectedPedido}
             onStatusChange={handleStatusChange}
+            onClose={handleClose}
+            busy={statusBusy}
           />
-        </div>
-      )}
+        ) : (
+          <OrdersEmptyDetail />
+        )}
+      </div>
     </div>
   );
 }
