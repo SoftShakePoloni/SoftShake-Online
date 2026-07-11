@@ -1,39 +1,44 @@
-import { NextResponse } from 'next/server';
-import { obterSessao } from '@/lib/auth';
-import { createServerClient } from '@/integrations/supabase/client.server';
+import { withApiGuard } from "@/lib/security/with-api-guard";
+import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import {
+  apiOk,
+  apiServerError,
+  apiUnauthorized,
+} from "@/lib/security/api-response";
+import { obterSessao } from "@/lib/auth";
+import { createServerClient } from "@/integrations/supabase/client.server";
 
-/**
- * Rota para verificar a sessão atual do usuário
- * Use esta rota como exemplo para proteger outras rotas
- */
-export async function GET() {
-  try {
-    const sessao = await obterSessao();
+export const GET = withApiGuard(
+  {
+    methods: ["GET"],
+    rateLimit: RATE_LIMITS.apiStrict,
+    checkOrigin: false,
+  },
+  async () => {
+    try {
+      const sessao = await obterSessao();
+      if (!sessao) return apiUnauthorized();
 
-    if (!sessao) {
-      return NextResponse.json(
-        { erro: 'Não autenticado' },
-        { status: 401 }
-      );
+      const supabase = createServerClient();
+      const { data: clienteCompleto } = await supabase
+        .from("clientes")
+        .select(
+          "id, nome, telefone, endereco, enderecos_adicionais, email, created_at"
+        )
+        .eq("id", sessao.id)
+        .maybeSingle();
+
+      return apiOk({
+        autenticado: true,
+        cliente: clienteCompleto || {
+          id: sessao.id,
+          nome: sessao.nome,
+          telefone: sessao.telefone,
+          endereco: sessao.endereco,
+        },
+      });
+    } catch (erro) {
+      return apiServerError(erro);
     }
-
-    // Busca dados completos do cliente incluindo endereços
-    const supabase = createServerClient();
-    const { data: clienteCompleto } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('id', sessao.id)
-      .single();
-
-    return NextResponse.json({
-      autenticado: true,
-      cliente: clienteCompleto || sessao,
-    });
-  } catch (erro) {
-    console.error('Erro ao verificar sessão:', erro);
-    return NextResponse.json(
-      { erro: 'Erro interno do servidor' },
-      { status: 500 }
-    );
   }
-}
+);

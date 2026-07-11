@@ -1,74 +1,112 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { z } from 'zod';
-import { buscarClientePorTelefone, gerarToken, normalizarTelefone } from '@/lib/auth';
-import type { Endereco } from '@/types/endereco';
+import { NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { z } from "zod";
+import {
+  buscarClientePorTelefone,
+  gerarToken,
+  normalizarTelefone,
+  sessionCookieOptions,
+} from "@/lib/auth";
+import type { Endereco } from "@/types/endereco";
+import { withApiGuard } from "@/lib/security/with-api-guard";
+import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import {
+  apiError,
+  apiOk,
+  apiServerError,
+  apiValidation,
+} from "@/lib/security/api-response";
+import { sanitizePhone, sanitizeText } from "@/lib/security/sanitize";
+import { securityLog } from "@/lib/security/logger";
 
 const entrarSchema = z.object({
-  telefone: z.string().min(10, 'Telefone deve ter no mínimo 10 dígitos'),
+  telefone: z
+    .string()
+    .min(10)
+    .max(20)
+    .transform((t) => sanitizePhone(t))
+    .refine((t) => t.length >= 10 && t.length <= 15, "Telefone inválido"),
 });
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    
-    // Validar dados com Zod
-    const validacao = entrarSchema.safeParse(body);
-    
-    if (!validacao.success) {
-      return NextResponse.json(
-        { erro: 'Telefone inválido', detalhes: validacao.error.format() },
-        { status: 400 }
-      );
-    }
+/** Mensagem genérica — evita enumeração de usuários (OWASP) */
+const MSG_CREDENCIAIS = "Credenciais inválidas.";
 
-    const { telefone } = validacao.data;
-    const telefoneNormalizado = normalizarTelefone(telefone);
+export const POST = withApiGuard(
+  {
+    methods: ["POST"],
+    rateLimit: RATE_LIMITS.login,
+    checkOrigin: true,
+  },
+  async (request: NextRequest, { ip }) => {
+    try {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return apiValidation("Corpo da requisição inválido");
+      }
 
-    // Buscar cliente pelo telefone
-    const cliente = await buscarClientePorTelefone(telefoneNormalizado);
+      const validacao = entrarSchema.safeParse(body);
+      if (!validacao.success) {
+        securityLog({
+          event: "auth.login.fail",
+          level: "warn",
+          ip,
+          path: "/api/auth/entrar",
+          result: "fail",
+          meta: { reason: "validation" },
+        });
+        // Mesma mensagem genérica
+        return apiError(MSG_CREDENCIAIS, 401, { codigo: "AUTH_FAILED" });
+      }
 
-    if (!cliente) {
-      return NextResponse.json(
-        { erro: 'Cliente não encontrado. Por favor, cadastre-se primeiro.' },
-        { status: 404 }
-      );
-    }
+      const telefoneNormalizado = normalizarTelefone(validacao.data.telefone);
+      const cliente = await buscarClientePorTelefone(telefoneNormalizado);
 
-    // Gerar token JWT
-    // Forçamos a conversão de tipo para resolver o conflito com o tipo Json do Supabase
-    const token = await gerarToken({
-      id: cliente.id,
-      nome: cliente.nome,
-      telefone: cliente.telefone,
-      endereco: cliente.endereco,
-      enderecos_adicionais: (cliente.enderecos_adicionais as unknown as Endereco[]) || [],
-    });
+      if (!cliente) {
+        securityLog({
+          event: "auth.login.fail",
+          level: "warn",
+          ip,
+          path: "/api/auth/entrar",
+          result: "fail",
+          meta: { reason: "not_found" },
+        });
+        // Timing aproximado: não revelar se existe ou não
+        return apiError(MSG_CREDENCIAIS, 401, { codigo: "AUTH_FAILED" });
+      }
 
-    // Definir cookie de sessão
-    const cookieStore = await cookies();
-    cookieStore.set('session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30, // 30 dias
-      path: '/',
-    });
-
-    return NextResponse.json({
-      mensagem: 'Login realizado com sucesso',
-      cliente: {
+      const token = await gerarToken({
         id: cliente.id,
-        nome: cliente.nome,
+        nome: sanitizeText(cliente.nome, 120) || null,
         telefone: cliente.telefone,
         endereco: cliente.endereco,
-      },
-    });
-  } catch (erro) {
-    console.error('Erro no login:', erro);
-    return NextResponse.json(
-      { erro: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+        enderecos_adicionais:
+          (cliente.enderecos_adicionais as unknown as Endereco[]) || [],
+      });
+
+      const cookieStore = await cookies();
+      cookieStore.set("session", token, sessionCookieOptions());
+
+      securityLog({
+        event: "auth.login.success",
+        ip,
+        userId: cliente.id,
+        path: "/api/auth/entrar",
+        result: "ok",
+      });
+
+      return apiOk({
+        mensagem: "Login realizado com sucesso",
+        cliente: {
+          id: cliente.id,
+          nome: cliente.nome,
+          telefone: cliente.telefone,
+          endereco: cliente.endereco,
+        },
+      });
+    } catch (erro) {
+      return apiServerError(erro);
+    }
   }
-}
+);

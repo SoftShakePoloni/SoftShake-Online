@@ -1,103 +1,138 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import { createServerClient } from '@/integrations/supabase/client.server';
-import { normalizarTelefone } from '@/lib/auth';
-import { randomUUID } from 'crypto';
-import type { Endereco } from '@/types/endereco';
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { createServerClient } from "@/integrations/supabase/client.server";
+import { normalizarTelefone } from "@/lib/auth";
+import { randomUUID } from "crypto";
+import type { Endereco } from "@/types/endereco";
+import { withApiGuard } from "@/lib/security/with-api-guard";
+import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import {
+  apiError,
+  apiOk,
+  apiServerError,
+  apiValidation,
+} from "@/lib/security/api-response";
+import { sanitizePhone, sanitizeText } from "@/lib/security/sanitize";
+import { securityLog } from "@/lib/security/logger";
 
 const registrarSchema = z.object({
-  nome: z.string().min(3, 'Nome deve ter no mínimo 3 caracteres'),
-  telefone: z.string().min(10, 'Telefone deve ter no mínimo 10 dígitos'),
-  endereco: z.string().min(5, 'Endereço deve ter no mínimo 5 caracteres'),
+  nome: z
+    .string()
+    .min(3)
+    .max(120)
+    .transform((n) => sanitizeText(n, 120)),
+  telefone: z
+    .string()
+    .min(10)
+    .max(20)
+    .transform((t) => sanitizePhone(t))
+    .refine((t) => t.length >= 10 && t.length <= 15),
+  endereco: z
+    .string()
+    .min(5)
+    .max(500)
+    .transform((e) => sanitizeText(e, 500)),
 });
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    
-    // Validar dados com Zod
-    const validacao = registrarSchema.safeParse(body);
-    
-    if (!validacao.success) {
-      return NextResponse.json(
-        { erro: 'Dados inválidos', detalhes: validacao.error.format() },
-        { status: 400 }
-      );
-    }
+export const POST = withApiGuard(
+  {
+    methods: ["POST"],
+    rateLimit: RATE_LIMITS.register,
+    checkOrigin: true,
+  },
+  async (request: NextRequest, { ip }) => {
+    try {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return apiValidation("Corpo da requisição inválido");
+      }
 
-    const { nome, telefone, endereco } = validacao.data;
-    const telefoneNormalizado = normalizarTelefone(telefone);
+      const validacao = registrarSchema.safeParse(body);
+      if (!validacao.success) {
+        return apiValidation("Dados inválidos");
+      }
 
-    const supabase = createServerClient();
+      const { nome, telefone, endereco } = validacao.data;
+      const telefoneNormalizado = normalizarTelefone(telefone);
+      const supabase = createServerClient();
 
-    // Verificar se o telefone já está cadastrado
-    const { data: clienteExistente } = await supabase
-      .from('clientes')
-      .select('id')
-      .eq('telefone', telefoneNormalizado)
-      .single();
+      const { data: clienteExistente } = await supabase
+        .from("clientes")
+        .select("id")
+        .eq("telefone", telefoneNormalizado)
+        .maybeSingle();
 
-    if (clienteExistente) {
-      return NextResponse.json(
-        { erro: 'Este telefone já está cadastrado' },
-        { status: 409 }
-      );
-    }
+      if (clienteExistente) {
+        // Mensagem neutra (não incentiva enumeração agressiva)
+        return apiError(
+          "Não foi possível concluir o cadastro com estes dados.",
+          409,
+          { codigo: "REGISTER_CONFLICT" }
+        );
+      }
 
-    // Parsear o endereço para criar objeto estruturado
-    // Formato esperado: "Rua X, 123 - Complemento - Bairro, Cidade/UF - CEP: 12345678"
-    const enderecoEstruturado: Endereco = {
-      id: randomUUID(),
-      apelido: 'Principal',
-      logradouro: endereco.split(',')[0]?.trim() || '',
-      numero: endereco.split(',')[1]?.split('-')[0]?.trim() || '',
-      complemento: endereco.split('-')[1]?.split('-')[0]?.trim() || '',
-      bairro: endereco.split('-')[endereco.split('-').length - 2]?.split(',')[0]?.trim() || '',
-      cidade: endereco.split(',')[endereco.split(',').length - 1]?.split('/')[0]?.trim() || '',
-      estado: endereco.split('/')[1]?.split('-')[0]?.trim() || '',
-      cep: endereco.match(/CEP:\s*(\d+)/)?.[1] || '',
-      principal: true,
-      created_at: new Date().toISOString(),
-    };
+      const enderecoEstruturado: Endereco = {
+        id: randomUUID(),
+        apelido: "Principal",
+        logradouro: endereco.split(",")[0]?.trim() || "",
+        numero: endereco.split(",")[1]?.split("-")[0]?.trim() || "",
+        complemento: endereco.split("-")[1]?.split("-")[0]?.trim() || "",
+        bairro:
+          endereco
+            .split("-")
+            [endereco.split("-").length - 2]?.split(",")[0]
+            ?.trim() || "",
+        cidade:
+          endereco
+            .split(",")
+            [endereco.split(",").length - 1]?.split("/")[0]
+            ?.trim() || "",
+        estado: endereco.split("/")[1]?.split("-")[0]?.trim() || "",
+        cep: endereco.match(/CEP:\s*(\d+)/)?.[1] || "",
+        principal: true,
+        created_at: new Date().toISOString(),
+      };
 
-    // Inserir novo cliente
-    const clienteId = randomUUID();
-    const { data: novoCliente, error } = await supabase
-      .from('clientes')
-      .insert({
-        id: clienteId,
-        nome,
-        telefone: telefoneNormalizado,
-        endereco,
-        enderecos_adicionais: JSON.stringify([enderecoEstruturado]),
-      })
-      .select()
-      .single();
+      const clienteId = randomUUID();
+      const { data: novoCliente, error } = await supabase
+        .from("clientes")
+        .insert({
+          id: clienteId,
+          nome,
+          telefone: telefoneNormalizado,
+          endereco,
+          enderecos_adicionais: JSON.stringify([enderecoEstruturado]),
+        })
+        .select("id, nome, telefone")
+        .single();
 
-    if (error) {
-      console.error('Erro ao cadastrar cliente:', error);
-      return NextResponse.json(
-        { erro: 'Erro ao cadastrar cliente' },
-        { status: 500 }
-      );
-    }
+      if (error || !novoCliente) {
+        return apiServerError(error);
+      }
 
-    return NextResponse.json(
-      {
-        mensagem: 'Cliente cadastrado com sucesso',
-        cliente: {
-          id: novoCliente.id,
-          nome: novoCliente.nome,
-          telefone: novoCliente.telefone,
+      securityLog({
+        event: "auth.register",
+        ip,
+        userId: novoCliente.id,
+        path: "/api/auth/registrar",
+        result: "ok",
+      });
+
+      return apiOk(
+        {
+          mensagem: "Cliente cadastrado com sucesso",
+          cliente: {
+            id: novoCliente.id,
+            nome: novoCliente.nome,
+            telefone: novoCliente.telefone,
+          },
         },
-      },
-      { status: 201 }
-    );
-  } catch (erro) {
-    console.error('Erro no cadastro:', erro);
-    return NextResponse.json(
-      { erro: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+        201
+      );
+    } catch (erro) {
+      return apiServerError(erro);
+    }
   }
-}
+);

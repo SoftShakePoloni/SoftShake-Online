@@ -1,10 +1,26 @@
-import { cookies } from 'next/headers';
-import { SignJWT, jwtVerify } from 'jose';
-import { createServerClient } from '@/integrations/supabase/client.server';
-import type { Endereco } from '@/types/endereco';
+import { cookies } from "next/headers";
+import { SignJWT, jwtVerify } from "jose";
+import { createServerClient } from "@/integrations/supabase/client.server";
+import type { Endereco } from "@/types/endereco";
 
-const SECRET_KEY = process.env.AUTH_JWT_SECRET || 'seu-secret-jwt-seguro-aqui';
-const secret = new TextEncoder().encode(SECRET_KEY);
+function getJwtSecret(): Uint8Array {
+  const raw = process.env.AUTH_JWT_SECRET;
+  if (!raw || raw.length < 32) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "AUTH_JWT_SECRET deve ter no mínimo 32 caracteres em produção"
+      );
+    }
+    // Dev only fallback — nunca usar em produção
+    console.warn(
+      "[security] AUTH_JWT_SECRET fraco/ausente — use um secret forte no .env"
+    );
+    return new TextEncoder().encode(
+      raw || "dev-only-softshake-jwt-secret-min-32-chars!!"
+    );
+  }
+  return new TextEncoder().encode(raw);
+}
 
 export interface ClientePayload {
   id: string;
@@ -15,9 +31,10 @@ export interface ClientePayload {
 }
 
 /**
- * Gera um token JWT para o cliente
+ * Gera um token JWT para o cliente (sessão httpOnly cookie).
  */
 export async function gerarToken(cliente: ClientePayload): Promise<string> {
+  const secret = getJwtSecret();
   const token = await new SignJWT({
     id: cliente.id,
     nome: cliente.nome,
@@ -25,9 +42,10 @@ export async function gerarToken(cliente: ClientePayload): Promise<string> {
     endereco: cliente.endereco,
     enderecos_adicionais: cliente.enderecos_adicionais || [],
   })
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime('30d') // Token expira em 30 dias
+    .setExpirationTime("7d") // 7 dias (renovável no login)
+    .setJti(crypto.randomUUID())
     .sign(secret);
 
   return token;
@@ -36,12 +54,15 @@ export async function gerarToken(cliente: ClientePayload): Promise<string> {
 /**
  * Verifica e decodifica um token JWT
  */
-export async function verificarToken(token: string): Promise<ClientePayload | null> {
+export async function verificarToken(
+  token: string
+): Promise<ClientePayload | null> {
   try {
+    const secret = getJwtSecret();
     const { payload } = await jwtVerify(token, secret);
+    if (!payload.id || typeof payload.id !== "string") return null;
     return payload as unknown as ClientePayload;
-  } catch (error) {
-    console.error('Erro ao verificar token:', error);
+  } catch {
     return null;
   }
 }
@@ -51,7 +72,7 @@ export async function verificarToken(token: string): Promise<ClientePayload | nu
  */
 export async function obterSessao(): Promise<ClientePayload | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get('session')?.value;
+  const token = cookieStore.get("session")?.value;
 
   if (!token) {
     return null;
@@ -60,11 +81,22 @@ export async function obterSessao(): Promise<ClientePayload | null> {
   return verificarToken(token);
 }
 
+/** Opções padrão de cookie de sessão (cliente SoftShake) */
+export function sessionCookieOptions(maxAgeSec = 60 * 60 * 24 * 7) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: maxAgeSec,
+    path: "/",
+  };
+}
+
 /**
  * Normaliza telefone removendo caracteres não numéricos
  */
 export function normalizarTelefone(telefone: string): string {
-  return telefone.replace(/\D/g, '');
+  return telefone.replace(/\D/g, "").slice(0, 15);
 }
 
 /**
@@ -75,13 +107,13 @@ export async function buscarClientePorTelefone(telefone: string) {
   const telefoneNormalizado = normalizarTelefone(telefone);
 
   const { data, error } = await supabase
-    .from('clientes')
-    .select('*')
-    .eq('telefone', telefoneNormalizado)
-    .single();
+    .from("clientes")
+    .select("*")
+    .eq("telefone", telefoneNormalizado)
+    .maybeSingle();
 
   if (error) {
-    console.error('Erro ao buscar cliente:', error);
+    console.error("Erro ao buscar cliente");
     return null;
   }
 
