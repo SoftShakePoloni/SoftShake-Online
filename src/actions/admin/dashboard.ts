@@ -208,7 +208,7 @@ export async function getDashboardData() {
 
   // Recent customers — 1 extra query for their orders (all client ids at once)
   const recentClientIds = (recentClients || []).map((c) => c.id);
-  let ordersByClient = new Map<string, PedidoRow[]>();
+  const ordersByClient = new Map<string, PedidoRow[]>();
 
   if (recentClientIds.length > 0) {
     const { data: clientOrders } = await supabase

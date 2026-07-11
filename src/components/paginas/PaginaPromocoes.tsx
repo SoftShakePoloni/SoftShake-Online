@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Search, Gift, Sparkles } from "lucide-react";
 import { useMenu } from "@/hooks/useCardapio";
 import {
@@ -339,13 +340,13 @@ function EmptyState() {
         Em breve teremos novas ofertas para você. Enquanto isso, confira o
         cardápio completo.
       </p>
-      <a
+      <Link
         href="/"
         className="mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-[#4C258C] px-4 text-sm font-semibold text-white transition-colors duration-150 hover:bg-[#5E35B1]"
       >
         <Sparkles className="h-4 w-4" />
         Ver cardápio
-      </a>
+      </Link>
     </div>
   );
 }
