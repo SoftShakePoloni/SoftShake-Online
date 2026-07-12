@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import {
   RATE_LIMITS,
   getClientIp,
-  rateLimit,
+  rateLimitCheck,
   rateLimitHeaders,
 } from "@/lib/security/rate-limit";
 
@@ -47,6 +47,57 @@ function applySecurityHeaders(res: NextResponse) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  const ip = getClientIp(request);
+
+  // ── Rate limit ANTES de auth/Supabase (barato e corta abuso cedo) ──
+  // Health check fica de fora (probes de LB / uptime).
+  // Bucket com prefixo "mw:" para não colidir com o contador do withApiGuard
+  // (Edge e Node não compartilham o Map in-memory).
+  const isHealth = path === "/api/health";
+
+  if (
+    !isHealth &&
+    (path.startsWith("/api/auth/entrar") ||
+      path.startsWith("/api/auth/registrar"))
+  ) {
+    const base = path.includes("registrar")
+      ? RATE_LIMITS.register
+      : RATE_LIMITS.login;
+    const cfg = { ...base, bucket: `mw:${base.bucket}` };
+    const rl = await rateLimitCheck(ip, cfg);
+    if (!rl.success) {
+      const res = NextResponse.json(
+        {
+          erro: "Muitas tentativas. Aguarde e tente novamente.",
+          codigo: "RATE_LIMIT",
+        },
+        { status: 429, headers: rateLimitHeaders(rl) }
+      );
+      return applySecurityHeaders(res);
+    }
+  } else if (
+    !isHealth &&
+    path.startsWith("/api/") &&
+    !path.startsWith("/api/auth/")
+  ) {
+    const cfg = {
+      ...RATE_LIMITS.api,
+      bucket: `mw:${RATE_LIMITS.api.bucket}`,
+    };
+    const rl = await rateLimitCheck(ip, cfg);
+    if (!rl.success) {
+      const res = NextResponse.json(
+        {
+          erro: "Muitas requisições. Tente novamente em instantes.",
+          codigo: "RATE_LIMIT",
+        },
+        { status: 429, headers: rateLimitHeaders(rl) }
+      );
+      return applySecurityHeaders(res);
+    }
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -118,39 +169,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const path = request.nextUrl.pathname;
-  const ip = getClientIp(request);
-
-  // Rate limit em rotas de auth de cliente
-  if (
-    path.startsWith("/api/auth/entrar") ||
-    path.startsWith("/api/auth/registrar")
-  ) {
-    const cfg = path.includes("registrar")
-      ? RATE_LIMITS.register
-      : RATE_LIMITS.login;
-    const rl = rateLimit(ip, cfg);
-    if (!rl.success) {
-      const res = NextResponse.json(
-        { erro: "Muitas tentativas. Aguarde e tente novamente." },
-        { status: 429, headers: rateLimitHeaders(rl) }
-      );
-      return applySecurityHeaders(res);
-    }
-  }
-
-  // Rate limit genérico em /api/*
-  if (path.startsWith("/api/") && !path.startsWith("/api/auth/")) {
-    const rl = rateLimit(ip, RATE_LIMITS.api);
-    if (!rl.success) {
-      const res = NextResponse.json(
-        { erro: "Muitas requisições. Tente novamente em instantes." },
-        { status: 429, headers: rateLimitHeaders(rl) }
-      );
-      return applySecurityHeaders(res);
-    }
-  }
 
   // Admin: exige usuário Supabase Auth (exceto login)
   if (path.startsWith("/admin") && path !== "/admin/login") {

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   RATE_LIMITS,
   getClientIp,
-  rateLimit,
+  rateLimitCheck,
   rateLimitHeaders,
   type RateLimitConfig,
 } from "./rate-limit";
@@ -30,6 +30,7 @@ type Handler = (
 
 /**
  * Wrapper para Route Handlers: método, rate limit, origin, erros seguros.
+ * Rate limit roda ANTES de validação de body — 429 tem prioridade sobre 400.
  */
 export function withApiGuard(options: GuardOptions, handler: Handler) {
   return async (request: NextRequest) => {
@@ -40,20 +41,10 @@ export function withApiGuard(options: GuardOptions, handler: Handler) {
       const methodErr = assertMethod(request, options.methods);
       if (methodErr) return methodErr;
 
-      if (options.checkOrigin !== false && !isTrustedOrigin(request)) {
-        securityLog({
-          event: "security.blocked",
-          level: "warn",
-          ip,
-          path,
-          result: "denied",
-          meta: { reason: "origin" },
-        });
-        return apiForbidden("Origem da requisição não permitida");
-      }
-
+      // Rate limit primeiro (antes de origin/handler) — evita gastar CPU e
+      // garante 429 mesmo quando o body é inválido (400 de validação).
       const rlConfig = options.rateLimit ?? RATE_LIMITS.api;
-      const rl = rateLimit(ip, rlConfig);
+      const rl = await rateLimitCheck(ip, rlConfig);
       const headers = rateLimitHeaders(rl);
 
       if (!rl.success) {
@@ -66,6 +57,18 @@ export function withApiGuard(options: GuardOptions, handler: Handler) {
           meta: { bucket: rlConfig.bucket },
         });
         return apiRateLimited(headers);
+      }
+
+      if (options.checkOrigin !== false && !isTrustedOrigin(request)) {
+        securityLog({
+          event: "security.blocked",
+          level: "warn",
+          ip,
+          path,
+          result: "denied",
+          meta: { reason: "origin" },
+        });
+        return apiForbidden("Origem da requisição não permitida");
       }
 
       const res = await handler(request, { ip });
