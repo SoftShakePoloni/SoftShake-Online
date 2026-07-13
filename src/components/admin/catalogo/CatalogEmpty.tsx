@@ -1,7 +1,6 @@
 "use client";
 
-import { Package, FolderOpen, Layers, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Package, FolderOpen, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type EmptyKind =
@@ -18,18 +17,17 @@ const COPY: Record<
   produtos: {
     icon: Package,
     title: "Nenhum produto nesta categoria",
-    description:
-      "Crie o primeiro produto ou mova itens existentes para esta categoria.",
+    description: "Crie o primeiro produto ou escolha outra categoria.",
   },
   categorias: {
     icon: FolderOpen,
     title: "Nenhuma categoria ainda",
-    description: "Organize o cardápio criando categorias como Açaís, Bebidas…",
+    description: "Organize o cardápio criando categorias.",
   },
   busca: {
     icon: Package,
     title: "Nenhum resultado",
-    description: "Tente outro termo, filtro ou categoria.",
+    description: "Tente outro termo ou filtro.",
   },
   complementos: {
     icon: Layers,
@@ -37,9 +35,9 @@ const COPY: Record<
     description: "Crie grupos como Caldas, Frutas e Coberturas.",
   },
   coming: {
-    icon: Sparkles,
+    icon: Package,
     title: "Em breve",
-    description: "Esta área do catálogo ainda está em desenvolvimento.",
+    description: "Esta área ainda está em desenvolvimento.",
   },
 };
 
@@ -60,26 +58,27 @@ export function CatalogEmpty({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center text-center py-16 px-6",
+        "flex flex-col items-center justify-center text-center py-12 px-6",
         className
       )}
     >
-      <div className="w-16 h-16 rounded-2xl bg-[#F3EEFA] flex items-center justify-center mb-4">
-        <Icon className="w-8 h-8 text-[#4C258C]" />
+      <div className="w-10 h-10 rounded-md bg-[#F3F4F6] flex items-center justify-center mb-3">
+        <Icon className="w-5 h-5 text-[#9CA3AF]" />
       </div>
-      <h3 className="text-base font-semibold text-[#111827] mb-1">
+      <h3 className="text-[15px] font-semibold text-[#111827] mb-1">
         {cfg.title}
       </h3>
-      <p className="text-sm text-[#6B7280] max-w-sm mb-5 leading-relaxed">
+      <p className="text-[13px] text-[#6B7280] max-w-sm mb-4 leading-relaxed">
         {cfg.description}
       </p>
       {actionLabel && onAction && (
-        <Button
+        <button
+          type="button"
           onClick={onAction}
-          className="bg-[#4C258C] hover:bg-[#5E35B1] text-white rounded-xl"
+          className="h-8 px-3 rounded-md bg-[#111827] text-white text-[12px] font-medium hover:bg-black"
         >
           {actionLabel}
-        </Button>
+        </button>
       )}
     </div>
   );

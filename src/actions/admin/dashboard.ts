@@ -3,6 +3,8 @@
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 import { requireAdmin } from "@/lib/admin/auth";
 
+export type DashboardPeriod = "hoje" | "ontem" | "7d" | "30d";
+
 type PedidoRow = {
   id: string | number;
   total: number;
@@ -15,342 +17,293 @@ type PedidoRow = {
   itens?: unknown;
 };
 
+const OPEN_STATUSES = new Set([
+  "pendente",
+  "confirmado",
+  "preparando",
+  "saiu_entrega",
+]);
+
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function addDays(d: Date, n: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function periodRange(
+  period: DashboardPeriod,
+  now = new Date()
+): { start: Date; end: Date; prevStart: Date; prevEnd: Date } {
+  const today = startOfDay(now);
+  const tomorrow = addDays(today, 1);
+
+  switch (period) {
+    case "ontem": {
+      const start = addDays(today, -1);
+      return {
+        start,
+        end: today,
+        prevStart: addDays(start, -1),
+        prevEnd: start,
+      };
+    }
+    case "7d": {
+      const start = addDays(today, -6);
+      return {
+        start,
+        end: tomorrow,
+        prevStart: addDays(start, -7),
+        prevEnd: start,
+      };
+    }
+    case "30d": {
+      const start = addDays(today, -29);
+      return {
+        start,
+        end: tomorrow,
+        prevStart: addDays(start, -30),
+        prevEnd: start,
+      };
+    }
+    case "hoje":
+    default:
+      return {
+        start: today,
+        end: tomorrow,
+        prevStart: addDays(today, -1),
+        prevEnd: today,
+      };
+  }
+}
+
+function inRange(iso: string, start: Date, end: Date) {
+  const t = new Date(iso).getTime();
+  return t >= start.getTime() && t < end.getTime();
+}
+
+function changePct(current: number, previous: number) {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+function sumTotal(orders: PedidoRow[]) {
+  return orders.reduce((s, o) => s + Number(o.total || 0), 0);
+}
+
+function mapRecentOrder(order: PedidoRow) {
+  return {
+    id: String(order.id),
+    cliente: order.cliente_nome || "Cliente",
+    pagamento: order.meio_pagamento || "—",
+    status: order.status || "pendente",
+    createdAt: order.created_at,
+    valor: Number(order.total || 0),
+  };
+}
+
+export type DashboardData = {
+  storeName: string;
+  period: DashboardPeriod;
+  generatedAt: string;
+  kpis: {
+    pedidos: number;
+    pedidosChange: number;
+    faturamento: number;
+    faturamentoChange: number;
+    ticketMedio: number;
+    ticketMedioChange: number;
+    emAberto: number;
+  };
+  salesByDay: { label: string; receita: number; pedidos: number }[];
+  hourly: { hora: string; pedidos: number }[];
+  payments: { name: string; value: number; percentage: number }[];
+  topProducts: { nome: string; quantidade: number; receita: number }[];
+  recentOrders: ReturnType<typeof mapRecentOrder>[];
+};
+
 /**
- * Dashboard com poucas queries paralelas + agregação em memória.
- * Antes: dezenas de round-trips sequenciais (lento em toda visita à home).
+ * Snapshot da dashboard por período.
+ * Agrega em memória a partir de uma janela de pedidos.
  */
-export async function getDashboardData() {
+export async function getDashboardData(
+  period: DashboardPeriod = "hoje"
+): Promise<DashboardData> {
   await requireAdmin();
   const supabase = createServiceRoleClient();
-
   const now = new Date();
-  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const firstDayOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastDayOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const { start, end, prevStart, prevEnd } = periodRange(period, now);
 
-  // Janela ampla: 6 meses (cobre monthly chart + last month + this month + 7 days)
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  // Busca o suficiente para período atual + anterior + open orders
+  const fetchFrom = new Date(
+    Math.min(prevStart.getTime(), addDays(startOfDay(now), -30).getTime())
+  );
 
-  const [
-    { data: ordersWindow },
-    { count: totalClients },
-    { data: recentClients },
-    { data: recentOrders },
-  ] = await Promise.all([
-    supabase
-      .from("pedidos")
-      .select(
-        "id, total, status, created_at, cliente_id, cliente_nome, meio_pagamento, endereco_completo, itens"
-      )
-      .gte("created_at", sixMonthsAgo.toISOString())
-      .order("created_at", { ascending: false }),
-    supabase.from("clientes").select("*", { count: "exact", head: true }),
-    supabase
-      .from("clientes")
-      .select("id, nome, email, created_at")
-      .order("created_at", { ascending: false })
-      .limit(4),
-    supabase
-      .from("pedidos")
-      .select(
-        "id, total, status, created_at, cliente_nome, meio_pagamento, endereco_completo"
-      )
-      .order("created_at", { ascending: false })
-      .limit(5),
-  ]);
+  const [{ data: ordersWindow }, { data: store }, { data: recentOrders }] =
+    await Promise.all([
+      supabase
+        .from("pedidos")
+        .select(
+          "id, total, status, created_at, cliente_id, cliente_nome, meio_pagamento, endereco_completo, itens"
+        )
+        .gte("created_at", fetchFrom.toISOString())
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("configuracoes_loja")
+        .select("nome")
+        .order("id", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("pedidos")
+        .select(
+          "id, total, status, created_at, cliente_nome, meio_pagamento, endereco_completo"
+        )
+        .order("created_at", { ascending: false })
+        .limit(8),
+    ]);
 
   const allOrders = (ordersWindow || []) as PedidoRow[];
 
-  const inRange = (iso: string, start: Date, end: Date) => {
-    const t = new Date(iso).getTime();
-    return t >= start.getTime() && t < end.getTime();
-  };
-
-  const ordersThisMonth = allOrders.filter((o) =>
-    inRange(o.created_at, firstDayOfMonth, tomorrow)
-  );
-  // last month inclusive through end of last day
-  const ordersLastMonth = allOrders.filter((o) => {
-    const t = new Date(o.created_at).getTime();
-    return t >= firstDayOfLastMonth.getTime() && t <= lastDayOfLastMonth.getTime();
-  });
-  const ordersToday = allOrders.filter((o) =>
-    inRange(o.created_at, today, tomorrow)
+  const current = allOrders.filter((o) => inRange(o.created_at, start, end));
+  const previous = allOrders.filter((o) =>
+    inRange(o.created_at, prevStart, prevEnd)
   );
 
-  const revenueThisMonth =
-    ordersThisMonth.reduce((sum, order) => sum + Number(order.total || 0), 0) ||
-    0;
-  const revenueLastMonth =
-    ordersLastMonth.reduce((sum, order) => sum + Number(order.total || 0), 0) ||
-    0;
-  const revenueToday =
-    ordersToday.reduce((sum, order) => sum + Number(order.total || 0), 0) || 0;
-
-  const ordersCountThisMonth = ordersThisMonth.length;
-  const ordersCountLastMonth = ordersLastMonth.length;
-  const ordersCountToday = ordersToday.length;
-
-  const paidOrders = ordersThisMonth.filter((o) => o.status === "pago").length;
-  const pendingOrders = ordersThisMonth.filter(
-    (o) => o.status === "pendente"
-  ).length;
-  const cancelledOrders = ordersThisMonth.filter(
-    (o) => o.status === "cancelado"
+  // Em aberto: sempre situação atual da operação (não depende do filtro)
+  const emAberto = allOrders.filter((o) =>
+    OPEN_STATUSES.has(String(o.status || ""))
   ).length;
 
-  const avgTicket =
-    ordersCountThisMonth > 0 ? revenueThisMonth / ordersCountThisMonth : 0;
+  // Também conta abertos recentes se não estiverem na janela fetchFrom
+  // (fetchFrom cobre 30d+, suficiente)
 
-  const calculateChange = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 100);
-  };
+  const faturamento = sumTotal(current);
+  const faturamentoPrev = sumTotal(previous);
+  const pedidos = current.length;
+  const pedidosPrev = previous.length;
+  const ticketMedio = pedidos > 0 ? faturamento / pedidos : 0;
+  const ticketPrev = pedidosPrev > 0 ? faturamentoPrev / pedidosPrev : 0;
 
-  // Last 7 days — pure in-memory bucket
-  const last7DaysData = [];
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    const dayStart = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      date.getDate()
-    );
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
-
-    const dayRevenue = allOrders
-      .filter((o) => inRange(o.created_at, dayStart, dayEnd))
-      .reduce((sum, o) => sum + Number(o.total || 0), 0);
-
-    last7DaysData.push({
-      date: date.toISOString().split("T")[0],
-      revenue: dayRevenue,
-      label: date.toLocaleDateString("pt-BR", { weekday: "short" }),
-    });
-  }
-
-  // Monthly revenue last 6 months
-  const monthlyData = [];
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-    const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-
-    const monthRevenue = allOrders
-      .filter((o) => inRange(o.created_at, monthStart, monthEnd))
-      .reduce((sum, o) => sum + Number(o.total || 0), 0);
-
-    monthlyData.push({
-      label: date.toLocaleDateString("pt-BR", { month: "short" }),
-      revenue: monthRevenue,
-    });
-  }
-
-  const activeClients = new Set(
-    ordersThisMonth.map((o) => o.cliente_id).filter(Boolean)
-  ).size;
-
-  // Top products from this month's order items
-  const productSales: Record<
-    string,
-    {
-      id: string;
-      nome: string;
-      categoria: string;
-      imagem?: string;
-      quantidade: number;
-      receita: number;
-    }
-  > = {};
-
-  type DashItem = {
-    qty?: number;
-    total?: number;
-    produto?: {
-      id?: string | number;
-      name?: string;
-      categoria?: string;
-      image?: string;
-    };
-  };
-
-  for (const order of ordersThisMonth) {
-    const itens = (
-      Array.isArray(order.itens) ? order.itens : []
-    ) as DashItem[];
-    for (const item of itens) {
-      const produto = item.produto;
-      if (!produto?.id) continue;
-      const produtoId = String(produto.id);
-      if (!productSales[produtoId]) {
-        productSales[produtoId] = {
-          id: produtoId,
-          nome: produto.name || "Produto",
-          categoria: produto.categoria || "Sem categoria",
-          imagem: produto.image,
-          quantidade: 0,
-          receita: 0,
-        };
-      }
-      productSales[produtoId].quantidade += item.qty || 1;
-      productSales[produtoId].receita += item.total || 0;
+  // Vendas por dia no período
+  const salesByDay: DashboardData["salesByDay"] = [];
+  {
+    const cursor = new Date(start);
+    while (cursor < end) {
+      const dayStart = startOfDay(cursor);
+      const dayEnd = addDays(dayStart, 1);
+      const dayOrders = current.filter((o) =>
+        inRange(o.created_at, dayStart, dayEnd)
+      );
+      const isSingleDay = period === "hoje" || period === "ontem";
+      salesByDay.push({
+        label: isSingleDay
+          ? dayStart.toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+            }) // won't use for single day series below
+          : dayStart.toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "2-digit",
+            }),
+        receita: sumTotal(dayOrders),
+        pedidos: dayOrders.length,
+      });
+      cursor.setDate(cursor.getDate() + 1);
     }
   }
 
-  const topProducts = Object.values(productSales)
-    .sort((a, b) => b.receita - a.receita)
-    .slice(0, 5);
-
-  // Recent customers — 1 extra query for their orders (all client ids at once)
-  const recentClientIds = (recentClients || []).map((c) => c.id);
-  const ordersByClient = new Map<string, PedidoRow[]>();
-
-  if (recentClientIds.length > 0) {
-    const { data: clientOrders } = await supabase
-      .from("pedidos")
-      .select("id, total, status, created_at, cliente_id")
-      .in("cliente_id", recentClientIds);
-
-    for (const order of (clientOrders || []) as PedidoRow[]) {
-      const cid = String(order.cliente_id || "");
-      if (!cid) continue;
-      const list = ordersByClient.get(cid) || [];
-      list.push(order);
-      ordersByClient.set(cid, list);
+  // Para hoje/ontem: gráfico por hora em vez de um ponto
+  let salesSeries = salesByDay;
+  if (period === "hoje" || period === "ontem") {
+    const buckets: { label: string; receita: number; pedidos: number }[] = [];
+    for (let h = 8; h <= 23; h++) {
+      const hourOrders = current.filter(
+        (o) => new Date(o.created_at).getHours() === h
+      );
+      buckets.push({
+        label: `${String(h).padStart(2, "0")}h`,
+        receita: sumTotal(hourOrders),
+        pedidos: hourOrders.length,
+      });
     }
+    salesSeries = buckets;
   }
 
-  const recentCustomers = (recentClients || []).map((cliente) => {
-    const clientOrders = ordersByClient.get(cliente.id) || [];
-    const totalPedidos = clientOrders.length;
-    const totalGasto = clientOrders.reduce(
-      (sum, o) => sum + Number(o.total || 0),
-      0
-    );
-    const sorted = [...clientOrders].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-    const ultimoPedido = sorted[0]?.created_at
-      ? new Date(sorted[0].created_at)
-      : new Date(cliente.created_at);
-
-    let tipo: "novo" | "recorrente" | "vip" = "novo";
-    if (totalPedidos >= 10 || totalGasto >= 500) {
-      tipo = "vip";
-    } else if (totalPedidos >= 3) {
-      tipo = "recorrente";
-    }
-
-    return {
-      id: cliente.id,
-      nome: cliente.nome || "Cliente",
-      email: cliente.email || "",
-      totalPedidos,
-      totalGasto,
-      ultimoPedido,
-      tipo,
-    };
-  });
-
-  const paymentMethods: Record<string, { count: number; total: number }> = {};
-  for (const order of ordersThisMonth) {
-    const method = order.meio_pagamento || "outro";
-    if (!paymentMethods[method]) {
-      paymentMethods[method] = { count: 0, total: 0 };
-    }
-    paymentMethods[method].count++;
-    paymentMethods[method].total += Number(order.total || 0);
+  // Pedidos por horário (sempre no período filtrado)
+  const hourlyMap: Record<number, number> = {};
+  for (let i = 0; i < 24; i++) hourlyMap[i] = 0;
+  for (const o of current) {
+    hourlyMap[new Date(o.created_at).getHours()]++;
   }
-
-  const totalPayments = Object.values(paymentMethods).reduce(
-    (sum, m) => sum + m.total,
-    0
-  );
-  const paymentMethodsData = Object.entries(paymentMethods).map(
-    ([name, data]) => ({
-      name,
-      value: data.total,
-      percentage:
-        totalPayments > 0
-          ? Math.round((data.total / totalPayments) * 100)
-          : 0,
-    })
-  );
-
-  const hourlyOrders: Record<number, number> = {};
-  for (let i = 0; i < 24; i++) hourlyOrders[i] = 0;
-  for (const order of ordersThisMonth) {
-    const hour = new Date(order.created_at).getHours();
-    hourlyOrders[hour]++;
-  }
-
-  const hourlyData = Object.entries(hourlyOrders)
-    .filter(([hour]) => parseInt(hour, 10) >= 8 && parseInt(hour, 10) <= 23)
-    .map(([hour, count]) => ({
-      hora: `${hour.padStart(2, "0")}h`,
+  const hourly = Object.entries(hourlyMap)
+    .filter(([h]) => parseInt(h, 10) >= 8 && parseInt(h, 10) <= 23)
+    .map(([h, count]) => ({
+      hora: `${String(h).padStart(2, "0")}h`,
       pedidos: count,
     }));
 
-  const recentOrdersData = ((recentOrders || []) as PedidoRow[]).map(
-    (order) => {
-      const end = order.endereco_completo;
-      let enderecoLabel = "Endereço não informado";
-      if (typeof end === "string" && end.trim()) {
-        enderecoLabel = end;
-      } else if (end && typeof end === "object" && !Array.isArray(end)) {
-        const obj = end as {
-          logradouro?: string;
-          bairro?: string;
-          cidade?: string;
-        };
-        enderecoLabel =
-          obj.logradouro ||
-          [obj.bairro, obj.cidade].filter(Boolean).join(", ") ||
-          "Endereço não informado";
+  // Pagamentos
+  const payMap: Record<string, number> = {};
+  for (const o of current) {
+    const key = (o.meio_pagamento || "Outro").trim() || "Outro";
+    payMap[key] = (payMap[key] || 0) + Number(o.total || 0);
+  }
+  const payTotal = Object.values(payMap).reduce((a, b) => a + b, 0);
+  const payments = Object.entries(payMap)
+    .map(([name, value]) => ({
+      name,
+      value,
+      percentage: payTotal > 0 ? Math.round((value / payTotal) * 100) : 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  // Top produtos
+  type Item = {
+    qty?: number;
+    total?: number;
+    produto?: { id?: string | number; name?: string };
+  };
+  const productMap: Record<
+    string,
+    { nome: string; quantidade: number; receita: number }
+  > = {};
+  for (const order of current) {
+    const itens = (Array.isArray(order.itens) ? order.itens : []) as Item[];
+    for (const item of itens) {
+      const id = String(item.produto?.id ?? item.produto?.name ?? "x");
+      const nome = item.produto?.name || "Produto";
+      if (!productMap[id]) {
+        productMap[id] = { nome, quantidade: 0, receita: 0 };
       }
-      return {
-        id: String(order.id),
-        cliente: order.cliente_nome || "Cliente",
-        endereco: enderecoLabel,
-        pagamento: order.meio_pagamento || "Não informado",
-        status: order.status,
-        tempo: new Date(order.created_at),
-        valor: Number(order.total || 0),
-      };
+      productMap[id].quantidade += item.qty || 1;
+      productMap[id].receita += Number(item.total || 0);
     }
-  );
+  }
+  const topProducts = Object.values(productMap)
+    .sort((a, b) => b.quantidade - a.quantidade)
+    .slice(0, 8);
 
   return {
-    revenue: {
-      total: revenueThisMonth,
-      today: revenueToday,
-      change: calculateChange(revenueThisMonth, revenueLastMonth),
+    storeName:
+      (store as { nome?: string } | null)?.nome?.trim() || "SoftShake",
+    period,
+    generatedAt: now.toISOString(),
+    kpis: {
+      pedidos,
+      pedidosChange: changePct(pedidos, pedidosPrev),
+      faturamento,
+      faturamentoChange: changePct(faturamento, faturamentoPrev),
+      ticketMedio,
+      ticketMedioChange: changePct(ticketMedio, ticketPrev),
+      emAberto,
     },
-    orders: {
-      total: ordersCountThisMonth,
-      today: ordersCountToday,
-      paid: paidOrders,
-      pending: pendingOrders,
-      cancelled: cancelledOrders,
-      change: calculateChange(ordersCountThisMonth, ordersCountLastMonth),
-    },
-    clients: {
-      total: totalClients || 0,
-      active: activeClients,
-    },
-    avgTicket,
-    last7DaysData,
-    monthlyData,
+    salesByDay: salesSeries,
+    hourly,
+    payments,
     topProducts,
-    recentCustomers,
-    paymentMethodsData,
-    hourlyData,
-    recentOrders: recentOrdersData,
+    recentOrders: ((recentOrders || []) as PedidoRow[]).map(mapRecentOrder),
   };
 }

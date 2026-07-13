@@ -561,7 +561,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
     const next = !currentlyOn;
     setTogglingId(String(opcao.id));
 
-    // Otimista
+    // Otimista — só disponibilidade (continua no cardápio do cliente com tarja)
     setGrupos((prev) =>
       prev.map((g) => ({
         ...g,
@@ -570,7 +570,8 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
             ? {
                 ...o,
                 esta_disponivel: next,
-                status: next ? "ativo" : "inativo",
+                // Mantém status ativo para o item continuar listado no cardápio
+                status: "ativo",
               }
             : o
         ),
@@ -580,9 +581,15 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
     try {
       await updateOpcao(opcao.id, {
         esta_disponivel: next,
-        status: next ? "ativo" : "inativo",
+        // Garante que opções “esgotadas” não fiquem com status inativo
+        // (inativo = removido do catálogo; esgotado = visível + indisponível)
+        status: "ativo",
       });
-      toast.success(next ? "Opção ativada" : "Opção desativada");
+      toast.success(
+        next
+          ? "Opção disponível no cardápio"
+          : "Opção marcada como esgotada (continua visível para o cliente)"
+      );
     } catch (e) {
       setGrupos((prev) =>
         prev.map((g) => ({

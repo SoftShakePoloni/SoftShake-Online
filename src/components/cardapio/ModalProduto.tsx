@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Minus, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
@@ -26,8 +27,15 @@ type Props = {
 export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const { adicionarItem } = useCarrinho();
   const { loja, isLoading } = useLoja();
+  const pathname = usePathname();
   const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
   const groups = product?.optionGroups ?? [notesOptionGroup];
+
+  // Fecha ao trocar de aba na bottom nav
+  useEffect(() => {
+    if (open) onOpenChange(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
@@ -117,9 +125,12 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
 
   const toggle = (group: OptionGroup, itemId: string) => {
     // Verifica se o item está disponível
-    const item = group.items.find(i => i.id === itemId);
+    const item = group.items.find((i) => i.id === itemId);
     if (item && item.disponivel === false) {
-      return; // Não permite selecionar itens indisponíveis
+      toast.error("Item esgotado", {
+        description: "Este complemento está indisponível no momento.",
+      });
+      return;
     }
 
     setSelections((prev) => {
@@ -201,8 +212,8 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 sm:h-[92vh] sm:max-h-[92vh] sm:rounded-2xl">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+      <DialogContent className="flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92vh] md:max-h-[92vh] md:rounded-2xl">
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
         <DialogDescription className="sr-only">{product.description}</DialogDescription>
 
@@ -305,106 +316,144 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                     </div>
                   </header>
                   <ul className="divide-y divide-border bg-card">
-                    {/* Itens selecionados primeiro */}
-                    {g.items
-                      .filter(item => selected.includes(item.id))
-                      .map((item) => {
-                        const isSelected = true;
-                        const isRadio = g.max === 1;
-                        return (
-                          <li key={item.id} className="bg-primary/5">
-                            <button
-                              type="button"
-                              onClick={() => toggle(g, item.id)}
-                              className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition"
-                            >
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-foreground">{item.name}</span>
-                                  {item.tag && <TagBadge tag={item.tag} />}
-                                </div>
-                                {item.priceDelta ? (
-                                  <span className="text-xs text-muted-foreground">
-                                    + {formatBRL(item.priceDelta)}
-                                  </span>
-                                ) : null}
+                    {/* Disponíveis primeiro (selecionados no topo), esgotados no fim com tarja */}
+                    {[
+                      ...g.items.filter(
+                        (item) =>
+                          item.disponivel !== false &&
+                          selected.includes(item.id)
+                      ),
+                      ...g.items.filter(
+                        (item) =>
+                          item.disponivel !== false &&
+                          !selected.includes(item.id)
+                      ),
+                      ...g.items.filter((item) => item.disponivel === false),
+                    ].map((item) => {
+                      const isSelected = selected.includes(item.id);
+                      const isUnavailable = item.disponivel === false;
+                      const totalSelected = isShared
+                        ? totalSharedSelected
+                        : selected.length;
+                      const disabled =
+                        isUnavailable ||
+                        (!isSelected &&
+                          g.max > 1 &&
+                          totalSelected >= displayMax);
+                      const isRadio = g.max === 1;
+
+                      return (
+                        <li
+                          key={item.id}
+                          className={
+                            isUnavailable
+                              ? "relative overflow-hidden bg-muted/40"
+                              : isSelected
+                                ? "bg-primary/5"
+                                : ""
+                          }
+                        >
+                          {/* Tarja diagonal — só em esgotados */}
+                          {isUnavailable && (
+                            <>
+                              <div
+                                className="pointer-events-none absolute inset-0 z-10 bg-black/10"
+                                aria-hidden
+                              />
+                              <div
+                                className="pointer-events-none absolute top-3 -right-10 z-20 w-36 rotate-45 bg-red-600 py-1 text-center shadow-md"
+                                aria-hidden
+                              >
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-white">
+                                  Indisponível
+                                </span>
                               </div>
+                            </>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() =>
+                              !isUnavailable && toggle(g, item.id)
+                            }
+                            className={[
+                              "relative z-[5] flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition",
+                              isUnavailable
+                                ? "cursor-not-allowed"
+                                : "hover:bg-muted/30",
+                              isSelected && !isUnavailable
+                                ? ""
+                                : "",
+                            ].join(" ")}
+                          >
+                            <div className="flex min-w-0 flex-col pr-8">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={[
+                                    "text-sm font-medium",
+                                    isUnavailable
+                                      ? "text-muted-foreground line-through"
+                                      : "text-foreground",
+                                  ].join(" ")}
+                                >
+                                  {item.name}
+                                </span>
+                                {isUnavailable && (
+                                  <span className="inline-flex items-center rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                    Esgotado
+                                  </span>
+                                )}
+                                {item.tag && !isUnavailable && (
+                                  <TagBadge tag={item.tag} />
+                                )}
+                              </div>
+                              {item.priceDelta ? (
+                                <span
+                                  className={[
+                                    "text-xs",
+                                    isUnavailable
+                                      ? "text-muted-foreground/70 line-through"
+                                      : "text-muted-foreground",
+                                  ].join(" ")}
+                                >
+                                  + {formatBRL(item.priceDelta)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {!isUnavailable && (
                               <span
                                 className={[
                                   "flex h-5 w-5 shrink-0 items-center justify-center border-2 transition",
                                   isRadio ? "rounded-full" : "rounded",
-                                  "border-primary bg-primary",
+                                  isSelected
+                                    ? "border-primary bg-primary"
+                                    : "border-muted-foreground/40 bg-card",
                                 ].join(" ")}
                               >
-                                {isRadio ? (
-                                  <span className="h-2 w-2 rounded-full bg-primary-foreground" />
-                                ) : (
-                                  <svg
-                                    viewBox="0 0 12 12"
-                                    className="h-3 w-3 text-primary-foreground"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth={2.5}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  >
-                                    <polyline points="2.5,6.5 5,9 9.5,3.5" />
-                                  </svg>
-                                )}
+                                {isSelected &&
+                                  (isRadio ? (
+                                    <span className="h-2 w-2 rounded-full bg-primary-foreground" />
+                                  ) : (
+                                    <svg
+                                      viewBox="0 0 12 12"
+                                      className="h-3 w-3 text-primary-foreground"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth={2.5}
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <polyline points="2.5,6.5 5,9 9.5,3.5" />
+                                    </svg>
+                                  ))}
                               </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    
-                    {/* Itens não selecionados */}
-                    {g.items
-                      .filter(item => !selected.includes(item.id))
-                      .map((item) => {
-                        const isSelected = false;
-                        const totalSelected = isShared ? totalSharedSelected : selected.length;
-                        const isUnavailable = item.disponivel === false;
-                        const disabled = isUnavailable || (!isSelected && g.max > 1 && totalSelected >= displayMax);
-                        const isRadio = g.max === 1;
-                        return (
-                          <li key={item.id} className={isUnavailable ? "relative" : ""}>
-                            <button
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => !isUnavailable && toggle(g, item.id)}
-                              className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition disabled:opacity-50"
-                            >
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-sm ${isUnavailable ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
-                                    {item.name}
-                                  </span>
-                                  {isUnavailable && (
-                                    <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-700 border border-red-200">
-                                      Esgotado
-                                    </span>
-                                  )}
-                                  {item.tag && !isUnavailable && <TagBadge tag={item.tag} />}
-                                </div>
-                                {item.priceDelta && !isUnavailable ? (
-                                  <span className="text-xs text-muted-foreground">
-                                    + {formatBRL(item.priceDelta)}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {!isUnavailable && (
-                                <span
-                                  className={[
-                                    "flex h-5 w-5 shrink-0 items-center justify-center border-2 transition",
-                                    isRadio ? "rounded-full" : "rounded",
-                                    "border-muted-foreground/40 bg-card",
-                                  ].join(" ")}
-                                />
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               );

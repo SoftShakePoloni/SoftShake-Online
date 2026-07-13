@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Package } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -227,23 +227,20 @@ export function ProdutoDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[520px] p-0 flex flex-col gap-0"
+        className="w-full sm:max-w-[520px] p-0 flex flex-col gap-0 border-l border-[#E5E7EB]"
       >
-        <SheetHeader className="px-6 py-4 border-b border-[#E5E7EB] space-y-1">
-          <SheetTitle className="text-lg font-bold text-[#111827] flex items-center gap-2">
-            <span className="w-9 h-9 rounded-xl bg-[#F3EEFA] flex items-center justify-center">
-              <Package className="w-4 h-4 text-[#4C258C]" />
-            </span>
+        <SheetHeader className="px-4 py-3 border-b border-[#E5E7EB] space-y-0.5">
+          <SheetTitle className="text-[15px] font-semibold text-[#111827]">
             {readOnly
               ? "Visualizar produto"
               : isEdit
                 ? "Editar produto"
                 : "Novo produto"}
           </SheetTitle>
-          <SheetDescription className="text-xs text-[#6B7280]">
+          <SheetDescription className="text-[12px] text-[#6B7280]">
             {readOnly
               ? "Somente leitura"
-              : "Preencha as informações e vincule complementos"}
+              : "Informações, preço e complementos"}
           </SheetDescription>
         </SheetHeader>
 

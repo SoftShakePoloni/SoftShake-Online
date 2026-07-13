@@ -381,7 +381,7 @@ export function CatalogoManager({
   };
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-[#F7F8FC] overflow-hidden">
+    <div className="h-[calc(100vh-4rem)] flex flex-col bg-[#F9FAFB] overflow-hidden">
       <CatalogoHeader
         search={search}
         onSearchChange={setSearch}
@@ -426,7 +426,7 @@ export function CatalogoManager({
 
           {/* Mobile categorias strip */}
           <div className="md:hidden shrink-0 bg-white border-b border-[#E5E7EB] overflow-x-auto">
-            <div className="flex gap-1 px-3 py-2">
+            <div className="flex gap-1 px-2 py-2">
               <Chip
                 active={selectedCategoriaId == null}
                 onClick={() => setSelectedCategoriaId(null)}
@@ -441,17 +441,6 @@ export function CatalogoManager({
                 />
               ))}
             </div>
-          </div>
-
-          {/* Busca mobile */}
-          <div className="md:hidden shrink-0 px-3 py-2 bg-white border-b border-[#E5E7EB]">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar produtos…"
-              aria-label="Buscar produtos"
-              className="w-full h-9 px-3 rounded-xl border border-[#E5E7EB] bg-[#F7F8FC] text-sm outline-none focus:ring-2 focus:ring-[#4C258C]/25"
-            />
           </div>
 
           <ProdutosArea
@@ -537,8 +526,8 @@ function Chip({
       onClick={onClick}
       className={
         active
-          ? "shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#F3EEFA] text-[#4C258C] border border-[#D4C4F0]"
-          : "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium bg-[#F7F8FC] text-[#6B7280] border border-[#E5E7EB]"
+          ? "shrink-0 px-2.5 py-1 rounded-md text-[12px] font-semibold bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB]"
+          : "shrink-0 px-2.5 py-1 rounded-md text-[12px] font-medium bg-white text-[#6B7280] border border-[#E5E7EB]"
       }
     >
       {label}

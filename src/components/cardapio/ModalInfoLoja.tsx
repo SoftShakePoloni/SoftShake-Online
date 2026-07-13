@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { X, MapPin, Phone, Clock, Instagram, ShoppingBag } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useLoja } from "@/hooks/useLoja";
@@ -12,6 +14,12 @@ type Props = {
 
 export function ModalInfoLoja({ open, onOpenChange }: Props) {
   const { loja } = useLoja();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (open) onOpenChange(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   if (!loja) return null;
 
@@ -21,8 +29,8 @@ export function ModalInfoLoja({ open, onOpenChange }: Props) {
     : loja.horario_abertura ?? null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 sm:h-auto sm:max-h-[90vh] sm:rounded-2xl">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+      <DialogContent className="flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-auto md:max-h-[90vh] md:rounded-2xl">
         <DialogTitle className="sr-only">Informações da loja</DialogTitle>
 
         {/* Banner */}

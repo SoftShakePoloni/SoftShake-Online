@@ -30,102 +30,18 @@ export type PedidoRow = {
 const CHANNEL_NAME = "admin-pedidos";
 const HIGHLIGHT_MS = 6000;
 
-/** Flag global de som (evita re-subscrever o canal a cada toggle) */
-let pedidosSoundEnabled = true;
+// Re-export do módulo de som (configurações do estabelecimento + painel)
+export {
+  unlockPedidosAudio,
+  setPedidosSoundEnabled,
+  getPedidosSoundEnabled,
+  playNewOrderSound,
+  applySoundPreferences,
+  setPedidosSoundVolume,
+  setPedidosSoundType,
+} from "@/lib/admin/order-alert-sound";
 
-/** AudioContext reutilizável — precisa de gesto do usuário para sair de "suspended" */
-let sharedAudioCtx: AudioContext | null = null;
-
-function getAudioContext(): AudioContext | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioCtx) return null;
-    if (!sharedAudioCtx || sharedAudioCtx.state === "closed") {
-      sharedAudioCtx = new AudioCtx();
-    }
-    return sharedAudioCtx;
-  } catch {
-    return null;
-  }
-}
-
-async function ensureAudioUnlocked(): Promise<AudioContext | null> {
-  const ctx = getAudioContext();
-  if (!ctx) return null;
-  if (ctx.state === "suspended") {
-    try {
-      await ctx.resume();
-    } catch {
-      return null;
-    }
-  }
-  return ctx.state === "running" ? ctx : null;
-}
-
-/**
- * Chamar em clique do admin (ex.: botão de som) para liberar o áudio no browser.
- * Sem isso, o Chrome/Edge bloqueiam som até haver interação.
- */
-export async function unlockPedidosAudio(): Promise<boolean> {
-  const ctx = await ensureAudioUnlocked();
-  return Boolean(ctx);
-}
-
-export function setPedidosSoundEnabled(enabled: boolean) {
-  pedidosSoundEnabled = enabled;
-  if (enabled) {
-    // Tenta desbloquear no mesmo stack do clique (gesto do usuário)
-    void unlockPedidosAudio();
-  }
-}
-
-export function getPedidosSoundEnabled() {
-  return pedidosSoundEnabled;
-}
-
-/** Dois bipes curtos e mais audíveis (notificação de pedido) */
-function playTone(
-  ctx: AudioContext,
-  freq: number,
-  startAt: number,
-  duration: number,
-  peak = 0.22
-) {
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(freq, startAt);
-
-  // linearRamp evita erro do exponential com valores ~0
-  gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.linearRampToValueAtTime(peak, startAt + 0.02);
-  gain.gain.linearRampToValueAtTime(0.0001, startAt + duration);
-
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start(startAt);
-  osc.stop(startAt + duration + 0.02);
-}
-
-export async function playNewOrderSound() {
-  if (!pedidosSoundEnabled) return;
-  try {
-    const ctx = await ensureAudioUnlocked();
-    if (!ctx) return;
-
-    const t = ctx.currentTime;
-    // Bipe 1 + bipe 2 (estilo alerta de pedido)
-    playTone(ctx, 880, t, 0.14, 0.25);
-    playTone(ctx, 1175, t + 0.16, 0.18, 0.28);
-    playTone(ctx, 1319, t + 0.36, 0.22, 0.22);
-  } catch {
-    // som opcional — não quebra o fluxo
-  }
-}
+import { playNewOrderSound } from "@/lib/admin/order-alert-sound";
 
 /**
  * Realtime puro para a tabela `pedidos`.

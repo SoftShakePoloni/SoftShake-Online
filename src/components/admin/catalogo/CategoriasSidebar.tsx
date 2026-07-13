@@ -26,8 +26,6 @@ import {
   Copy,
   EyeOff,
   Trash2,
-  FolderOpen,
-  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -149,55 +147,39 @@ function CategoriaItemInner({
   isDragging?: boolean;
   dragHandleProps?: Record<string, unknown>;
 }) {
-  const isPromo = cat.nome.toLowerCase().includes("promo");
-
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center gap-1 rounded-xl transition-all duration-150",
-        isDragging && "opacity-80 z-20 shadow-lg",
+        "group relative flex items-center gap-0.5 rounded-md transition-colors",
+        isDragging && "opacity-80 z-20 bg-white border border-[#E5E7EB]",
         selected
-          ? "bg-[#F3EEFA] text-[#4C258C]"
-          : "hover:bg-[#F7F8FC] text-[#374151]"
+          ? "bg-[#F3F4F6] text-[#111827]"
+          : "hover:bg-[#F9FAFB] text-[#374151]"
       )}
     >
-      {selected && (
-        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#4C258C]" />
-      )}
-
       {dragHandleProps ? (
         <button
           type="button"
-          className="p-1.5 pl-2 text-[#9CA3AF] opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none"
+          className="p-1 pl-1.5 text-[#D1D5DB] opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none"
           aria-label="Arrastar categoria"
           {...dragHandleProps}
         >
           <GripVertical className="w-3.5 h-3.5" />
         </button>
       ) : (
-        <span className="w-6 shrink-0" aria-hidden />
+        <span className="w-5 shrink-0" aria-hidden />
       )}
 
       <button
         type="button"
         onClick={onSelect}
-        className="flex-1 min-w-0 flex items-center gap-2 py-2.5 pr-1 text-left"
+        className="flex-1 min-w-0 flex items-center gap-1.5 py-2 pr-1 text-left"
       >
-        {isPromo ? (
-          <Star className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-        ) : (
-          <FolderOpen
-            className={cn(
-              "w-3.5 h-3.5 shrink-0",
-              selected ? "text-[#4C258C]" : "text-[#9CA3AF]"
-            )}
-          />
-        )}
         <span
           className={cn(
-            "truncate text-sm",
+            "truncate text-[13px]",
             selected ? "font-semibold" : "font-medium"
           )}
         >
@@ -205,11 +187,11 @@ function CategoriaItemInner({
         </span>
         <span
           className={cn(
-            "ml-auto text-[11px] tabular-nums shrink-0",
-            selected ? "text-[#4C258C]/70" : "text-[#9CA3AF]"
+            "ml-auto text-[12px] tabular-nums shrink-0",
+            selected ? "text-[#6B7280]" : "text-[#9CA3AF]"
           )}
         >
-          {count}
+          ({count})
         </span>
       </button>
 
@@ -217,7 +199,7 @@ function CategoriaItemInner({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="p-1.5 mr-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/80 text-[#6B7280]"
+            className="p-1 mr-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-white text-[#6B7280]"
             aria-label="Menu da categoria"
           >
             <MoreVertical className="w-3.5 h-3.5" />
@@ -344,41 +326,38 @@ export function CategoriasSidebar({
   };
 
   return (
-    <aside className="w-full lg:w-[260px] shrink-0 border-r border-[#E5E7EB] bg-white flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#E5E7EB]">
-        <h2 className="text-sm font-semibold text-[#111827]">Categorias</h2>
+    <aside className="w-full lg:w-[220px] shrink-0 border-r border-[#E5E7EB] bg-white flex flex-col h-full">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#E5E7EB]">
+        <h2 className="text-[13px] font-semibold text-[#111827]">Categorias</h2>
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className="h-8 w-8 rounded-lg text-[#4C258C] hover:bg-[#F3EEFA]"
+          className="h-7 w-7 rounded-md text-[#6B7280] hover:bg-[#F3F4F6]"
           onClick={() => {
             setCreating(true);
             setNewName("");
           }}
           aria-label="Nova categoria"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+      <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
         <button
           type="button"
           onClick={() => onSelect(null)}
           className={cn(
-            "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-colors",
+            "w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-[13px] transition-colors",
             selectedId == null
-              ? "bg-[#F3EEFA] text-[#4C258C] font-semibold relative"
-              : "text-[#374151] hover:bg-[#F7F8FC] font-medium"
+              ? "bg-[#F3F4F6] text-[#111827] font-semibold"
+              : "text-[#374151] hover:bg-[#F9FAFB] font-medium"
           )}
         >
-          {selectedId == null && (
-            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#4C258C]" />
-          )}
           <span className="truncate">Todas</span>
-          <span className="ml-auto text-[11px] tabular-nums text-[#9CA3AF]">
-            {produtos.length}
+          <span className="ml-auto text-[12px] tabular-nums text-[#9CA3AF]">
+            ({produtos.length})
           </span>
         </button>
 

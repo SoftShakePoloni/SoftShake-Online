@@ -16,7 +16,6 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import { Filter, ArrowUpDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -34,7 +33,7 @@ import type {
 } from "./types";
 import { produtoStatus } from "./types";
 
-const PAGE_SIZE = 40;
+const PAGE_SIZE = 50;
 
 export function ProdutosArea({
   categorias,
@@ -65,8 +64,8 @@ export function ProdutosArea({
     useState<ProdutoStatusFilter>("todos");
   const [sort, setSort] = useState<ProdutoSort>("ordem");
   const [visible, setVisible] = useState(PAGE_SIZE);
-  // dnd-kit gera IDs diferentes no SSR → só monta DnD no cliente
   const [dndReady, setDndReady] = useState(false);
+
   useEffect(() => {
     setDndReady(true);
   }, []);
@@ -100,6 +99,7 @@ export function ProdutosArea({
           p.nome,
           p.descricao || "",
           p.categoria?.nome || "",
+          p.codigo || "",
           String(p.id),
         ]
           .join(" ")
@@ -126,9 +126,7 @@ export function ProdutosArea({
         list.sort((a, b) => Number(b.id) - Number(a.id));
         break;
       default:
-        list.sort(
-          (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
-        );
+        list.sort((a, b) => Number(a.ordem || 0) - Number(b.ordem || 0));
     }
 
     return list;
@@ -161,78 +159,127 @@ export function ProdutosArea({
     onReorder(arrayMove(ids, oldIndex, newIndex));
   };
 
+  const renderTable = (enableDnd: boolean) => (
+    <table className="w-full text-left border-collapse min-w-[640px]">
+      <thead className="sticky top-0 z-[1] bg-[#FAFAFA] border-b border-[#E5E7EB]">
+        <tr className="text-[11px] uppercase tracking-wide text-[#9CA3AF]">
+          <th className="w-8 py-2 pl-2 font-medium" />
+          <th className="py-2 pr-3 font-medium">Produto</th>
+          <th className="py-2 pr-3 font-medium hidden md:table-cell">
+            Categoria
+          </th>
+          <th className="py-2 pr-3 font-medium">Preço</th>
+          <th className="py-2 pr-3 font-medium">Status</th>
+          <th className="py-2 pr-3 font-medium hidden sm:table-cell">
+            Ativo
+          </th>
+          <th className="py-2 pr-3 font-medium hidden lg:table-cell">
+            Atualização
+          </th>
+          <th className="py-2 pr-3 font-medium text-right">Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {page.map((p) => (
+          <ProdutoRow
+            key={p.id}
+            produto={p}
+            enableDnd={enableDnd}
+            onEdit={() => onEdit(p)}
+            onDuplicate={() => onDuplicate(p)}
+            onView={() => onView(p)}
+            onDelete={() => onDelete(p)}
+            onToggleDisponivel={() => onToggleDisponivel(p)}
+          />
+        ))}
+      </tbody>
+    </table>
+  );
+
   return (
-    <div className="flex-1 min-w-0 flex flex-col h-full bg-[#F7F8FC]">
-      <div className="px-4 sm:px-6 py-4 border-b border-[#E5E7EB] bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-[#111827] tracking-tight">
-              {categoriaNome}
-            </h2>
-            <p className="text-sm text-[#6B7280]">
-              <span className="font-semibold text-[#4C258C] tabular-nums">
-                {filtered.length}
-              </span>{" "}
-              {filtered.length === 1 ? "produto" : "produtos"}
-              {search.trim() ? " encontrados" : ""}
-            </p>
-          </div>
+    <div className="flex-1 min-w-0 flex flex-col h-full bg-[#F9FAFB]">
+      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-[#E5E7EB] bg-white flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-[#111827]">
+            {categoriaNome}
+          </p>
+          <p className="text-[12px] text-[#6B7280]">
+            <span className="font-semibold tabular-nums text-[#111827]">
+              {filtered.length}
+            </span>{" "}
+            {filtered.length === 1 ? "produto" : "produtos"}
+          </p>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-xs text-[#6B7280]">
-              <Filter className="w-3.5 h-3.5" />
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => {
-                  setStatusFilter(v as ProdutoStatusFilter);
-                  setVisible(PAGE_SIZE);
-                }}
-              >
-                <SelectTrigger className="h-8 w-[130px] rounded-lg text-xs">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos status</SelectItem>
-                  <SelectItem value="ativo">Ativos</SelectItem>
-                  <SelectItem value="inativo">Inativos</SelectItem>
-                  <SelectItem value="promocao">Promoção</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => {
+              setStatusFilter(v as ProdutoStatusFilter);
+              setVisible(PAGE_SIZE);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[128px] rounded-md border-[#E5E7EB] text-[12px]">
+              <SelectValue placeholder="Disponibilidade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos" className="text-[12px]">
+                Todos
+              </SelectItem>
+              <SelectItem value="ativo" className="text-[12px]">
+                Disponíveis
+              </SelectItem>
+              <SelectItem value="inativo" className="text-[12px]">
+                Indisponíveis
+              </SelectItem>
+              <SelectItem value="promocao" className="text-[12px]">
+                Promoção
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-            <div className="flex items-center gap-1.5 text-xs text-[#6B7280]">
-              <ArrowUpDown className="w-3.5 h-3.5" />
-              <Select
-                value={sort}
-                onValueChange={(v) => {
-                  setSort(v as ProdutoSort);
-                  setVisible(PAGE_SIZE);
-                }}
-              >
-                <SelectTrigger className="h-8 w-[140px] rounded-lg text-xs">
-                  <SelectValue placeholder="Ordenar" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ordem">Ordem manual</SelectItem>
-                  <SelectItem value="nome">Nome</SelectItem>
-                  <SelectItem value="preco_asc">Menor preço</SelectItem>
-                  <SelectItem value="preco_desc">Maior preço</SelectItem>
-                  <SelectItem value="recentes">Mais recentes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <Select
+            value={sort}
+            onValueChange={(v) => {
+              setSort(v as ProdutoSort);
+              setVisible(PAGE_SIZE);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[130px] rounded-md border-[#E5E7EB] text-[12px]">
+              <SelectValue placeholder="Ordenar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ordem" className="text-[12px]">
+                Ordem manual
+              </SelectItem>
+              <SelectItem value="nome" className="text-[12px]">
+                Nome
+              </SelectItem>
+              <SelectItem value="preco_asc" className="text-[12px]">
+                Menor preço
+              </SelectItem>
+              <SelectItem value="preco_desc" className="text-[12px]">
+                Maior preço
+              </SelectItem>
+              <SelectItem value="recentes" className="text-[12px]">
+                Mais recentes
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
+      <div className="flex-1 overflow-auto">
         {filtered.length === 0 ? (
-          <CatalogEmpty
-            kind={search.trim() ? "busca" : "produtos"}
-            actionLabel={search.trim() ? undefined : "Novo produto"}
-            onAction={search.trim() ? undefined : onNovoProduto}
-          />
-        ) : dndReady ? (
+          <div className="p-6">
+            <CatalogEmpty
+              kind={search.trim() ? "busca" : "produtos"}
+              actionLabel={search.trim() ? undefined : "Novo produto"}
+              onAction={search.trim() ? undefined : onNovoProduto}
+            />
+          </div>
+        ) : dndReady && canReorder ? (
+          /* DndContext FORA da <table> — ele injeta <div>s de acessibilidade */
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -242,47 +289,21 @@ export function ProdutosArea({
               items={page.map((p) => String(p.id))}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-1.5 max-w-5xl">
-                {page.map((p) => (
-                  <ProdutoRow
-                    key={p.id}
-                    produto={p}
-                    enableDnd
-                    onEdit={() => onEdit(p)}
-                    onDuplicate={() => onDuplicate(p)}
-                    onView={() => onView(p)}
-                    onDelete={() => onDelete(p)}
-                    onToggleDisponivel={() => onToggleDisponivel(p)}
-                  />
-                ))}
-              </div>
+              {renderTable(true)}
             </SortableContext>
           </DndContext>
         ) : (
-          <div className="space-y-1.5 max-w-5xl">
-            {page.map((p) => (
-              <ProdutoRow
-                key={p.id}
-                produto={p}
-                enableDnd={false}
-                onEdit={() => onEdit(p)}
-                onDuplicate={() => onDuplicate(p)}
-                onView={() => onView(p)}
-                onDelete={() => onDelete(p)}
-                onToggleDisponivel={() => onToggleDisponivel(p)}
-              />
-            ))}
-          </div>
+          renderTable(false)
         )}
 
         {visible < filtered.length && (
-          <div className="flex justify-center mt-6">
+          <div className="flex justify-center py-4 border-t border-[#E5E7EB] bg-white">
             <button
               type="button"
               onClick={() => setVisible((v) => v + PAGE_SIZE)}
-              className="text-sm font-medium text-[#4C258C] hover:underline px-4 py-2"
+              className="text-[13px] font-medium text-blue-600 hover:underline"
             >
-              Carregar mais ({filtered.length - visible} restantes)
+              Carregar mais ({filtered.length - visible})
             </button>
           </div>
         )}

@@ -3,9 +3,14 @@ import { ProductCard } from "./CardProduto";
 
 export function ProductSection({ category }: { category: Category }) {
   return (
-    <section className="space-y-4">
+    <section
+      id={`categoria-${category.id}`}
+      className="scroll-mt-24 space-y-4"
+    >
       <header>
-        <h2 className="text-xl font-bold text-foreground sm:text-2xl">{category.name}</h2>
+        <h2 className="text-xl font-bold text-foreground sm:text-2xl">
+          {category.name}
+        </h2>
         {category.subtitle && (
           <p className="mt-1 text-sm text-muted-foreground">{category.subtitle}</p>
         )}

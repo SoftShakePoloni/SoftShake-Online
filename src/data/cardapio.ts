@@ -82,15 +82,22 @@ export async function fetchMenu(): Promise<Category[]> {
               min,
               max,
               tag: grupo.tag_id ? tagsMap.get(grupo.tag_id) : undefined,
+              // Mantém todas as opções no cardápio (mesmo indisponíveis).
+              // Indisponível = cliente vê com tarja, sem poder selecionar.
               items: (opcoes ?? [])
                 .filter((o) => o.grupo_id === grupo.id)
-                .map((o) => ({
-                  id: String(o.id),
-                  name: o.nome,
-                  priceDelta: Number(o.preco_adicional ?? 0),
-                  tag: o.tag_id ? tagsMap.get(o.tag_id) : undefined,
-                  disponivel: o.esta_disponivel !== false && o.status !== "inativo",
-                })),
+                .map((o) => {
+                  const status = String(o.status ?? "ativo").toLowerCase();
+                  const disponivel =
+                    o.esta_disponivel !== false && status !== "inativo";
+                  return {
+                    id: String(o.id),
+                    name: o.nome,
+                    priceDelta: Number(o.preco_adicional ?? 0),
+                    tag: o.tag_id ? tagsMap.get(o.tag_id) : undefined,
+                    disponivel,
+                  };
+                }),
             } as OptionGroup;
           })
           .filter((g): g is OptionGroup => g !== null);

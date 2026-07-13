@@ -7,6 +7,7 @@ import {
   TrendingUp,
   FileText,
   Settings,
+  Store,
   LogOut,
   Menu,
   X,
@@ -48,6 +49,11 @@ const navItems = [
     label: "Relatórios",
     href: "/admin/relatorios",
     icon: FileText,
+  },
+  {
+    label: "Estabelecimento",
+    href: "/admin/estabelecimento",
+    icon: Store,
   },
   {
     label: "Configurações",

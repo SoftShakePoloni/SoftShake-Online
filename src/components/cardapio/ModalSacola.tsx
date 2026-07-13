@@ -289,12 +289,12 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const enderecoAtual = enderecosDisponiveis.find(e => e.id === enderecoSelecionado);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 sm:h-[92vh] sm:max-h-[92vh] sm:rounded-2xl sm:mt-8">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+      <DialogContent className="flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92vh] md:max-h-[92vh] md:rounded-2xl">
         <DialogTitle className="sr-only">Sacola</DialogTitle>
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-card px-5 py-4 shadow-sm">
+        <div className="flex items-center justify-between bg-card px-5 pb-4 pt-10 shadow-sm sm:pt-8">
           <div className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-bold text-foreground">
@@ -303,7 +303,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               {step === 'payment' && 'Pagamento e entrega'}
             </h2>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 pr-8">
             {itens.length > 0 && step === 'cart' && (
               <button
                 onClick={limpar}
