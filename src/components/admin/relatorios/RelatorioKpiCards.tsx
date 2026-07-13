@@ -1,92 +1,46 @@
 "use client";
 
-import {
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
-  ShoppingBag,
-  Users,
-  Target,
-  XCircle,
-  CheckCircle2,
-  Clock,
-  Bike,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KpiCard } from "@/types/relatorios";
 
-const iconMap = {
-  DollarSign,
-  ShoppingBag,
-  Users,
-  Target,
-  XCircle,
-  CheckCircle2,
-  Clock,
-  Bike,
-};
-
-const variants = {
-  purple: { bg: "bg-[#EEE8FA]", color: "text-[#4C258C]" },
-  blue: { bg: "bg-blue-50", color: "text-blue-600" },
-  green: { bg: "bg-emerald-50", color: "text-emerald-600" },
-  orange: { bg: "bg-amber-50", color: "text-amber-600" },
-  pink: { bg: "bg-pink-50", color: "text-pink-600" },
-  red: { bg: "bg-red-50", color: "text-red-600" },
-};
+/** Exibe só os 4 KPIs principais, estilo analytics compacto */
+const PRIMARY_KEYS = ["faturamento", "pedidos", "ticket", "clientes"];
 
 export function RelatorioKpiCards({ kpis }: { kpis: KpiCard[] }) {
+  const primary = PRIMARY_KEYS.map((key) =>
+    kpis.find((k) => k.key === key)
+  ).filter(Boolean) as KpiCard[];
+
+  const list = primary.length > 0 ? primary : kpis.slice(0, 4);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
-      {kpis.map((kpi) => {
-        const Icon = iconMap[kpi.icon] || DollarSign;
-        const style = variants[kpi.variant];
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+      {list.map((kpi) => {
         const hasTrend = kpi.trend != null;
         const positive = (kpi.trend ?? 0) >= 0;
 
         return (
           <div
             key={kpi.key}
-            className="group bg-white rounded-2xl border border-[#E5E7EB] p-5 hover:shadow-lg hover:border-[#D1D5DB] transition-all duration-200 hover:-translate-y-0.5"
+            className="rounded-md border border-[#E5E7EB] bg-white px-3.5 py-3"
           >
-            <div className="flex items-start justify-between mb-3">
-              <div
-                className={cn(
-                  "w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105",
-                  style.bg
-                )}
-              >
-                <Icon className={cn("w-5 h-5", style.color)} />
-              </div>
+            <p className="text-[12px] text-[#6B7280]">{kpi.label}</p>
+            <div className="mt-1 flex items-end justify-between gap-2">
+              <p className="text-[28px] font-bold leading-none tabular-nums tracking-tight text-[#111827]">
+                {kpi.value}
+              </p>
               {hasTrend && (
-                <div
+                <span
                   className={cn(
-                    "flex items-center gap-0.5 text-[11px] font-semibold px-2 py-1 rounded-lg",
-                    positive
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-red-50 text-red-700"
+                    "text-[12px] font-medium tabular-nums shrink-0",
+                    positive ? "text-emerald-600" : "text-red-600"
                   )}
                 >
-                  {positive ? (
-                    <TrendingUp className="w-3 h-3" />
-                  ) : (
-                    <TrendingDown className="w-3 h-3" />
-                  )}
-                  {Math.abs(kpi.trend!)}%
-                </div>
+                  {positive ? "▲" : "▼"} {positive ? "+" : ""}
+                  {kpi.trend}%
+                </span>
               )}
             </div>
-            <p className="text-xs font-medium text-[#6B7280] mb-1">
-              {kpi.label}
-            </p>
-            <p className="text-2xl font-bold text-[#111827] tracking-tight tabular-nums">
-              {kpi.value}
-            </p>
-            {(kpi.subtitle || kpi.trendLabel) && (
-              <p className="text-[11px] text-[#9CA3AF] mt-1.5">
-                {kpi.subtitle || kpi.trendLabel}
-              </p>
-            )}
           </div>
         );
       })}

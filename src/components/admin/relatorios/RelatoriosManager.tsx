@@ -2,21 +2,13 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import {
-  BarChart3,
-  Calendar,
   Download,
   FileSpreadsheet,
   FileText,
-  Filter,
   Loader2,
-  Printer,
   RefreshCw,
-  Bike,
-  Clock,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,17 +29,14 @@ import { RelatorioKpiCards } from "./RelatorioKpiCards";
 import {
   ChartFaturamento,
   ChartHoras,
-  ChartMensal,
   ChartPedidosBar,
   ChartPizza,
-  ChartSemana,
+  ChartCategorias,
 } from "./RelatorioCharts";
 import {
   ComparativosCards,
   TabelaClientes,
   TabelaProdutos,
-  TabelaRanking,
-  TabelaTamanhos,
 } from "./RelatorioTables";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -61,21 +50,23 @@ const PRESETS: { id: RelatorioPeriodoPreset; label: string }[] = [
   { id: "7d", label: "7 dias" },
   { id: "30d", label: "30 dias" },
   { id: "mes", label: "Este mês" },
-  { id: "mes_passado", label: "Mês passado" },
   { id: "custom", label: "Personalizado" },
 ];
 
 function Skeleton() {
   return (
-    <div className="space-y-6 animate-pulse">
-      <div className="grid grid-cols-2 xl:grid-cols-6 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-28 rounded-2xl bg-white border border-[#E5E7EB]" />
+    <div className="space-y-3 animate-pulse">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-[76px] rounded-md bg-white border border-[#E5E7EB]"
+          />
         ))}
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 h-80 rounded-2xl bg-white border border-[#E5E7EB]" />
-        <div className="h-80 rounded-2xl bg-white border border-[#E5E7EB]" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <div className="lg:col-span-2 h-64 rounded-md bg-white border border-[#E5E7EB]" />
+        <div className="h-64 rounded-md bg-white border border-[#E5E7EB]" />
       </div>
     </div>
   );
@@ -118,14 +109,6 @@ function exportCSV(data: RelatorioData) {
   );
 }
 
-function exportExcel(data: RelatorioData) {
-  // Excel abre CSV UTF-8 com BOM corretamente
-  exportCSV(data);
-  toast.success("Arquivo exportado (CSV compatível com Excel)");
-}
-
-
-
 export function RelatoriosManager() {
   const [filtros, setFiltros] = useState<RelatorioFiltros>({
     preset: "30d",
@@ -136,30 +119,24 @@ export function RelatoriosManager() {
   const [data, setData] = useState<RelatorioData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [showFilters, setShowFilters] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [adminName, setAdminName] = useState("Administrador");
 
-  const load = useCallback(
-    (f: RelatorioFiltros) => {
-      setError(null);
-      startTransition(async () => {
-        try {
-          const result = await getRelatorios(f);
-          setData(result);
-          setLastUpdated(new Date());
-        } catch (e: unknown) {
-          console.error(e);
-          const msg =
-            e instanceof Error ? e.message : "Erro ao carregar relatórios";
-          setError(msg);
-          toast.error("Erro ao carregar relatórios");
-        }
-      });
-    },
-    []
-  );
+  const load = useCallback((f: RelatorioFiltros) => {
+    setError(null);
+    startTransition(async () => {
+      try {
+        const result = await getRelatorios(f);
+        setData(result);
+      } catch (e: unknown) {
+        console.error(e);
+        setError(
+          e instanceof Error ? e.message : "Erro ao carregar relatórios"
+        );
+        toast.error("Erro ao carregar relatórios");
+      }
+    });
+  }, []);
 
   useEffect(() => {
     load(filtros);
@@ -167,7 +144,6 @@ export function RelatoriosManager() {
   }, []);
 
   useEffect(() => {
-    // Nome do admin vindo do topbar/sessão (local) ou fallback
     try {
       const raw =
         localStorage.getItem("softshake-admin-name") ||
@@ -180,48 +156,21 @@ export function RelatoriosManager() {
     }
   }, []);
 
-  const handleExportPdf = async () => {
-    setExportingPdf(true);
-    try {
-      // Garante dados frescos do período selecionado
-      const result = await getRelatorios(filtros);
-      setData(result);
-      setLastUpdated(new Date());
-
-      const { blob, filename } = await generateRelatorioPdf({
-        data: result,
-        emitidoPor: adminName,
-      });
-      downloadPdfBlob(blob, filename);
-      toast.success("PDF gerado com sucesso", {
-        description: filename,
-      });
-    } catch (e: unknown) {
-      console.error(e);
-      toast.error(e instanceof Error ? e.message : "Erro ao gerar PDF");
-    } finally {
-      setExportingPdf(false);
-    }
-  };
-
-  // Realtime: quando pedido muda, revalida o relatório (sem polling)
+  // Realtime
   useEffect(() => {
     const supabase = createClient();
     let t: ReturnType<typeof setTimeout> | null = null;
-
     const channel = supabase
       .channel("relatorios-pedidos")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pedidos" },
         () => {
-          // debounce leve para não reprocessar a cada update em rajada
           if (t) clearTimeout(t);
           t = setTimeout(() => load(filtros), 800);
         }
       )
       .subscribe();
-
     return () => {
       if (t) clearTimeout(t);
       void supabase.removeChannel(channel);
@@ -234,50 +183,64 @@ export function RelatoriosManager() {
     load(next);
   };
 
-  const applyFilters = () => {
-    load(filtros);
-    setShowFilters(false);
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const result = await getRelatorios(filtros);
+      setData(result);
+      const { blob, filename } = await generateRelatorioPdf({
+        data: result,
+        emitidoPor: adminName,
+      });
+      downloadPdfBlob(blob, filename);
+      toast.success("PDF exportado");
+    } catch (e: unknown) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Erro ao gerar PDF");
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
+  const btnOutline =
+    "inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50";
+
   return (
-    <div className="min-h-full bg-[#F7F8FC]">
-      {/* Header */}
-      <div className="bg-white border-b border-[#E5E7EB] px-6 py-5 sticky top-0 z-20">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#4C258C] to-[#7C3AED] flex items-center justify-center shadow-md shadow-purple-500/20">
-              <BarChart3 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-[#111827]">Relatórios</h1>
-              <p className="text-sm text-[#6B7280]">
-                Resumo completo do desempenho da loja
-                {lastUpdated && (
-                  <span className="text-[#9CA3AF]">
-                    {" "}
-                    · atualizado{" "}
-                    {lastUpdated.toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+    <div className="min-h-full bg-[#F9FAFB]">
+      <div className="mx-auto max-w-[1400px] px-4 sm:px-5 py-4 space-y-4">
+        {/* Cabeçalho */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            {data && (
+              <p className="text-[13px] text-[#6B7280]">
+                Período:{" "}
+                <span className="font-medium text-[#111827]">
+                  {data.range.label}
+                </span>
+                <span className="text-[#D1D5DB]"> · </span>
+                {data.totalPedidosPeriodo} pedidos
+                {isPending && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-[#9CA3AF]">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Atualizando
                   </span>
                 )}
               </p>
-            </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex p-1 bg-[#F3F4F6] rounded-xl">
+            <div className="inline-flex rounded-md border border-[#E5E7EB] bg-white p-0.5">
               {PRESETS.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   onClick={() => applyPreset(p.id)}
                   className={cn(
-                    "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                    "h-8 px-2.5 rounded text-[12px] font-medium transition-colors",
                     filtros.preset === p.id
-                      ? "bg-white text-[#4C258C] shadow-sm"
-                      : "text-[#6B7280] hover:text-[#111827]"
+                      ? "bg-[#DC2626] text-white"
+                      : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6]"
                   )}
                 >
                   {p.label}
@@ -285,40 +248,67 @@ export function RelatoriosManager() {
               ))}
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => setShowFilters((v) => !v)}
+            <button
+              type="button"
+              className={btnOutline}
+              disabled={exportingPdf || isPending}
+              onClick={() => void handleExportPdf()}
             >
-              <Filter className="w-4 h-4 mr-1.5" />
-              Filtros
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
+              {exportingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileText className="w-3.5 h-3.5" />
+              )}
+              PDF
+            </button>
+            <button
+              type="button"
+              className={btnOutline}
+              disabled={!data}
+              onClick={() => {
+                if (!data) return;
+                exportCSV(data);
+                toast.success("Excel/CSV exportado");
+              }}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              Excel
+            </button>
+            <button
+              type="button"
+              className={btnOutline}
+              disabled={!data}
+              onClick={() => {
+                if (!data) return;
+                exportCSV(data);
+                toast.success("CSV exportado");
+              }}
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+            <button
+              type="button"
+              className={btnOutline}
               disabled={isPending}
               onClick={() => load(filtros)}
             >
-              {isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-            </Button>
+              <RefreshCw
+                className={cn("w-3.5 h-3.5", isPending && "animate-spin")}
+              />
+              Atualizar
+            </button>
           </div>
         </div>
 
-        {/* Custom range */}
+        {/* Período personalizado */}
         {filtros.preset === "custom" && (
-          <div className="mt-4 flex flex-wrap items-end gap-3 p-3 rounded-xl bg-[#F8F9FC] border border-[#E5E7EB]">
+          <div className="flex flex-wrap items-end gap-2 rounded-md border border-[#E5E7EB] bg-white p-3">
             <div>
-              <Label className="text-xs text-[#6B7280]">De</Label>
+              <Label className="text-[11px] text-[#6B7280]">De</Label>
               <Input
                 type="date"
-                className="h-9 mt-1"
+                className="h-8 mt-1 w-[140px] rounded-md text-[13px]"
                 value={filtros.from?.slice(0, 10) || ""}
                 onChange={(e) =>
                   setFiltros((f) => ({ ...f, from: e.target.value }))
@@ -326,238 +316,120 @@ export function RelatoriosManager() {
               />
             </div>
             <div>
-              <Label className="text-xs text-[#6B7280]">Até</Label>
+              <Label className="text-[11px] text-[#6B7280]">Até</Label>
               <Input
                 type="date"
-                className="h-9 mt-1"
+                className="h-8 mt-1 w-[140px] rounded-md text-[13px]"
                 value={filtros.to?.slice(0, 10) || ""}
                 onChange={(e) =>
                   setFiltros((f) => ({ ...f, to: e.target.value }))
                 }
               />
             </div>
-            <Button
-              size="sm"
-              className="h-9 bg-[#4C258C] hover:bg-[#5E35B1]"
+            <button
+              type="button"
+              className="h-8 px-3 rounded-md bg-[#DC2626] text-white text-[12px] font-medium hover:bg-[#B91C1C]"
               onClick={() => load(filtros)}
             >
-              <Calendar className="w-4 h-4 mr-1.5" />
-              Aplicar período
-            </Button>
+              Aplicar
+            </button>
           </div>
         )}
 
-        {/* Advanced filters */}
-        {showFilters && (
-          <div className="mt-4 p-4 rounded-2xl border border-[#E5E7EB] bg-[#F8F9FC] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <Label className="text-xs">Status</Label>
-              <Select
-                value={filtros.status || "todos"}
-                onValueChange={(v) => setFiltros((f) => ({ ...f, status: v }))}
-              >
-                <SelectTrigger className="h-9 mt-1 bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="pendente">Recebido</SelectItem>
-                  <SelectItem value="preparando">Em preparo</SelectItem>
-                  <SelectItem value="saiu_entrega">Saiu para entrega</SelectItem>
-                  <SelectItem value="entregue">Finalizado</SelectItem>
-                  <SelectItem value="cancelado">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Pagamento</Label>
-              <Select
-                value={filtros.meio_pagamento || "todos"}
-                onValueChange={(v) =>
-                  setFiltros((f) => ({ ...f, meio_pagamento: v }))
-                }
-              >
-                <SelectTrigger className="h-9 mt-1 bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="pix">PIX</SelectItem>
-                  <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                  <SelectItem value="cartao">Cartão</SelectItem>
-                  {(data?.meiosPagamento || []).map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Tipo</Label>
-              <Select
-                value={filtros.tipo_entrega || "todos"}
-                onValueChange={(v) =>
-                  setFiltros((f) => ({ ...f, tipo_entrega: v }))
-                }
-              >
-                <SelectTrigger className="h-9 mt-1 bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="entrega">Entrega</SelectItem>
-                  <SelectItem value="retirada">Retirada</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Cliente</Label>
-              <Input
-                className="h-9 mt-1 bg-white"
-                placeholder="Nome ou telefone"
-                value={filtros.cliente || ""}
-                onChange={(e) =>
-                  setFiltros((f) => ({ ...f, cliente: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Produto</Label>
-              <Input
-                className="h-9 mt-1 bg-white"
-                placeholder="Nome do produto"
-                value={filtros.produto || ""}
-                onChange={(e) =>
-                  setFiltros((f) => ({ ...f, produto: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Cidade</Label>
-              <Select
-                value={filtros.cidade || "todos"}
-                onValueChange={(v) =>
-                  setFiltros((f) => ({
-                    ...f,
-                    cidade: v === "todos" ? undefined : v,
-                  }))
-                }
-              >
-                <SelectTrigger className="h-9 mt-1 bg-white">
-                  <SelectValue placeholder="Todas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas</SelectItem>
-                  {(data?.cidades || []).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs">Bairro</Label>
-              <Select
-                value={filtros.bairro || "todos"}
-                onValueChange={(v) =>
-                  setFiltros((f) => ({
-                    ...f,
-                    bairro: v === "todos" ? undefined : v,
-                  }))
-                }
-              >
-                <SelectTrigger className="h-9 mt-1 bg-white">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  {(data?.bairros || []).map((b) => (
-                    <SelectItem key={b} value={b}>
-                      {b}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end gap-2">
-              <Button
-                className="h-9 flex-1 bg-[#4C258C] hover:bg-[#5E35B1]"
-                onClick={applyFilters}
-              >
-                Aplicar filtros
-              </Button>
-              <Button
-                variant="outline"
-                className="h-9"
-                onClick={() => {
-                  const reset: RelatorioFiltros = {
-                    preset: filtros.preset,
-                    from: filtros.from,
-                    to: filtros.to,
-                    status: "todos",
-                    meio_pagamento: "todos",
-                    tipo_entrega: "todos",
-                  };
-                  setFiltros(reset);
-                  load(reset);
-                }}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Filtros compactos */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Select
+            value={filtros.status || "todos"}
+            onValueChange={(v) => {
+              const next = { ...filtros, status: v };
+              setFiltros(next);
+              load(next);
+            }}
+          >
+            <SelectTrigger className="h-8 w-[120px] rounded-md border-[#E5E7EB] text-[12px] bg-white">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos" className="text-[12px]">
+                Status
+              </SelectItem>
+              <SelectItem value="pendente" className="text-[12px]">
+                Novo
+              </SelectItem>
+              <SelectItem value="preparando" className="text-[12px]">
+                Em preparo
+              </SelectItem>
+              <SelectItem value="saiu_entrega" className="text-[12px]">
+                Entrega
+              </SelectItem>
+              <SelectItem value="entregue" className="text-[12px]">
+                Finalizado
+              </SelectItem>
+              <SelectItem value="cancelado" className="text-[12px]">
+                Cancelado
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
-        {/* Export */}
-        <div className="mt-4 flex flex-wrap gap-2 print:hidden">
-          <Button
-            size="sm"
-            className="bg-[#4C258C] hover:bg-[#5E35B1] text-white"
-            disabled={exportingPdf || isPending}
-            onClick={handleExportPdf}
+          <Select
+            value={filtros.meio_pagamento || "todos"}
+            onValueChange={(v) => {
+              const next = { ...filtros, meio_pagamento: v };
+              setFiltros(next);
+              load(next);
+            }}
           >
-            {exportingPdf ? (
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-            ) : (
-              <FileText className="w-4 h-4 mr-1.5" />
-            )}
-            {exportingPdf ? "Gerando PDF..." : "Exportar PDF"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!data}
-            onClick={() => data && exportCSV(data)}
+            <SelectTrigger className="h-8 w-[130px] rounded-md border-[#E5E7EB] text-[12px] bg-white">
+              <SelectValue placeholder="Pagamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos" className="text-[12px]">
+                Pagamento
+              </SelectItem>
+              <SelectItem value="pix" className="text-[12px]">
+                PIX
+              </SelectItem>
+              <SelectItem value="dinheiro" className="text-[12px]">
+                Dinheiro
+              </SelectItem>
+              <SelectItem value="cartao" className="text-[12px]">
+                Cartão
+              </SelectItem>
+              {(data?.meiosPagamento || []).map((m) => (
+                <SelectItem key={m} value={m} className="text-[12px]">
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filtros.tipo_entrega || "todos"}
+            onValueChange={(v) => {
+              const next = { ...filtros, tipo_entrega: v };
+              setFiltros(next);
+              load(next);
+            }}
           >
-            <Download className="w-4 h-4 mr-1.5" />
-            CSV
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!data}
-            onClick={() => data && exportExcel(data)}
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-1.5" />
-            Excel
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!data}
-            onClick={() => window.print()}
-          >
-            <Printer className="w-4 h-4 mr-1.5" />
-            Imprimir
-          </Button>
+            <SelectTrigger className="h-8 w-[120px] rounded-md border-[#E5E7EB] text-[12px] bg-white">
+              <SelectValue placeholder="Canal" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos" className="text-[12px]">
+                Canal
+              </SelectItem>
+              <SelectItem value="entrega" className="text-[12px]">
+                Entrega
+              </SelectItem>
+              <SelectItem value="retirada" className="text-[12px]">
+                Retirada
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </div>
 
-      <div className="p-6 space-y-6">
         {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">
             {error}
           </div>
         )}
@@ -565,139 +437,80 @@ export function RelatoriosManager() {
         {isPending && !data ? (
           <Skeleton />
         ) : data ? (
-          <>
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-[#6B7280]">
-                Período:{" "}
-                <span className="font-semibold text-[#111827]">
-                  {data.range.label}
-                </span>
-                {" · "}
-                {data.totalPedidosPeriodo} pedidos analisados
-              </p>
-              {isPending && (
-                <span className="inline-flex items-center gap-1.5 text-xs text-[#6B7280]">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Atualizando…
-                </span>
-              )}
-            </div>
-
+          <div className={cn("space-y-3", isPending && "opacity-70")}>
+            {/* KPIs */}
             <RelatorioKpiCards kpis={data.kpis} />
 
-            {/* Ops extras */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
-                  <Bike className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-xs text-[#6B7280]">Entrega vs Retirada</p>
-                  <div className="flex gap-4 mt-1">
-                    {data.entregaVsRetirada.map((e) => (
-                      <p key={e.name} className="text-sm font-semibold">
-                        {e.name}: {e.percent ?? 0}%
-                        <span className="text-[#9CA3AF] font-normal ml-1">
-                          ({e.value})
-                        </span>
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-[#6B7280]">
-                    Tempo médio até conclusão
-                  </p>
-                  <p className="text-xl font-bold text-[#111827] mt-0.5">
-                    {data.tempoMedioMinutos != null
-                      ? `${data.tempoMedioMinutos} min`
-                      : "—"}
-                  </p>
-                  <p className="text-[11px] text-[#9CA3AF]">
-                    Pedidos finalizados no período
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <ComparativosCards items={data.comparativos} />
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            {/* Vendas + Pagamento */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
               <ChartFaturamento data={data.faturamentoDiario} />
-              <ChartPedidosBar data={data.pedidosDiarios} />
+              <ChartPizza data={data.pagamentos} />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              <ChartPizza
-                title="Métodos de pagamento"
-                description="Distribuição dos pedidos"
-                data={data.pagamentos}
-              />
-              <ChartPizza
-                title="Status dos pedidos"
-                description="Funil operacional"
-                data={data.status}
-                donut
-              />
-              <ChartPizza
-                title="Entrega × Retirada"
-                data={data.entregaVsRetirada}
-                donut
-              />
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <TabelaProdutos data={data.produtos} />
-              <TabelaRanking
-                title="Sabores mais vendidos"
-                description="Baseado nas opções de sabor dos pedidos"
-                data={data.sabores}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <TabelaTamanhos data={data.tamanhos} />
-              <TabelaRanking
-                title="Adicionais mais escolhidos"
-                description="Nutella, cremes, frutas e outros"
-                data={data.adicionais}
-              />
-            </div>
-
-            <TabelaClientes data={data.clientes} />
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {/* Horário + Status + Canal */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <ChartHoras data={data.porHora} />
-              <ChartSemana data={data.porDiaSemana} />
+              <ChartPedidosBar data={data.status} />
+              <ChartCategorias data={data.entregaVsRetirada} />
             </div>
 
-            <ChartMensal data={data.receitaMensal} />
-          </>
-        ) : (
-          <Skeleton />
-        )}
-      </div>
+            {/* Produtos + Clientes + Comparativo */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+              <div className="lg:col-span-3">
+                <TabelaProdutos data={data.produtos} />
+              </div>
+              <div className="lg:col-span-2 space-y-3">
+                <TabelaClientes data={data.clientes} />
+                <ComparativosCards data={data.comparativos} />
+              </div>
+            </div>
 
-      <style jsx global>{`
-        @media print {
-          aside,
-          .print\\:hidden,
-          button {
-            display: none !important;
-          }
-          main {
-            margin: 0 !important;
-          }
-          body {
-            background: white !important;
-          }
-        }
-      `}</style>
+            {/* Últimos pedidos do relatório */}
+            {data.pedidosLista?.length > 0 && (
+              <section className="rounded-md border border-[#E5E7EB] bg-white p-4">
+                <h3 className="text-[13px] font-semibold text-[#111827] mb-3">
+                  Pedidos do período
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[13px]">
+                    <thead>
+                      <tr className="border-b border-[#E5E7EB] text-[11px] uppercase tracking-wide text-[#9CA3AF]">
+                        <th className="pb-2 pr-2 font-medium">Pedido</th>
+                        <th className="pb-2 pr-2 font-medium">Cliente</th>
+                        <th className="pb-2 pr-2 font-medium">Status</th>
+                        <th className="pb-2 pr-2 font-medium">Pagamento</th>
+                        <th className="pb-2 font-medium text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F3F4F6]">
+                      {data.pedidosLista.slice(0, 10).map((p) => (
+                        <tr key={p.id} className="hover:bg-[#FAFAFA]">
+                          <td className="py-2 pr-2 font-medium tabular-nums text-[#111827]">
+                            #{String(p.id).slice(0, 6)}
+                          </td>
+                          <td className="py-2 pr-2 text-[#374151] truncate max-w-[140px]">
+                            {p.cliente}
+                          </td>
+                          <td className="py-2 pr-2 text-[#6B7280]">{p.status}</td>
+                          <td className="py-2 pr-2 text-[#6B7280] capitalize">
+                            {p.pagamento}
+                          </td>
+                          <td className="py-2 text-right font-semibold tabular-nums">
+                            {p.total.toLocaleString("pt-BR", {
+                              style: "currency",
+                              currency: "BRL",
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

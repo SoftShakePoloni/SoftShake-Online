@@ -23,6 +23,11 @@ const items: {
   { to: "/perfil", label: "Perfil", icon: User },
 ];
 
+function isActivePath(pathname: string, to: string) {
+  if (to === "/") return pathname === "/";
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
 export function BottomNav() {
   const pathname = usePathname();
   const [pedidosAtivos, setPedidosAtivos] = useState(0);
@@ -51,10 +56,14 @@ export function BottomNav() {
   }, []);
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card/95 backdrop-blur-md md:hidden">
+    <nav
+      className="fixed bottom-0 inset-x-0 z-[70] border-t border-border bg-card/95 backdrop-blur-md md:hidden"
+      // Acima dos dialogs (z-50) para a navegação do celular sempre funcionar
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
       <ul className="grid grid-cols-4">
         {items.map((item) => {
-          const active = pathname === item.to;
+          const active = isActivePath(pathname, item.to);
           const Icon = item.icon;
           const isPedidos = item.to === "/pedidos";
           const isPromos = item.to === "/promocoes";
@@ -92,14 +101,16 @@ export function BottomNav() {
                       {promosCount > 9 ? "9+" : promosCount}
                     </span>
                   )}
-                  {/* Ponto de atenção quando há promo e não está na página */}
                   {isPromos && promosCount > 0 && !active && (
                     <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
                   )}
                 </div>
                 <span
                   className={cn(
-                    isPromos && promosCount > 0 && !active && "text-primary font-semibold"
+                    isPromos &&
+                      promosCount > 0 &&
+                      !active &&
+                      "text-primary font-semibold"
                   )}
                 >
                   {item.label}

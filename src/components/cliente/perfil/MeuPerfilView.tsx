@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -10,31 +10,15 @@ import {
   ShoppingBag,
   LogOut,
   Pencil,
-  Plus,
-  Star,
-  Trash2,
-  Phone,
-  Calendar,
-  Wallet,
-  Package,
-  CheckCircle2,
-  Bell,
-  Tag,
+  Settings2,
   ChevronRight,
-  Home,
-  Building2,
   Loader2,
-  Shield,
+  Phone,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { formatBRL } from "@/data/tipos";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -55,55 +39,6 @@ type ClienteFull = {
   email?: string | null;
 };
 
-function parseEnderecos(cliente: ClienteFull): Endereco[] {
-  const list: Endereco[] = [];
-
-  if (cliente.endereco) {
-    const raw = cliente.endereco;
-    // tenta parse estruturado "Rua, n - Bairro, Cidade/UF - CEP: x"
-    const parts = raw.split(" - ");
-    const ruaNum = parts[0] || raw;
-    const [logradouro, numero] = ruaNum.split(",").map((s) => s.trim());
-    const bairroCidade = parts[1] || "";
-    const [bairro, cidadeUf] = bairroCidade.split(",").map((s) => s.trim());
-    const [cidade, estado] = (cidadeUf || "").split("/").map((s) => s.trim());
-    const cep = raw.match(/CEP:\s*(\d+)/)?.[1] || "";
-
-    list.push({
-      id: "endereco-legado",
-      apelido: "Principal",
-      logradouro: logradouro || raw,
-      numero: numero || "",
-      complemento: "",
-      bairro: bairro || "",
-      cidade: cidade || "",
-      estado: estado || "",
-      cep,
-      principal: true,
-      created_at: cliente.created_at || new Date().toISOString(),
-    });
-  }
-
-  let adicionais: Endereco[] = [];
-  const rawAdd = cliente.enderecos_adicionais;
-  if (Array.isArray(rawAdd)) {
-    adicionais = rawAdd as Endereco[];
-  } else if (typeof rawAdd === "string") {
-    try {
-      const p = JSON.parse(rawAdd);
-      if (Array.isArray(p)) adicionais = p;
-    } catch {
-      // ignore
-    }
-  }
-
-  if (list.length > 0) {
-    adicionais = adicionais.map((e) => ({ ...e, principal: false }));
-  }
-
-  return [...list, ...adicionais];
-}
-
 function initials(nome: string | null) {
   if (!nome) return "CL";
   return nome
@@ -114,51 +49,14 @@ function initials(nome: string | null) {
     .join("");
 }
 
-function addressIcon(apelido: string) {
-  const a = apelido.toLowerCase();
-  if (a.includes("trab") || a.includes("loja")) return Building2;
-  if (a.includes("casa") || a.includes("principal")) return Home;
-  return MapPin;
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  tone = "primary",
-}: {
-  icon: React.ElementType;
+type MenuItem = {
+  href?: string;
   label: string;
-  value: string;
-  tone?: "primary" | "green" | "blue" | "amber";
-}) {
-  const tones = {
-    primary: "bg-primary/10 text-primary",
-    green: "bg-emerald-50 text-emerald-600",
-    blue: "bg-blue-50 text-blue-600",
-    amber: "bg-amber-50 text-amber-600",
-  };
-  return (
-    <div className="rounded-3xl border border-border bg-card p-4 shadow-sm hover:shadow-md transition-shadow">
-      <div
-        className={cn(
-          "w-10 h-10 rounded-2xl flex items-center justify-center mb-3",
-          tones[tone]
-        )}
-      >
-        <Icon className="w-5 h-5" />
-      </div>
-      <p className="text-[11px] font-medium text-muted-foreground mb-0.5">
-        {label}
-      </p>
-      <p className="text-lg font-bold text-foreground tabular-nums leading-tight">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-const PREFS_KEY = "softshake-prefs";
+  description?: string;
+  icon: React.ElementType;
+  onClick?: () => void;
+  danger?: boolean;
+};
 
 export function MeuPerfilView({
   cliente,
@@ -175,71 +73,13 @@ export function MeuPerfilView({
   const [nome, setNome] = useState(cliente.nome || "");
   const [telefone, setTelefone] = useState(cliente.telefone || "");
   const [saving, setSaving] = useState(false);
-  const [removendo, setRemovendo] = useState<string | null>(null);
-  const [prefs, setPrefs] = useState({
-    notificacoes: true,
-    promocoes: true,
-  });
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(PREFS_KEY);
-      if (raw) setPrefs({ ...prefs, ...JSON.parse(raw) });
-    } catch {
-      // ignore
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     setNome(cliente.nome || "");
     setTelefone(cliente.telefone || "");
   }, [cliente]);
 
-  const savePrefs = (next: typeof prefs) => {
-    setPrefs(next);
-    localStorage.setItem(PREFS_KEY, JSON.stringify(next));
-    toast.success("Preferências salvas");
-  };
-
-  const enderecos = useMemo(() => parseEnderecos(cliente), [cliente]);
-
-  const stats = useMemo(() => {
-    const validos = pedidos.filter((p) => p.status !== "cancelado");
-    const concluidos = pedidos.filter((p) => p.status === "entregue");
-    const totalGasto = validos.reduce((s, p) => s + Number(p.total || 0), 0);
-    const ticket = validos.length ? totalGasto / validos.length : 0;
-    const ultimo = pedidos[0];
-    return {
-      pedidos: validos.length,
-      totalGasto,
-      ticket,
-      ultimo,
-      concluidos: concluidos.length,
-    };
-  }, [pedidos]);
-
-  const atividade = useMemo(() => {
-    const items: { id: string; text: string; at: string }[] = [];
-    for (const p of pedidos.slice(0, 8)) {
-      const short = p.id.slice(0, 8).toUpperCase();
-      if (p.status === "entregue") {
-        items.push({
-          id: `${p.id}-done`,
-          text: `Pedido #${short} entregue`,
-          at: p.updated_at || p.created_at,
-        });
-      }
-      items.push({
-        id: `${p.id}-created`,
-        text: `Pedido #${short} realizado`,
-        at: p.created_at,
-      });
-    }
-    return items
-      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-      .slice(0, 6);
-  }, [pedidos]);
+  const pedidosCount = pedidos.filter((p) => p.status !== "cancelado").length;
 
   const handleSavePerfil = async () => {
     setSaving(true);
@@ -264,413 +104,142 @@ export function MeuPerfilView({
     }
   };
 
-  const handleRemoveEndereco = async (id: string) => {
-    if (id === "endereco-legado") {
-      toast.error("O endereço principal não pode ser removido por aqui");
-      return;
-    }
-    setRemovendo(id);
-    try {
-      const res = await fetch("/api/enderecos/remover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        toast.error(d.erro || "Erro ao remover endereço");
-        return;
-      }
-      toast.success("Endereço removido");
-      await onRefresh();
-    } catch {
-      toast.error("Erro ao remover");
-    } finally {
-      setRemovendo(null);
-    }
-  };
-
-  const handlePrincipal = async (id: string) => {
-    try {
-      const res = await fetch("/api/enderecos/principal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        toast.error(d.erro || "Erro ao definir principal");
-        return;
-      }
-      toast.success("Endereço principal atualizado");
-      await onRefresh();
-    } catch {
-      toast.error("Erro ao atualizar");
-    }
-  };
-
-  const anoCliente = cliente.created_at
-    ? format(new Date(cliente.created_at), "yyyy")
-    : null;
+  const menuItems: MenuItem[] = [
+    {
+      label: "Dados pessoais",
+      description: "Nome e telefone",
+      icon: User,
+      onClick: () => setEditOpen(true),
+    },
+    {
+      href: "/perfil/enderecos",
+      label: "Endereços",
+      description: "Onde receber seus pedidos",
+      icon: MapPin,
+    },
+    {
+      href: "/pedidos",
+      label: "Meus pedidos",
+      description: loadingPedidos
+        ? "Carregando…"
+        : pedidosCount === 0
+          ? "Nenhum pedido ainda"
+          : `${pedidosCount} pedido${pedidosCount === 1 ? "" : "s"}`,
+      icon: ShoppingBag,
+    },
+    {
+      href: "/perfil/preferencias",
+      label: "Preferências",
+      description: "Notificações e promoções",
+      icon: Settings2,
+    },
+  ];
 
   return (
-    <div className="min-h-[70vh] bg-gradient-to-b from-primary/[0.05] via-background to-background">
-      <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8 pb-28 space-y-5">
-        {/* Hero */}
+    <div className="min-h-[70vh] bg-gradient-to-b from-primary/[0.04] via-background to-background">
+      <div className="mx-auto max-w-lg px-4 py-8 pb-28 space-y-6">
+        {/* Header compacto */}
         <motion.section
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-[2rem] border border-border bg-card shadow-sm"
+          className="flex flex-col items-center text-center"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent" />
-          <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-left">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-[1.75rem] bg-gradient-to-br from-primary to-violet-500 text-primary-foreground flex items-center justify-center text-3xl font-bold shadow-xl shadow-primary/25 ring-4 ring-white">
+          <div className="relative mb-4">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet-500 text-2xl font-bold text-primary-foreground shadow-lg shadow-primary/20 ring-4 ring-background">
               {initials(cliente.nome)}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
-                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground truncate">
-                  {cliente.nome || "Cliente"}
-                </h1>
-                {anoCliente && (
-                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary text-[11px] font-semibold px-2.5 py-1 border border-primary/15">
-                    Cliente desde {anoCliente}
-                  </span>
-                )}
-              </div>
-              <div className="space-y-1 text-sm text-muted-foreground">
-                {cliente.telefone && (
-                  <p className="inline-flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5" />
-                    {cliente.telefone}
-                  </p>
-                )}
-                {cliente.created_at && (
-                  <p className="inline-flex items-center gap-1.5 sm:ml-0 block">
-                    <Calendar className="w-3.5 h-3.5" />
-                    Cadastro em{" "}
-                    {format(new Date(cliente.created_at), "dd MMM yyyy", {
-                      locale: ptBR,
-                    })}
-                  </p>
-                )}
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-4 rounded-xl h-10"
-                onClick={() => setEditOpen(true)}
-              >
-                <Pencil className="w-4 h-4 mr-1.5" />
-                Editar perfil
-              </Button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="absolute -bottom-0.5 -right-0.5 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
+              aria-label="Editar perfil"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
           </div>
+
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            {cliente.nome || "Cliente"}
+          </h1>
+          {cliente.telefone ? (
+            <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Phone className="h-3.5 w-3.5" />
+              {cliente.telefone}
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="mt-1 text-sm font-medium text-primary"
+            >
+              Adicionar telefone
+            </button>
+          )}
         </motion.section>
 
-        {/* Stats */}
-        <section className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <StatCard
-            icon={ShoppingBag}
-            label="Pedidos realizados"
-            value={loadingPedidos ? "…" : String(stats.pedidos)}
-          />
-          <StatCard
-            icon={Wallet}
-            label="Total gasto"
-            value={loadingPedidos ? "…" : formatBRL(stats.totalGasto)}
-            tone="green"
-          />
-          <StatCard
-            icon={Package}
-            label="Ticket médio"
-            value={loadingPedidos ? "…" : formatBRL(stats.ticket)}
-            tone="blue"
-          />
-          <StatCard
-            icon={CheckCircle2}
-            label="Concluídos"
-            value={loadingPedidos ? "…" : String(stats.concluidos)}
-            tone="amber"
-          />
-          <div className="col-span-2 sm:col-span-2 rounded-3xl border border-border bg-card p-4 shadow-sm">
-            <p className="text-[11px] font-medium text-muted-foreground mb-1">
-              Último pedido
-            </p>
-            {stats.ultimo ? (
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="font-bold text-foreground">
-                    #{stats.ultimo.id.slice(0, 8).toUpperCase()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(stats.ultimo.created_at), "dd/MM/yyyy HH:mm", {
-                      locale: ptBR,
-                    })}
-                  </p>
-                </div>
-                <p className="text-lg font-bold text-primary tabular-nums">
-                  {formatBRL(Number(stats.ultimo.total))}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nenhum pedido ainda</p>
-            )}
-          </div>
-        </section>
-
-        {/* Dados pessoais */}
-        <section className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2">
-              <User className="w-4 h-4 text-primary" />
-              Dados pessoais
-            </h2>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rounded-xl"
-              onClick={() => setEditOpen(true)}
-            >
-              <Pencil className="w-4 h-4 mr-1" />
-              Editar
-            </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-muted/50 p-3.5">
-              <p className="text-[11px] text-muted-foreground mb-0.5">Nome</p>
-              <p className="font-semibold text-sm">{cliente.nome || "—"}</p>
-            </div>
-            <div className="rounded-2xl bg-muted/50 p-3.5">
-              <p className="text-[11px] text-muted-foreground mb-0.5">Telefone</p>
-              <p className="font-semibold text-sm">{cliente.telefone || "—"}</p>
-            </div>
-            <div className="rounded-2xl bg-muted/50 p-3.5 sm:col-span-2">
-              <p className="text-[11px] text-muted-foreground mb-0.5">E-mail</p>
-              <p className="font-semibold text-sm text-muted-foreground">
-                {cliente.email || "Não informado"}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Endereços */}
-        <section className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-primary" />
-              Endereços
-            </h2>
-            <Link href="/perfil/enderecos/novo">
-              <Button size="sm" className="rounded-xl h-10 bg-primary">
-                <Plus className="w-4 h-4 mr-1" />
-                Novo
-              </Button>
-            </Link>
-          </div>
-
-          {enderecos.length === 0 ? (
-            <div className="text-center py-8">
-              <MapPin className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-50" />
-              <p className="text-sm text-muted-foreground mb-4">
-                Nenhum endereço cadastrado
-              </p>
-              <Link href="/perfil/enderecos/novo">
-                <Button variant="outline" className="rounded-xl">
-                  Adicionar endereço
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {enderecos.map((end) => {
-                const Icon = addressIcon(end.apelido);
-                return (
-                  <div
-                    key={end.id}
-                    className={cn(
-                      "rounded-2xl border p-4 transition-all",
-                      end.principal
-                        ? "border-primary/30 bg-primary/[0.03]"
-                        : "border-border bg-card"
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <Icon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <p className="font-semibold text-sm">{end.apelido}</p>
-                          {end.principal && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
-                              <Star className="w-3 h-3" />
-                              Principal
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {end.logradouro}
-                          {end.numero ? `, ${end.numero}` : ""}
-                          {end.complemento ? ` — ${end.complemento}` : ""}
-                          <br />
-                          {end.bairro}
-                          {end.cidade ? ` · ${end.cidade}` : ""}
-                          {end.estado ? `/${end.estado}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/70">
-                      {!end.principal && end.id !== "endereco-legado" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-9 rounded-xl text-xs"
-                          onClick={() => handlePrincipal(end.id)}
-                        >
-                          <Star className="w-3.5 h-3.5 mr-1" />
-                          Definir principal
-                        </Button>
-                      )}
-                      <Link href="/perfil/enderecos">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-9 rounded-xl text-xs"
-                        >
-                          <Pencil className="w-3.5 h-3.5 mr-1" />
-                          Gerenciar
-                        </Button>
-                      </Link>
-                      {end.id !== "endereco-legado" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-9 rounded-xl text-xs text-destructive hover:text-destructive"
-                          disabled={removendo === end.id}
-                          onClick={() => handleRemoveEndereco(end.id)}
-                        >
-                          {removendo === end.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5 mr-1" />
-                          )}
-                          Excluir
-                        </Button>
-                      )}
-                    </div>
+        {/* Menu */}
+        <motion.section
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+        >
+          <ul className="divide-y divide-border">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const content = (
+                <>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Preferências */}
-        <section className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm space-y-4">
-          <h2 className="font-bold text-foreground flex items-center gap-2">
-            <Bell className="w-4 h-4 text-primary" />
-            Preferências
-          </h2>
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/40 px-4 py-3">
-            <div>
-              <p className="text-sm font-semibold">Receber notificações</p>
-              <p className="text-xs text-muted-foreground">
-                Status de pedidos e atualizações
-              </p>
-            </div>
-            <Switch
-              checked={prefs.notificacoes}
-              onCheckedChange={(v) =>
-                savePrefs({ ...prefs, notificacoes: v })
-              }
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/40 px-4 py-3">
-            <div className="flex items-start gap-2">
-              <Tag className="w-4 h-4 text-primary mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold">Receber promoções</p>
-                <p className="text-xs text-muted-foreground">
-                  Ofertas e novidades da SoftShake
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={prefs.promocoes}
-              onCheckedChange={(v) => savePrefs({ ...prefs, promocoes: v })}
-            />
-          </div>
-        </section>
-
-        {/* Atividade */}
-        <section className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-foreground">Histórico recente</h2>
-            <Link
-              href="/pedidos"
-              className="text-xs font-semibold text-primary inline-flex items-center"
-            >
-              Ver pedidos
-              <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-          {atividade.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Sua atividade aparecerá aqui
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {atividade.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-start gap-3 text-sm"
-                >
-                  <span className="mt-1.5 w-2 h-2 rounded-full bg-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground">{item.text}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {format(new Date(item.at), "dd MMM yyyy · HH:mm", {
-                        locale: ptBR,
-                      })}
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="text-sm font-semibold text-foreground">
+                      {item.label}
                     </p>
+                    {item.description && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {item.description}
+                      </p>
+                    )}
                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </>
+              );
 
-        {/* Segurança */}
-        <section className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-sm space-y-2">
-          <h2 className="font-bold text-foreground flex items-center gap-2 mb-3">
-            <Shield className="w-4 h-4 text-primary" />
-            Segurança
-          </h2>
-          <button
-            type="button"
-            onClick={() =>
-              toast.message("Em breve", {
-                description: "Alteração de senha estará disponível em breve.",
-              })
-            }
-            className="w-full flex items-center justify-between rounded-2xl border border-border px-4 py-3.5 text-left hover:bg-muted/40 transition"
-          >
-            <span className="text-sm font-medium">Alterar senha</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              toast.message("Em breve", {
-                description: "Troca de e-mail estará disponível em breve.",
-              })
-            }
-            className="w-full flex items-center justify-between rounded-2xl border border-border px-4 py-3.5 text-left hover:bg-muted/40 transition"
-          >
-            <span className="text-sm font-medium">Trocar e-mail</span>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          </button>
+              const className =
+                "flex w-full items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50 active:bg-muted/70";
+
+              if (item.href) {
+                return (
+                  <li key={item.label}>
+                    <Link href={item.href} className={className}>
+                      {content}
+                    </Link>
+                  </li>
+                );
+              }
+
+              return (
+                <li key={item.label}>
+                  <button
+                    type="button"
+                    onClick={item.onClick}
+                    className={className}
+                  >
+                    {content}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </motion.section>
+
+        {/* Sair */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
           <button
             type="button"
             onClick={async () => {
@@ -678,44 +247,25 @@ export function MeuPerfilView({
               toast.success("Você saiu da conta");
               router.push("/");
             }}
-            className="w-full flex items-center justify-between rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3.5 text-left hover:bg-destructive/10 transition"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/15 bg-destructive/5 px-4 py-3.5 text-sm font-semibold text-destructive transition hover:bg-destructive/10"
           >
-            <span className="text-sm font-semibold text-destructive inline-flex items-center gap-2">
-              <LogOut className="w-4 h-4" />
-              Sair da conta
-            </span>
-            <ChevronRight className="w-4 h-4 text-destructive/60" />
+            <LogOut className="h-4 w-4" />
+            Sair da conta
           </button>
-        </section>
-
-        <Link
-          href="/pedidos"
-          className="flex items-center gap-3 rounded-3xl border border-border bg-card p-4 shadow-sm hover:shadow-md hover:border-primary/20 transition"
-        >
-          <div className="w-11 h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          <div className="flex-1">
-            <p className="font-semibold text-sm">Meus pedidos</p>
-            <p className="text-xs text-muted-foreground">
-              Acompanhar status e histórico
-            </p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        </Link>
+        </motion.div>
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="rounded-3xl sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar dados pessoais</DialogTitle>
+            <DialogTitle>Editar dados</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
               <Label htmlFor="nome">Nome</Label>
               <Input
                 id="nome"
-                className="h-11 mt-1.5 rounded-xl"
+                className="mt-1.5 h-11 rounded-xl"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
               />
@@ -724,9 +274,10 @@ export function MeuPerfilView({
               <Label htmlFor="tel">Telefone</Label>
               <Input
                 id="tel"
-                className="h-11 mt-1.5 rounded-xl"
+                className="mt-1.5 h-11 rounded-xl"
                 value={telefone}
                 onChange={(e) => setTelefone(e.target.value)}
+                placeholder="(00) 00000-0000"
               />
             </div>
           </div>
@@ -744,7 +295,7 @@ export function MeuPerfilView({
               onClick={handleSavePerfil}
             >
               {saving ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : null}
               Salvar
             </Button>

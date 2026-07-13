@@ -1,36 +1,20 @@
-import { ensureConfiguracoesLoja } from "@/actions/admin/configuracoes";
-import { ConfiguracoesManager } from "@/components/admin/configuracoes/ConfiguracoesManager";
-import {
-  normalizeConfiguracao,
-  type ConfiguracaoLoja,
-} from "@/types/configuracoes";
+import { getPreferenciasEstabelecimento } from "@/actions/admin/estabelecimento-settings";
+import { SistemaConfigManager } from "@/components/admin/sistema";
+import { DEFAULT_PREFERENCIAS_ESTABELECIMENTO } from "@/types/estabelecimento-settings";
 
 export const metadata = {
   title: "Configurações | SoftShake Admin",
-  description: "Configurações da loja",
+  description: "Pedidos, impressão, notificações e preferências do sistema",
 };
 
 export default async function ConfiguracoesPage() {
-  let raw: Record<string, unknown> | null = null;
+  let preferencias = DEFAULT_PREFERENCIAS_ESTABELECIMENTO;
 
   try {
-    raw = (await ensureConfiguracoesLoja()) as Record<string, unknown> | null;
+    preferencias = await getPreferenciasEstabelecimento();
   } catch (error) {
-    console.error("Erro ao carregar configurações:", error);
+    console.error("Erro ao carregar preferências:", error);
   }
 
-  const configuracao: ConfiguracaoLoja = raw
-    ? normalizeConfiguracao(raw)
-    : normalizeConfiguracao({
-        id: 0,
-        nome: "SoftShake",
-        descricao: "Sua loja de açaí e milk shake",
-        esta_aberto: true,
-        taxa_entrega: 5,
-        pedido_minimo: 20,
-        tempo_entrega_min: 30,
-        tempo_entrega_max: 45,
-      });
-
-  return <ConfiguracoesManager configuracaoInicial={configuracao} />;
+  return <SistemaConfigManager preferenciasIniciais={preferencias} />;
 }

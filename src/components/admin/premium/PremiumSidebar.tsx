@@ -11,6 +11,7 @@ import {
   Users,
   BarChart3,
   Settings,
+  Store,
   LogOut,
   ChevronRight,
   TicketPercent,
@@ -29,6 +30,8 @@ type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
   /** Badge opcional (ex.: "Em breve") */
   badge?: string;
+  /** Agrupa visualmente (ex.: Configurações) */
+  group?: string;
 };
 
 const menuItems: MenuItem[] = [
@@ -64,9 +67,16 @@ const menuItems: MenuItem[] = [
     icon: BarChart3,
   },
   {
+    label: "Estabelecimento",
+    href: "/admin/estabelecimento",
+    icon: Store,
+    group: "config",
+  },
+  {
     label: "Configurações",
     href: "/admin/configuracoes",
     icon: Settings,
+    group: "config",
   },
 ];
 
@@ -202,16 +212,36 @@ export function PremiumSidebar({ adminEmail }: PremiumSidebarProps) {
           Menu
         </p>
         <div className="space-y-1">
-          {menuItems.map((item) => (
-            <SidebarLink
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={item.icon}
-              badge={item.badge}
-              active={pathIsActive(pathname, item.href)}
-            />
-          ))}
+          {menuItems
+            .filter((item) => !item.group)
+            .map((item) => (
+              <SidebarLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                badge={item.badge}
+                active={pathIsActive(pathname, item.href)}
+              />
+            ))}
+        </div>
+
+        <p className="px-3 mb-2 mt-5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+          Configurações
+        </p>
+        <div className="space-y-1">
+          {menuItems
+            .filter((item) => item.group === "config")
+            .map((item) => (
+              <SidebarLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                badge={item.badge}
+                active={pathIsActive(pathname, item.href)}
+              />
+            ))}
         </div>
       </nav>
 

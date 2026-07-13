@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { CatalogTab } from "./types";
 
@@ -20,8 +19,8 @@ export function CatalogoTabs({
   onChange: (tab: CatalogTab) => void;
 }) {
   return (
-    <div className="border-b border-[#E5E7EB] bg-white px-4 sm:px-6">
-      <nav className="flex gap-1 overflow-x-auto scrollbar-none" role="tablist">
+    <div className="border-b border-[#E5E7EB] bg-white px-3 sm:px-4">
+      <nav className="flex gap-0 overflow-x-auto" role="tablist">
         {TABS.map((tab) => {
           const isActive = active === tab.id;
           return (
@@ -32,20 +31,13 @@ export function CatalogoTabs({
               aria-selected={isActive}
               onClick={() => onChange(tab.id)}
               className={cn(
-                "relative px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors duration-150",
+                "relative px-3 py-2.5 text-[13px] font-medium whitespace-nowrap border-b-2 -mb-px transition-colors",
                 isActive
-                  ? "text-[#4C258C]"
-                  : "text-[#6B7280] hover:text-[#111827]"
+                  ? "border-[#111827] text-[#111827]"
+                  : "border-transparent text-[#6B7280] hover:text-[#111827]"
               )}
             >
               {tab.label}
-              {isActive && (
-                <motion.span
-                  layoutId="catalog-tab-underline"
-                  className="absolute left-2 right-2 bottom-0 h-0.5 rounded-full bg-[#4C258C]"
-                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                />
-              )}
             </button>
           );
         })}

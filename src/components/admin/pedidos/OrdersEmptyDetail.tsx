@@ -1,25 +1,23 @@
 "use client";
 
-import { ShoppingBag, Keyboard } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 
 export function OrdersEmptyDetail() {
   return (
-    <div className="flex-1 h-full flex items-center justify-center bg-[#FAFBFC] min-w-0">
-      <div className="text-center max-w-sm px-6">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white border border-[#E5E7EB] shadow-sm flex items-center justify-center">
-          <ShoppingBag className="w-7 h-7 text-[#4C258C]" />
+    <div className="flex-1 h-full flex items-center justify-center bg-[#FAFAFA] min-w-0 border-l border-[#E5E7EB]">
+      <div className="text-center max-w-xs px-6">
+        <div className="w-12 h-12 mx-auto mb-3 rounded-md bg-white border border-[#E5E7EB] flex items-center justify-center">
+          <ShoppingBag className="w-5 h-5 text-[#9CA3AF]" />
         </div>
-        <h3 className="text-lg font-semibold text-[#111827] mb-1.5">
+        <h3 className="text-[15px] font-semibold text-[#111827] mb-1">
           Selecione um pedido
         </h3>
-        <p className="text-sm text-[#6B7280] leading-relaxed">
-          Escolha um pedido na lista ao lado para ver detalhes, itens e ações
-          rápidas.
+        <p className="text-[13px] text-[#6B7280] leading-relaxed">
+          Clique em um pedido na lista para ver detalhes e ações.
         </p>
-        <div className="mt-5 inline-flex items-center gap-2 text-[11px] text-[#9CA3AF] bg-white border border-[#E5E7EB] rounded-lg px-3 py-1.5">
-          <Keyboard className="w-3.5 h-3.5" />
+        <p className="mt-3 text-[11px] text-[#9CA3AF]">
           Enter aceita · Esc fecha
-        </div>
+        </p>
       </div>
     </div>
   );

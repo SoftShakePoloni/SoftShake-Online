@@ -74,13 +74,21 @@ export type Database = {
           esta_aberto: boolean | null
           estado: string | null
           facebook: string | null
+          finalizar_agendados_apos_3_dias: boolean | null
+          finalizar_pedidos_apos_24h: boolean | null
           horario_abertura: string | null
           horario_fechamento: string | null
           id: number
+          imprimir_aceitar_automaticamente: boolean | null
           instagram: string | null
           logo_url: string | null
           nome: string
+          notificar_novos_pedidos: boolean | null
           pedido_minimo: number | null
+          proximo_numero_pedido: number | null
+          som_alerta_ativo: boolean | null
+          som_alerta_tipo: string | null
+          som_alerta_volume: number | null
           taxa_entrega: number | null
           telefone: string | null
           tempo_entrega_max: number | null
@@ -98,13 +106,21 @@ export type Database = {
           esta_aberto?: boolean | null
           estado?: string | null
           facebook?: string | null
+          finalizar_agendados_apos_3_dias?: boolean | null
+          finalizar_pedidos_apos_24h?: boolean | null
           horario_abertura?: string | null
           horario_fechamento?: string | null
           id?: number
+          imprimir_aceitar_automaticamente?: boolean | null
           instagram?: string | null
           logo_url?: string | null
           nome?: string
+          notificar_novos_pedidos?: boolean | null
           pedido_minimo?: number | null
+          proximo_numero_pedido?: number | null
+          som_alerta_ativo?: boolean | null
+          som_alerta_tipo?: string | null
+          som_alerta_volume?: number | null
           taxa_entrega?: number | null
           telefone?: string | null
           tempo_entrega_max?: number | null
@@ -122,13 +138,21 @@ export type Database = {
           esta_aberto?: boolean | null
           estado?: string | null
           facebook?: string | null
+          finalizar_agendados_apos_3_dias?: boolean | null
+          finalizar_pedidos_apos_24h?: boolean | null
           horario_abertura?: string | null
           horario_fechamento?: string | null
           id?: number
+          imprimir_aceitar_automaticamente?: boolean | null
           instagram?: string | null
           logo_url?: string | null
           nome?: string
+          notificar_novos_pedidos?: boolean | null
           pedido_minimo?: number | null
+          proximo_numero_pedido?: number | null
+          som_alerta_ativo?: boolean | null
+          som_alerta_tipo?: string | null
+          som_alerta_volume?: number | null
           taxa_entrega?: number | null
           telefone?: string | null
           tempo_entrega_max?: number | null

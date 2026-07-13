@@ -59,13 +59,14 @@ export default function PaginaPerfil() {
   if (loading || loadingFull) {
     return (
       <div className="min-h-[70vh] bg-background">
-        <div className="mx-auto max-w-2xl px-4 py-8 space-y-4 animate-pulse">
-          <div className="h-40 rounded-[2rem] bg-muted" />
-          <div className="grid grid-cols-2 gap-3">
-            <div className="h-24 rounded-3xl bg-muted" />
-            <div className="h-24 rounded-3xl bg-muted" />
+        <div className="mx-auto max-w-lg px-4 py-8 space-y-6 animate-pulse">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-20 w-20 rounded-full bg-muted" />
+            <div className="h-5 w-36 rounded-lg bg-muted" />
+            <div className="h-4 w-28 rounded-lg bg-muted" />
           </div>
-          <div className="h-48 rounded-3xl bg-muted" />
+          <div className="h-56 rounded-2xl bg-muted" />
+          <div className="h-12 rounded-2xl bg-muted" />
         </div>
       </div>
     );
