@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePageAccess } from "@/lib/admin/auth";
 import { listProdutosAdmin } from "@/actions/admin/produtos";
 import { listCategorias } from "@/actions/admin/categorias";
 import { CatalogoManager } from "@/components/admin/catalogo";
@@ -10,7 +10,7 @@ export const metadata = {
 };
 
 export default async function ProdutosPage() {
-  await requireAdmin();
+  await requirePageAccess("catalogo");
 
   let produtos: CatalogProduto[] = [];
   let categorias: CatalogCategoria[] = [];

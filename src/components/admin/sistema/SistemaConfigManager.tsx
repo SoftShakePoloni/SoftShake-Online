@@ -28,6 +28,7 @@ import {
   unlockPedidosAudio,
 } from "@/lib/admin/order-alert-sound";
 import { cn } from "@/lib/utils";
+import { UsuariosSection } from "./UsuariosSection";
 
 /* ─── Nav ─────────────────────────────────────────────────────────────── */
 
@@ -674,7 +675,7 @@ export function SistemaConfigManager({
           )}
 
           {section === "seguranca" && <EmptySection title="Segurança" />}
-          {section === "usuarios" && <EmptySection title="Usuários" />}
+          {section === "usuarios" && <UsuariosSection />}
           {section === "integracoes" && <EmptySection title="Integrações" />}
           {section === "api" && <EmptySection title="API" />}
           {section === "backup" && <EmptySection title="Backup" />}
@@ -685,10 +686,17 @@ export function SistemaConfigManager({
               <SectionTitle>Conta</SectionTitle>
               <Panel>
                 <Row
-                  title="Tipo de acesso"
-                  description="Papel do usuário logado no painel."
+                  title="Gestão de usuários"
+                  description="Papéis e telas liberadas ficam em Usuários."
                 >
-                  <span className="text-sm text-[#6B7280]">Administrador</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 rounded-md text-sm"
+                    onClick={() => setSection("usuarios")}
+                  >
+                    Abrir Usuários
+                  </Button>
                 </Row>
                 <Row title="Área" description="Painel em uso." last>
                   <span className="text-sm text-[#6B7280]">SoftShake Admin</span>

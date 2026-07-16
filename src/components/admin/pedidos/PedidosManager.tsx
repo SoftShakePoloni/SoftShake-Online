@@ -59,6 +59,8 @@ export const SOUND_KEY = "softshake-orders-sound";
 interface PedidosManagerProps {
   pedidosIniciais: PedidoRow[];
   autoAcceptInicial?: boolean;
+  /** Admin com config:write — aceitar auto / preferências da loja */
+  canManageStore?: boolean;
 }
 
 function mapPedido(
@@ -107,6 +109,7 @@ function mapPedido(
 export function PedidosManager({
   pedidosIniciais,
   autoAcceptInicial = false,
+  canManageStore = false,
 }: PedidosManagerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [opcoes, setOpcoes] = useState<OpcaoLookup[]>([]);
@@ -416,30 +419,11 @@ export function PedidosManager({
     if (currentCol === targetColumn) return;
 
     const newStatus = resolveDropStatus(targetColumn, pedido);
-    if (newStatus === pedido.status && currentCol !== targetColumn) {
-      // Mesmo status no banco (ex.: preparando entre Produção e Prontos)
-      // Para pickup: Produção e Prontos usam preparando — se ambos são preparando,
-      // o agrupamento já decide pela tipo. Drag delivery → Prontos: manter preparando.
-      // Se for delivery em Prontos, opcionalmente ir para saiu_entrega
-      if (
-        targetColumn === "prontos" &&
-        (pedido.tipo_entrega === "delivery" ||
-          pedido.tipo_entrega === "entrega")
-      ) {
-        await handleStatusChange(pedidoId, "saiu_entrega");
-        return;
-      }
-      if (
-        targetColumn === "em_producao" &&
-        pedido.status === "preparando"
-      ) {
-        return;
-      }
+    if (newStatus === pedido.status) {
+      return;
     }
 
-    if (newStatus !== pedido.status) {
-      await handleStatusChange(pedidoId, newStatus);
-    }
+    await handleStatusChange(pedidoId, newStatus);
   };
 
   useEffect(() => {
@@ -480,6 +464,7 @@ export function PedidosManager({
         autoAccept={autoAccept}
         autoAcceptLoading={autoAcceptLoading}
         onAutoAcceptChange={(v) => void handleAutoAcceptChange(v)}
+        canManageStore={canManageStore}
         totalCount={filtered.length}
       />
 

@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePageAccess } from "@/lib/admin/auth";
 import { TicketPercent, Construction, Sparkles } from "lucide-react";
 
 export const metadata = {
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function CuponsPage() {
-  await requireAdmin();
+  await requirePageAccess("cupons");
 
   return (
     <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center p-6 sm:p-8 bg-[#F7F8FC]">

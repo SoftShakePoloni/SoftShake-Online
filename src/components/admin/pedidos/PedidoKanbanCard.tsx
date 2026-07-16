@@ -48,7 +48,6 @@ interface PedidoKanbanCardProps {
 const COLUMN_ACCENT: Record<KanbanColumnId, string> = {
   em_aberto: "bg-[#4C258C]",
   em_producao: "bg-blue-500",
-  prontos: "bg-amber-500",
   saiu_entrega: "bg-orange-500",
   finalizados: "bg-emerald-500",
 };

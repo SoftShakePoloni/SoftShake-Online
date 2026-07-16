@@ -3,8 +3,9 @@ import { cookies } from "next/headers";
 import type { Database } from "./types";
 
 /**
- * Cliente Supabase SSR para Server Components e Actions
- * Usa os cookies da requisição para recuperar a sessão
+ * Cliente Supabase SSR para Server Components e Actions.
+ * setAll ignora erros em Server Components (só Actions/Route Handlers
+ * podem mutar cookies de verdade — o middleware renova a sessão).
  */
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
@@ -18,9 +19,13 @@ export async function createServerSupabaseClient() {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Server Components não podem setar cookies — ok ignorar.
+          }
         },
       },
     }

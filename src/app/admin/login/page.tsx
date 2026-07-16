@@ -21,6 +21,11 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  firstAllowedAdminPath,
+  resolveAdminRole,
+  resolveAcessos,
+} from "@/lib/security/rbac";
 
 const loginSchema = z.object({
   email: z
@@ -111,9 +116,55 @@ export default function AdminLoginPage() {
         // ignore
       }
 
+      // Confirma staff na tabela perfis. Sem linha = sem painel.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setPhase("error");
+        setFormError("E-mail ou senha inválidos.");
+        return;
+      }
+
+      let perfil: { role: string | null; acessos?: string[] | null } | null =
+        null;
+
+      const full = await supabase
+        .from("perfis")
+        .select("role, acessos")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (full.error) {
+        const basic = await supabase
+          .from("perfis")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (!basic.error && basic.data) {
+          perfil = { role: basic.data.role, acessos: null };
+        }
+      } else {
+        perfil = full.data;
+      }
+
+      if (!perfil) {
+        await supabase.auth.signOut();
+        setPhase("error");
+        setFormError(
+          "Seu usuário não tem perfil de acesso ao painel. Fale com o administrador."
+        );
+        return;
+      }
+
+      const role = resolveAdminRole(perfil.role);
+      const acessos = resolveAcessos(role, perfil.acessos ?? null);
+      const dest = firstAllowedAdminPath(acessos);
+
       setPhase("success");
       await new Promise((r) => setTimeout(r, 1100));
-      router.push("/admin");
+      router.push(dest);
       router.refresh();
     } catch {
       setPhase("error");

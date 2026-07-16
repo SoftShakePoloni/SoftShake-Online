@@ -417,6 +417,39 @@ export type Database = {
         }
         Relationships: []
       }
+      perfis: {
+        Row: {
+          id: string
+          nome: string | null
+          email: string | null
+          role: string
+          acessos: string[] | null
+          permissoes: string[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          nome?: string | null
+          email?: string | null
+          role?: string
+          acessos?: string[] | null
+          permissoes?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nome?: string | null
+          email?: string | null
+          role?: string
+          acessos?: string[] | null
+          permissoes?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

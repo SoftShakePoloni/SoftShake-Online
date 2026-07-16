@@ -1,7 +1,7 @@
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePageAccess } from "@/lib/admin/auth";
 
 export default async function AdminFinancePage() {
-  await requireAdmin();
+  await requirePageAccess("relatorios");
 
   return (
     <div className="space-y-6">
