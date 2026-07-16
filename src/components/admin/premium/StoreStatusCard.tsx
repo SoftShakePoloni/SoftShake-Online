@@ -36,6 +36,12 @@ import { toast } from "sonner";
 
 interface StoreStatusCardProps {
   configInicial?: ConfiguracaoLoja | null;
+  /** Admin com config:write — pode abrir/fechar a loja */
+  canManageStore?: boolean;
+  /** Tem acesso à tela de configurações */
+  canOpenConfig?: boolean;
+  /** Sidebar recolhida: só logo + status */
+  collapsed?: boolean;
 }
 
 function StoreStatusSkeleton() {
@@ -86,7 +92,12 @@ function StatusRow({
   );
 }
 
-export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
+export function StoreStatusCard({
+  configInicial,
+  canManageStore = false,
+  canOpenConfig = false,
+  collapsed = false,
+}: StoreStatusCardProps) {
   const [open, setOpen] = useState(false);
   const [toggling, setToggling] = useState(false);
 
@@ -115,6 +126,12 @@ export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
   const statusDot = lojaAberta ? "bg-emerald-500" : "bg-red-400";
 
   const handleToggleLoja = useCallback(async () => {
+    if (!canManageStore) {
+      toast.error("Sem permissão", {
+        description: "Apenas administradores podem abrir ou fechar a loja.",
+      });
+      return;
+    }
     if (!config?.id || toggling) return;
     const next = !lojaAberta;
     setToggling(true);
@@ -146,6 +163,7 @@ export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
       setToggling(false);
     }
   }, [
+    canManageStore,
     config?.id,
     toggling,
     lojaAberta,
@@ -155,19 +173,36 @@ export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
   ]);
 
   if (loading && !config) {
-    return <StoreStatusSkeleton />;
+    return collapsed ? (
+      <div className="mx-2 mt-3 mb-1 flex justify-center">
+        <div className="w-10 h-10 rounded-full bg-[#E5E7EB] animate-pulse" />
+      </div>
+    ) : (
+      <StoreStatusSkeleton />
+    );
   }
 
   if (!config) {
+    if (collapsed) {
+      return (
+        <div className="mx-2 mt-3 mb-1 flex justify-center">
+          <div className="w-10 h-10 rounded-full bg-[#F3F4F6] flex items-center justify-center">
+            <Store className="w-4 h-4 text-[#9CA3AF]" />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mx-3 mt-3 mb-1 rounded-2xl border border-dashed border-[#E5E7EB] bg-white p-3 text-center">
         <p className="text-xs text-[#6B7280]">Loja não configurada</p>
-        <Link
-          href="/admin/configuracoes"
-          className="text-xs font-semibold text-[#4C258C] hover:underline"
-        >
-          Configurar agora
-        </Link>
+        {canOpenConfig && (
+          <Link
+            href="/admin/configuracoes"
+            className="text-xs font-semibold text-[#4C258C] hover:underline"
+          >
+            Configurar agora
+          </Link>
+        )}
       </div>
     );
   }
@@ -178,21 +213,23 @@ export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
   );
 
   return (
-    <div className="mx-3 mt-3 mb-1">
+    <div className={cn(collapsed ? "mx-2 mt-3 mb-1" : "mx-3 mt-3 mb-1")}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
             className={cn(
-              "w-full group flex items-center gap-3 rounded-2xl border border-[#E5E7EB] bg-white p-3",
+              "w-full group flex items-center rounded-2xl border border-[#E5E7EB] bg-white",
               "text-left cursor-pointer transition-all duration-200",
               "hover:border-[#D4C4F0] hover:shadow-md hover:shadow-[#4C258C]/5",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/35",
-              open && "border-[#4C258C]/40 shadow-md shadow-[#4C258C]/8"
+              open && "border-[#4C258C]/40 shadow-md shadow-[#4C258C]/8",
+              collapsed ? "justify-center p-2" : "gap-3 p-3"
             )}
             aria-expanded={open}
             aria-haspopup="dialog"
             aria-label={`Status da loja: ${config.nome}, ${statusLabel}`}
+            title={collapsed ? `${config.nome} · ${statusLabel}` : undefined}
           >
             <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#4C258C] to-[#7C3AED] shrink-0 ring-2 ring-white shadow-sm">
               {config.logo_url ? (
@@ -217,34 +254,38 @@ export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
               />
             </div>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-[#111827] truncate leading-tight">
-                {config.nome}
-              </p>
-              <p
-                className={cn(
-                  "text-[11px] font-medium mt-0.5 flex items-center gap-1.5",
-                  lojaAberta ? "text-emerald-600" : "text-red-500"
-                )}
-              >
-                <span
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full",
-                    statusDot,
-                    lojaAberta && "animate-pulse"
-                  )}
-                />
-                {statusLabel}
-              </p>
-            </div>
+            {!collapsed && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[#111827] truncate leading-tight">
+                    {config.nome}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-[11px] font-medium mt-0.5 flex items-center gap-1.5",
+                      lojaAberta ? "text-emerald-600" : "text-red-500"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full",
+                        statusDot,
+                        lojaAberta && "animate-pulse"
+                      )}
+                    />
+                    {statusLabel}
+                  </p>
+                </div>
 
-            <motion.span
-              animate={{ rotate: open ? 180 : 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="text-[#9CA3AF] group-hover:text-[#4C258C] transition-colors"
-            >
-              <ChevronDown className="w-4 h-4" aria-hidden />
-            </motion.span>
+                <motion.span
+                  animate={{ rotate: open ? 180 : 0 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="text-[#9CA3AF] group-hover:text-[#4C258C] transition-colors"
+                >
+                  <ChevronDown className="w-4 h-4" aria-hidden />
+                </motion.span>
+              </>
+            )}
           </button>
         </PopoverTrigger>
 
@@ -388,42 +429,59 @@ export function StoreStatusCard({ configInicial }: StoreStatusCardProps) {
                   />
                 </div>
 
-                {/* Footer actions */}
-                <div className="p-4 pt-3 border-t border-[#F3F4F6] flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 h-10 rounded-xl border-[#E5E7EB] text-[#374151] hover:bg-[#F9FAFB]"
-                    asChild
-                  >
-                    <Link
-                      href="/admin/configuracoes"
-                      onClick={() => setOpen(false)}
-                    >
-                      <Settings className="w-4 h-4 mr-1.5" />
-                      Configurações
-                    </Link>
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    disabled={toggling}
-                    onClick={() => void handleToggleLoja()}
-                    className={cn(
-                      "flex-1 h-10 rounded-xl font-semibold text-white shadow-sm",
-                      lojaAberta
-                        ? "bg-red-500 hover:bg-red-600"
-                        : "bg-emerald-600 hover:bg-emerald-700"
+                {/* Footer actions — só admin gerencia loja/config */}
+                {(canManageStore || canOpenConfig) && (
+                  <div className="p-4 pt-3 border-t border-[#F3F4F6] flex gap-2">
+                    {canOpenConfig && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "h-10 rounded-xl border-[#E5E7EB] text-[#374151] hover:bg-[#F9FAFB]",
+                          canManageStore ? "flex-1" : "w-full"
+                        )}
+                        asChild
+                      >
+                        <Link
+                          href="/admin/configuracoes"
+                          onClick={() => setOpen(false)}
+                        >
+                          <Settings className="w-4 h-4 mr-1.5" />
+                          Configurações
+                        </Link>
+                      </Button>
                     )}
-                  >
-                    <Store className="w-4 h-4 mr-1.5" />
-                    {toggling
-                      ? "Salvando..."
-                      : lojaAberta
-                        ? "Fechar Loja"
-                        : "Abrir Loja"}
-                  </Button>
-                </div>
+
+                    {canManageStore && (
+                      <Button
+                        size="sm"
+                        disabled={toggling}
+                        onClick={() => void handleToggleLoja()}
+                        className={cn(
+                          "flex-1 h-10 rounded-xl font-semibold text-white shadow-sm",
+                          lojaAberta
+                            ? "bg-red-500 hover:bg-red-600"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        )}
+                      >
+                        <Store className="w-4 h-4 mr-1.5" />
+                        {toggling
+                          ? "Salvando..."
+                          : lojaAberta
+                            ? "Fechar Loja"
+                            : "Abrir Loja"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {!canManageStore && !canOpenConfig && (
+                  <div className="px-4 pb-4 pt-1">
+                    <p className="text-[11px] text-[#9CA3AF] text-center">
+                      Status somente leitura. Abertura da loja é do administrador.
+                    </p>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

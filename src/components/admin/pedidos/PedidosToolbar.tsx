@@ -27,6 +27,8 @@ interface PedidosToolbarProps {
   autoAccept: boolean;
   autoAcceptLoading?: boolean;
   onAutoAcceptChange: (v: boolean) => void;
+  /** Só admin pode alterar aceite automático */
+  canManageStore?: boolean;
   totalCount: number;
 }
 
@@ -42,6 +44,7 @@ export function PedidosToolbar({
   autoAccept,
   autoAcceptLoading,
   onAutoAcceptChange,
+  canManageStore = false,
   totalCount,
 }: PedidosToolbarProps) {
   return (
@@ -54,15 +57,17 @@ export function PedidosToolbar({
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <label className="hidden sm:flex items-center gap-1.5 text-[12px] text-[#6B7280]">
-            Aceite auto
-            <Switch
-              checked={autoAccept}
-              disabled={autoAcceptLoading}
-              onCheckedChange={onAutoAcceptChange}
-              className="h-5 w-9 data-[state=checked]:bg-[#4C258C] data-[state=unchecked]:bg-[#D1D5DB] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
-            />
-          </label>
+          {canManageStore && (
+            <label className="hidden sm:flex items-center gap-1.5 text-[12px] text-[#6B7280]">
+              Aceite auto
+              <Switch
+                checked={autoAccept}
+                disabled={autoAcceptLoading}
+                onCheckedChange={onAutoAcceptChange}
+                className="h-5 w-9 data-[state=checked]:bg-[#4C258C] data-[state=unchecked]:bg-[#D1D5DB] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+              />
+            </label>
+          )}
           <button
             type="button"
             onClick={() => onSoundChange(!soundEnabled)}

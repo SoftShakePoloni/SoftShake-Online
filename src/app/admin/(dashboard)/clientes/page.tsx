@@ -1,10 +1,10 @@
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePageAccess } from "@/lib/admin/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
 import { ClientesManager } from "@/components/admin/clientes/ClientesManager";
 import type { Cliente } from "@/types/cliente";
 
 export default async function AdminClientsPage() {
-  await requireAdmin();
+  await requirePageAccess("clientes");
   const supabase = createServerClient();
 
   const [{ data: clientes }, { data: pedidos }] = await Promise.all([

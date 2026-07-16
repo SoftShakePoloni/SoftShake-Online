@@ -5,7 +5,7 @@
  * Persistidas em `configuracoes_loja.aceitar_pedidos_automaticamente`.
  */
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireAdmin, requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 export type PreferenciasOperacionais = {
@@ -73,7 +73,7 @@ export async function getStoreSettings(): Promise<StoreSettings> {
 export async function setAceitarPedidosAutomaticamente(
   ativo: boolean
 ): Promise<PreferenciasOperacionais> {
-  await requireAdmin();
+  await requirePermission("config:write");
   const supabase = createServiceRoleClient();
   const row = await buscarLinhaConfig();
 

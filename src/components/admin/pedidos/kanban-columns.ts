@@ -5,7 +5,6 @@ import { isDeliveryType, isPickupType, isMesaType } from "./order-status";
 export type KanbanColumnId =
   | "em_aberto"
   | "em_producao"
-  | "prontos"
   | "saiu_entrega"
   | "finalizados";
 
@@ -32,13 +31,6 @@ export const KANBAN_COLUMNS: KanbanColumnDef[] = [
     dropStatus: "preparando",
   },
   {
-    id: "prontos",
-    label: "Prontos",
-    accent: "bg-amber-500",
-    // Pronto para retirada / despacho — permanece em preparo no banco
-    dropStatus: "preparando",
-  },
-  {
     id: "saiu_entrega",
     label: "Saiu p/ Entrega",
     accent: "bg-orange-500",
@@ -53,25 +45,16 @@ export const KANBAN_COLUMNS: KanbanColumnDef[] = [
 ];
 
 /**
- * Em Produção = preparando + delivery
- * Prontos = preparando + retirada/mesa (pronto para o cliente)
- * (Operador move delivery de Produção → Saiu; retirada de Produção → Prontos → Finalizados)
+ * Em Aberto → Em Produção → Saiu p/ Entrega (delivery) → Finalizados
+ * Retirada/mesa: Em Produção → Finalizados
  */
 export function getPedidoColumnId(pedido: Pedido): KanbanColumnId {
   switch (pedido.status) {
     case "pendente":
     case "confirmado":
       return "em_aberto";
-    case "preparando": {
-      if (isPickupType(pedido.tipo_entrega) || isMesaType(pedido.tipo_entrega)) {
-        return "prontos";
-      }
-      // Delivery e demais ficam em produção até saírem
-      if (isDeliveryType(pedido.tipo_entrega)) {
-        return "em_producao";
-      }
+    case "preparando":
       return "em_producao";
-    }
     case "saiu_entrega":
       return "saiu_entrega";
     case "entregue":
@@ -89,11 +72,6 @@ export function resolveDropStatus(
 ): PedidoStatus {
   const col = KANBAN_COLUMNS.find((c) => c.id === columnId);
   if (!col) return pedido.status;
-
-  if (columnId === "prontos") {
-    // Mantém em preparo (pronto para retirada)
-    return "preparando";
-  }
 
   if (columnId === "em_producao") {
     return "preparando";
@@ -114,7 +92,6 @@ export function groupPedidosByColumn(
   const map: Record<KanbanColumnId, Pedido[]> = {
     em_aberto: [],
     em_producao: [],
-    prontos: [],
     saiu_entrega: [],
     finalizados: [],
   };

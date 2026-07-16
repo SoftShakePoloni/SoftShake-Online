@@ -4,6 +4,7 @@ import {
   normalizeConfiguracao,
   type ConfiguracaoLoja,
 } from "@/types/configuracoes";
+import { requirePageAccess } from "@/lib/admin/auth";
 
 export const metadata = {
   title: "Estabelecimento | SoftShake Admin",
@@ -11,6 +12,8 @@ export const metadata = {
 };
 
 export default async function EstabelecimentoPage() {
+  await requirePageAccess("estabelecimento");
+
   let raw: Record<string, unknown> | null = null;
 
   try {

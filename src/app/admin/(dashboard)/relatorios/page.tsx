@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePageAccess } from "@/lib/admin/auth";
 import { RelatoriosManager } from "@/components/admin/relatorios/RelatoriosManager";
 
 export const metadata = {
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function AdminReportsPage() {
-  await requireAdmin();
+  await requirePageAccess("relatorios");
 
   return <RelatoriosManager />;
 }

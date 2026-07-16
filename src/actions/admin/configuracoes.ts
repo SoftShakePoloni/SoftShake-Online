@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireAdmin, requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 import { parseDiasFuncionamento } from "@/types/configuracoes";
 
@@ -119,7 +119,8 @@ function sanitizeUpdates(updates: ConfiguracoesUpdate) {
  * Atualiza `esta_aberto` (sempre). Se a coluna existir, também `aceitando_pedidos`.
  */
 export async function setLojaAberta(aberta: boolean) {
-  await requireAdmin();
+  // Só admin (config:write) — atendente/gerente não abrem/fecham a loja
+  await requirePermission("config:write");
   const supabase = createServiceRoleClient();
 
   const { data: current, error: fetchError } = await supabase
