@@ -14,6 +14,7 @@ const MENU_TABLES = [
   "grupos_opcoes",
   "opcoes",
   "produto_grupos",
+  "promocoes_frete_gratis",
 ] as const;
 
 const DEBOUNCE_MS = 350;
@@ -75,6 +76,9 @@ function ensureMenuRealtime() {
   bootstrapped = true;
 
   void loadMenu();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) scheduleReload();
+  });
 
   let ch = supabase.channel("cardapio-cliente-menu-shared");
   for (const table of MENU_TABLES) {

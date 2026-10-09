@@ -30,6 +30,7 @@ import { getProdutoGrupoIds } from "@/actions/admin/grupos-opcoes";
 import type { CatalogCategoria, CatalogProduto } from "./types";
 import { ProdutoComplementosPanel } from "./ProdutoComplementosPanel";
 import { ProdutoTagsPanel } from "./ProdutoTagsPanel";
+import { ProdutoImageUpload } from "@/components/admin/produto-image-upload";
 
 const schema = z
   .object({
@@ -325,12 +326,15 @@ export function ProdutoDrawer({
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="URL da imagem">
-                  <Input
-                    {...form.register("imagem_url")}
+                <Field label="Imagem do produto">
+                  <ProdutoImageUpload
+                    value={form.watch("imagem_url")}
+                    onChange={(path) => {
+                      form.setValue("imagem_url", path || "", {
+                        shouldDirty: true,
+                      });
+                    }}
                     disabled={readOnly}
-                    placeholder="path ou https://…"
-                    className="rounded-xl"
                   />
                 </Field>
                 <Field label="Código interno">

@@ -110,17 +110,17 @@ function ProdutoRowInner({
       ref={setNodeRef as unknown as React.Ref<HTMLTableRowElement>}
       style={style}
       className={cn(
-        "group border-b border-[#F3F4F6] hover:bg-[#FAFAFA]",
-        isDragging && "bg-white shadow-sm opacity-90 relative z-10",
+        "group border-b border-[#F1EEF3] transition-colors hover:bg-[#FCFBFD]",
+        isDragging && "relative z-10 bg-white opacity-90 shadow-sm",
         !disponivel && "opacity-70"
       )}
     >
       {/* Drag */}
-      <td className="w-8 py-2 pl-2 pr-0">
+      <td className="w-10 py-3 pl-3 pr-0">
         {dragHandleProps ? (
           <button
             type="button"
-            className="p-1 text-[#D1D5DB] opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none"
+            className="touch-none cursor-grab p-1 text-[#AAA4B0] opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
             aria-label="Arrastar produto"
             {...dragHandleProps}
           >
@@ -130,13 +130,13 @@ function ProdutoRowInner({
       </td>
 
       {/* Produto */}
-      <td className="py-2 pr-3">
+      <td className="py-3 pr-4">
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-2.5 min-w-0 text-left w-full"
+          className="flex w-full min-w-0 items-center gap-3 text-left"
         >
-          <div className="relative w-12 h-12 shrink-0 rounded border border-[#E5E7EB] bg-[#F9FAFB] overflow-hidden">
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#EFECF1] bg-[#F8F7F9]">
             {imgUrl ? (
               <Image
                 src={imgUrl}
@@ -147,20 +147,20 @@ function ProdutoRowInner({
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
-                <Package className="w-4 h-4 text-[#D1D5DB]" />
+                <Package className="h-4 w-4 text-[#B8B2BE]" />
               </div>
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[15px] font-medium text-[#111827] truncate leading-tight">
+            <p className="truncate text-[13px] font-semibold leading-tight text-[#29252E]">
               {produto.nome}
             </p>
             {produto.codigo ? (
-              <p className="text-[11px] text-[#9CA3AF] tabular-nums mt-0.5">
+              <p className="mt-1 text-[11px] tabular-nums text-[#96909B]">
                 {produto.codigo}
               </p>
             ) : (
-              <p className="text-[11px] text-[#9CA3AF] mt-0.5 line-clamp-1">
+              <p className="mt-1 line-clamp-1 text-[11px] text-[#96909B]">
                 {(produto.descricao || "").trim() || "—"}
               </p>
             )}
@@ -169,45 +169,45 @@ function ProdutoRowInner({
       </td>
 
       {/* Categoria — ocultar em tablet pequeno */}
-      <td className="py-2 pr-3 hidden md:table-cell">
-        <span className="text-[13px] text-[#6B7280]">
+      <td className="hidden py-3 pr-4 md:table-cell">
+        <span className="text-[12px] text-[#716B77]">
           {produto.categoria?.nome || "Sem categoria"}
         </span>
       </td>
 
       {/* Preço */}
-      <td className="py-2 pr-3 whitespace-nowrap">
+      <td className="whitespace-nowrap py-3 pr-4">
         {promo ? (
           <div>
-            <p className="text-[15px] font-bold text-[#111827] tabular-nums">
+            <p className="text-[13px] font-semibold tabular-nums text-[#29252E]">
               {formatBRL(produto.preco_promocional)}
             </p>
-            <p className="text-[11px] text-[#9CA3AF] line-through tabular-nums">
+            <p className="text-[11px] tabular-nums text-[#96909B] line-through">
               {formatBRL(produto.preco_base)}
             </p>
           </div>
         ) : (
-          <p className="text-[15px] font-bold text-[#111827] tabular-nums">
+          <p className="text-[13px] font-semibold tabular-nums text-[#29252E]">
             {formatBRL(produto.preco_base)}
           </p>
         )}
       </td>
 
       {/* Status */}
-      <td className="py-2 pr-3">
+      <td className="py-3 pr-4">
         <div className="flex flex-wrap items-center gap-1">
           <span
             className={cn(
-              "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium border",
+              "inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-medium",
               disponivel
-                ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                : "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]"
+                ? "border-[#DDEDE4] bg-[#F1F8F3] text-[#3F7351]"
+                : "border-[#E8E5EA] bg-[#F6F5F7] text-[#77717D]"
             )}
           >
             {disponivel ? "Disponível" : "Indisponível"}
           </span>
           {promo && (
-            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium border bg-orange-50 text-orange-700 border-orange-100">
+            <span className="inline-flex items-center rounded-md border border-[#E5DDF0] bg-[#F6F2FA] px-2 py-1 text-[10px] font-medium text-[#65468B]">
               Promoção
             </span>
           )}
@@ -215,7 +215,7 @@ function ProdutoRowInner({
       </td>
 
       {/* Disponível switch — ocultar em mobile */}
-      <td className="py-2 pr-3 hidden sm:table-cell">
+      <td className="hidden py-3 pr-4 sm:table-cell">
         <Switch
           checked={disponivel}
           disabled={toggling}
@@ -226,17 +226,17 @@ function ProdutoRowInner({
       </td>
 
       {/* Atualização — desktop */}
-      <td className="py-2 pr-3 hidden lg:table-cell">
-        <span className="text-[12px] text-[#9CA3AF] tabular-nums">{updated}</span>
+      <td className="hidden py-3 pr-4 lg:table-cell">
+        <span className="text-[11px] tabular-nums text-[#96909B]">{updated}</span>
       </td>
 
       {/* Ações */}
-      <td className="py-2 pr-3 text-right">
+      <td className="py-3 pr-4 text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-transparent text-[#6B7280] hover:border-[#E5E7EB] hover:bg-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#716B77] transition-colors hover:border-[#E7E3EA] hover:bg-white hover:text-[#29252E]"
               aria-label="Ações"
             >
               <MoreHorizontal className="w-4 h-4" />

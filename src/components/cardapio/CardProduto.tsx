@@ -6,6 +6,7 @@ import { Gift } from "lucide-react";
 import type { Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
 import { TagBadge } from "@/components/ui/TagBadge";
+import { FreteGratisBadge } from "@/components/ui/FreteGratisBadge";
 import { ProductDetailDialog } from "./ModalProduto";
 import { PrecoProduto } from "./PrecoProduto";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,8 @@ export function ProductCard({ product }: { product: Product }) {
       <article
         onClick={handleOpen}
         className={cn(
-          "group flex h-full gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition hover:shadow-md relative overflow-hidden",
+          "group relative flex h-full gap-3 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:shadow-md",
+          "border-border bg-card",
           podePedir ? "cursor-pointer" : "cursor-not-allowed opacity-75"
         )}
       >
@@ -57,6 +59,9 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="flex min-w-0 flex-1 flex-col relative z-[5]">
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             {product.tag && <TagBadge tag={product.tag} />}
+            {product.freteGratis && isDisponivel && (
+              <FreteGratisBadge prazo={product.freteGratisPrazo} />
+            )}
             {hasProductPromo(product) && isDisponivel && (
               <span className="inline-flex rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
                 Promo

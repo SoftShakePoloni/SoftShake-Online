@@ -160,23 +160,23 @@ export function ProdutosArea({
   };
 
   const renderTable = (enableDnd: boolean) => (
-    <table className="w-full text-left border-collapse min-w-[640px]">
-      <thead className="sticky top-0 z-[1] bg-[#FAFAFA] border-b border-[#E5E7EB]">
-        <tr className="text-[11px] uppercase tracking-wide text-[#9CA3AF]">
-          <th className="w-8 py-2 pl-2 font-medium" />
-          <th className="py-2 pr-3 font-medium">Produto</th>
-          <th className="py-2 pr-3 font-medium hidden md:table-cell">
+    <table className="w-full min-w-[720px] border-collapse text-left">
+      <thead className="sticky top-0 z-[1] border-b border-[#EEEAF1] bg-[#FBFAFC]">
+        <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#89838F]">
+          <th className="w-10 py-3 pl-3 font-semibold" />
+          <th className="py-3 pr-4 font-semibold">Produto</th>
+          <th className="hidden py-3 pr-4 font-semibold md:table-cell">
             Categoria
           </th>
-          <th className="py-2 pr-3 font-medium">Preço</th>
-          <th className="py-2 pr-3 font-medium">Status</th>
-          <th className="py-2 pr-3 font-medium hidden sm:table-cell">
+          <th className="py-3 pr-4 font-semibold">Preço</th>
+          <th className="py-3 pr-4 font-semibold">Status</th>
+          <th className="hidden py-3 pr-4 font-semibold sm:table-cell">
             Ativo
           </th>
-          <th className="py-2 pr-3 font-medium hidden lg:table-cell">
+          <th className="hidden py-3 pr-4 font-semibold lg:table-cell">
             Atualização
           </th>
-          <th className="py-2 pr-3 font-medium text-right">Ações</th>
+          <th className="py-3 pr-4 text-right font-semibold">Ações</th>
         </tr>
       </thead>
       <tbody>
@@ -197,21 +197,21 @@ export function ProdutosArea({
   );
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col h-full bg-[#F9FAFB]">
-      <div className="shrink-0 px-3 sm:px-4 py-2 border-b border-[#E5E7EB] bg-white flex flex-wrap items-center justify-between gap-2">
+    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#E7E3EA] bg-white shadow-sm">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#EEEAF1] bg-white px-4 py-3.5 sm:px-5">
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-[#111827]">
+          <p className="truncate text-[14px] font-semibold text-[#25212A]">
             {categoriaNome}
           </p>
-          <p className="text-[12px] text-[#6B7280]">
-            <span className="font-semibold tabular-nums text-[#111827]">
+          <p className="mt-0.5 text-[12px] text-[#817B87]">
+            <span className="font-semibold tabular-nums text-[#514B59]">
               {filtered.length}
             </span>{" "}
             {filtered.length === 1 ? "produto" : "produtos"}
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           <Select
             value={statusFilter}
             onValueChange={(v) => {
@@ -219,7 +219,7 @@ export function ProdutosArea({
               setVisible(PAGE_SIZE);
             }}
           >
-            <SelectTrigger className="h-8 w-[128px] rounded-md border-[#E5E7EB] text-[12px]">
+            <SelectTrigger className="h-9 w-[136px] rounded-lg border-[#E4E1E8] bg-white text-[12px] text-[#514B59] shadow-none">
               <SelectValue placeholder="Disponibilidade" />
             </SelectTrigger>
             <SelectContent>
@@ -245,7 +245,7 @@ export function ProdutosArea({
               setVisible(PAGE_SIZE);
             }}
           >
-            <SelectTrigger className="h-8 w-[130px] rounded-md border-[#E5E7EB] text-[12px]">
+            <SelectTrigger className="h-9 w-[144px] rounded-lg border-[#E4E1E8] bg-white text-[12px] text-[#514B59] shadow-none">
               <SelectValue placeholder="Ordenar" />
             </SelectTrigger>
             <SelectContent>
@@ -269,7 +269,7 @@ export function ProdutosArea({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         {filtered.length === 0 ? (
           <div className="p-6">
             <CatalogEmpty
@@ -297,11 +297,11 @@ export function ProdutosArea({
         )}
 
         {visible < filtered.length && (
-          <div className="flex justify-center py-4 border-t border-[#E5E7EB] bg-white">
+          <div className="flex justify-center border-t border-[#EEEAF1] bg-white py-4">
             <button
               type="button"
               onClick={() => setVisible((v) => v + PAGE_SIZE)}
-              className="text-[13px] font-medium text-blue-600 hover:underline"
+              className="rounded-lg px-3 py-2 text-[13px] font-medium text-[#4C258C] transition-colors hover:bg-[#F5F2F8]"
             >
               Carregar mais ({filtered.length - visible})
             </button>

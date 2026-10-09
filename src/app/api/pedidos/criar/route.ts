@@ -18,6 +18,8 @@ import {
 } from "@/lib/security/api-response";
 import { sanitizePhone, sanitizeText } from "@/lib/security/sanitize";
 import { securityLog } from "@/lib/security/logger";
+import { getSaoPauloDateTime, isFreteCampaignActive } from "@/lib/promocoes/frete";
+import { validarCupom } from "@/lib/cupons";
 
 const criarPedidoSchema = z.object({
   cliente_nome: z
@@ -42,6 +44,7 @@ const criarPedidoSchema = z.object({
   subtotal: z.number().min(0).max(100_000),
   taxa_entrega: z.number().min(0).max(1_000),
   total: z.number().min(0).max(100_000),
+  cupom_codigo: z.string().max(32).optional().nullable(),
   itens: z.array(z.record(z.string(), z.unknown())).min(1).max(50),
   observacoes: z
     .string()
@@ -76,6 +79,14 @@ export const POST = withApiGuard(
 
       const data = parsed.data;
 
+      if (data.cupom_codigo) {
+        try {
+          await validarCupom(data.cupom_codigo, data.subtotal);
+        } catch (error) {
+          return apiError(error instanceof Error ? error.message : "Cupom inválido.", 400);
+        }
+      }
+
       if (
         (data.tipo_entrega === "entrega" || data.tipo_entrega === "delivery") &&
         !data.endereco_completo
@@ -95,6 +106,7 @@ export const POST = withApiGuard(
         esta_aberto?: boolean | null;
         aceitar_pedidos_automaticamente?: boolean | null;
         aceitando_pedidos?: boolean | null;
+        taxa_entrega?: number | null;
       };
 
       let configLoja: ConfigRow | null = null;
@@ -102,7 +114,7 @@ export const POST = withApiGuard(
         const full = await supabase
           .from("configuracoes_loja")
           .select(
-            "esta_aberto, aceitar_pedidos_automaticamente, aceitando_pedidos"
+            "esta_aberto, aceitar_pedidos_automaticamente, aceitando_pedidos, taxa_entrega"
           )
           .order("id", { ascending: true })
           .limit(1)
@@ -113,7 +125,7 @@ export const POST = withApiGuard(
         } else {
           const basic = await supabase
             .from("configuracoes_loja")
-            .select("esta_aberto, aceitar_pedidos_automaticamente")
+            .select("esta_aberto, aceitar_pedidos_automaticamente, taxa_entrega")
             .order("id", { ascending: true })
             .limit(1)
             .maybeSingle();
@@ -138,6 +150,68 @@ export const POST = withApiGuard(
             { codigo: "STORE_CLOSED" }
           );
         }
+      }
+
+      const comboIds = [...new Set(data.itens.flatMap((raw) => {
+        const item = raw as { produto?: { comboId?: unknown; id?: unknown }; qty?: unknown; total?: unknown };
+        const comboId = Number(item.produto?.comboId);
+        return Number.isInteger(comboId) && comboId > 0 ? [comboId] : [];
+      }))];
+      let comboLinks: { combo_id: number; produto_id: number }[] = [];
+      if (comboIds.length) {
+        const { data: activeCombos, error: comboError } = await supabase
+          .from("combos")
+          .select("id, preco, ativa")
+          .in("id", comboIds);
+        if (comboError) return apiServerError(comboError);
+        if ((activeCombos ?? []).length !== comboIds.length || activeCombos?.some((combo) => !combo.ativa)) {
+          return apiError("Um dos combos não está mais disponível. Atualize a sacola.", 409, { codigo: "COMBO_UNAVAILABLE" });
+        }
+        const comboById = new Map((activeCombos ?? []).map((combo) => [combo.id, Number(combo.preco)]));
+        for (const raw of data.itens) {
+          const item = raw as { produto?: { comboId?: unknown }; qty?: unknown; total?: unknown };
+          const comboId = Number(item.produto?.comboId);
+          if (!comboById.has(comboId)) continue;
+          const expectedTotal = (comboById.get(comboId) ?? 0) * Math.max(1, Number(item.qty) || 1);
+          if (Math.abs(Number(item.total) - expectedTotal) > 0.01) {
+            return apiError("O preço de um combo foi atualizado. Confira a sacola e tente novamente.", 409, { codigo: "COMBO_UPDATED" });
+          }
+        }
+        const { data: links, error: linksError } = await supabase
+          .from("combo_itens")
+          .select("combo_id, produto_id")
+          .in("combo_id", comboIds);
+        if (linksError) return apiServerError(linksError);
+        comboLinks = links ?? [];
+      }
+      const idsNoCarrinho = new Set(data.itens.flatMap((raw) => {
+        const item = raw as { produto?: { id?: unknown; comboId?: unknown } };
+        return item.produto?.comboId != null || item.produto?.id == null
+          ? []
+          : [String(item.produto.id)];
+      }));
+      for (const link of comboLinks) idsNoCarrinho.add(String(link.produto_id));
+      const agoraBrasil = getSaoPauloDateTime();
+      const { data: campanhasFrete } = await supabase
+        .from("promocoes_frete_gratis")
+        .select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim")
+        .eq("ativa", true)
+        .lte("data_inicio", agoraBrasil.date)
+        .gte("data_fim", agoraBrasil.date);
+      const freteElegivel = (campanhasFrete ?? []).some((campaign) =>
+        isFreteCampaignActive(campaign, agoraBrasil) &&
+        (campaign.produto_id == null || idsNoCarrinho.has(String(campaign.produto_id)))
+      );
+      const entrega = data.tipo_entrega === "entrega" || data.tipo_entrega === "delivery";
+      const taxaEntregaCalculada = entrega
+        ? freteElegivel ? 0 : Number(configLoja?.taxa_entrega ?? data.taxa_entrega)
+        : 0;
+      if (Math.abs(data.taxa_entrega - taxaEntregaCalculada) > 0.01) {
+        return apiError(
+          "O frete foi atualizado. Confira o valor na sacola e tente novamente.",
+          409,
+          { codigo: "SHIPPING_UPDATED" }
+        );
       }
 
       const [{ data: opcoes }, { data: grupos }] = await Promise.all([
@@ -175,16 +249,22 @@ export const POST = withApiGuard(
           meio_pagamento: data.meio_pagamento,
           troco_para: data.troco_para != null ? String(data.troco_para) : null,
           subtotal: data.subtotal,
-          taxa_entrega: data.taxa_entrega,
-          total: data.total,
+          taxa_entrega: taxaEntregaCalculada,
+          total: data.subtotal + taxaEntregaCalculada,
+          cupom_codigo: data.cupom_codigo?.trim().toUpperCase() || null,
           itens: itensEnriquecidos,
           status: initialStatus,
           observacoes: data.observacoes,
         })
-        .select("id, status, total, created_at")
+        .select("id, status, total, desconto_cupom, cupom_codigo, created_at")
         .single();
 
       if (error || !pedido) {
+        const message = error?.message ?? "";
+        if (message.includes("CUPOM_INVALIDO")) return apiError("Esse cupom não é válido.", 400);
+        if (message.includes("CUPOM_FORA_DA_VALIDADE")) return apiError("Esse cupom está fora do período de validade.", 400);
+        if (message.includes("CUPOM_ESGOTADO")) return apiError("Esse cupom acabou de atingir o limite de usos.", 409);
+        if (message.includes("CUPOM_VALOR_MINIMO")) return apiError("O pedido não atingiu o valor mínimo deste cupom.", 400);
         return apiServerError(error);
       }
 

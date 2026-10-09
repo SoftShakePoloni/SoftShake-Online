@@ -34,7 +34,10 @@ import { CategoriasSidebar } from "./CategoriasSidebar";
 import { ProdutosArea } from "./ProdutosArea";
 import { ProdutoDrawer, type ProdutoFormValues } from "./ProdutoDrawer";
 import { ComplementosTab } from "./ComplementosTab";
-import { ComingSoonTab } from "./ComingSoonTab";
+import { CombosTab } from "./CombosTab";
+import { PromocoesFreteTab } from "./PromocoesFreteTab";
+import type { PromocaoFrete } from "@/actions/admin/promocoes-frete";
+import type { ComboAdmin } from "@/actions/admin/combos";
 import type {
   CatalogTab,
   CatalogProduto,
@@ -44,11 +47,19 @@ import type {
 interface CatalogoManagerProps {
   produtosIniciais: CatalogProduto[];
   categoriasIniciais: CatalogCategoria[];
+  promocoesFreteIniciais: PromocaoFrete[];
+  promocoesFreteErro: string | null;
+  combosIniciais: ComboAdmin[];
+  combosErro: string | null;
 }
 
 export function CatalogoManager({
   produtosIniciais,
   categoriasIniciais,
+  promocoesFreteIniciais,
+  promocoesFreteErro,
+  combosIniciais,
+  combosErro,
 }: CatalogoManagerProps) {
   const [tab, setTab] = useState<CatalogTab>("produtos");
   const [produtos, setProdutos] =
@@ -381,8 +392,9 @@ export function CatalogoManager({
   };
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col bg-[#F9FAFB] overflow-hidden">
+    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#F7F8FC]">
       <CatalogoHeader
+        activeTab={tab}
         search={search}
         onSearchChange={setSearch}
         onNovoProduto={openNovo}
@@ -397,8 +409,8 @@ export function CatalogoManager({
       <CatalogoTabs active={tab} onChange={setTab} />
 
       {tab === "produtos" && (
-        <div className="flex flex-1 min-h-0 flex-col md:flex-row">
-          <div className="hidden md:flex h-full">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 bg-[#F7F8FC] p-3 sm:p-5 md:flex-row">
+          <div className="hidden h-full w-[232px] shrink-0 md:flex">
             <CategoriasSidebar
               categorias={categorias}
               produtos={produtos}
@@ -425,8 +437,8 @@ export function CatalogoManager({
           </div>
 
           {/* Mobile categorias strip */}
-          <div className="md:hidden shrink-0 bg-white border-b border-[#E5E7EB] overflow-x-auto">
-            <div className="flex gap-1 px-2 py-2">
+          <div className="shrink-0 overflow-x-auto rounded-xl border border-[#E7E3EA] bg-white p-2 shadow-sm md:hidden">
+            <div className="flex gap-1.5">
               <Chip
                 active={selectedCategoriaId == null}
                 onClick={() => setSelectedCategoriaId(null)}
@@ -461,18 +473,8 @@ export function CatalogoManager({
 
       {tab === "complementos" && <ComplementosTab mode="complementos" />}
       {tab === "opcoes" && <ComplementosTab mode="opcoes" />}
-      {tab === "combos" && (
-        <ComingSoonTab
-          title="Combos"
-          description="Monte combos com múltiplos produtos e preço especial. Em desenvolvimento."
-        />
-      )}
-      {tab === "promocoes" && (
-        <ComingSoonTab
-          title="Promoções"
-          description="Campanhas, descontos e vitrines promocionais do cardápio. Em desenvolvimento."
-        />
-      )}
+      {tab === "combos" && <CombosTab products={produtos} initial={combosIniciais} loadError={combosErro} />}
+      {tab === "promocoes" && <PromocoesFreteTab products={produtos} initial={promocoesFreteIniciais} loadError={promocoesFreteErro} />}
 
       <ProdutoDrawer
         open={drawerOpen}
@@ -526,8 +528,8 @@ function Chip({
       onClick={onClick}
       className={
         active
-          ? "shrink-0 px-2.5 py-1 rounded-md text-[12px] font-semibold bg-[#F3F4F6] text-[#111827] border border-[#E5E7EB]"
-          : "shrink-0 px-2.5 py-1 rounded-md text-[12px] font-medium bg-white text-[#6B7280] border border-[#E5E7EB]"
+          ? "shrink-0 rounded-lg border border-[#DCCFEA] bg-[#F4F0F8] px-3 py-2 text-[12px] font-semibold text-[#4C258C]"
+          : "shrink-0 rounded-lg border border-transparent bg-white px-3 py-2 text-[12px] font-medium text-[#716B77] hover:bg-[#F8F7FA]"
       }
     >
       {label}

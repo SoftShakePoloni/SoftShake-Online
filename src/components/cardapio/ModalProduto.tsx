@@ -15,6 +15,7 @@ import {
 import { PrecoProduto } from "./PrecoProduto";
 import { useCarrinho } from "@/context/CarrinhoContext";
 import { TagBadge } from "@/components/ui/TagBadge";
+import { FreteGratisBadge } from "@/components/ui/FreteGratisBadge";
 import { useLoja } from "@/hooks/useLoja";
 import { toast } from "sonner";
 
@@ -232,6 +233,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
               {product.tag && <TagBadge tag={product.tag} />}
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
+            {product.freteGratis && <FreteGratisBadge prazo={product.freteGratisPrazo} />}
             <div className="pt-1">
               <PrecoProduto product={product} size="lg" />
             </div>

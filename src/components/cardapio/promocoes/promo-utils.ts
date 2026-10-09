@@ -51,7 +51,7 @@ export function getPromoBadges(p: Product): PromoBadge[] {
     badges.push({ kind: "premium", label: "Premium" });
   }
 
-  if (name.includes("combo") || name.includes("leve 2") || name.includes("2x")) {
+  if (p.comboId != null || name.includes("combo") || name.includes("leve 2") || name.includes("2x")) {
     if (name.includes("leve 2") || name.includes("2x")) {
       badges.push({ kind: "leve2", label: "Leve 2" });
     } else {
@@ -83,6 +83,7 @@ export function promoCategoriesOnly(categories: Category[]): Category[] {
 }
 
 export function isComboProduct(p: Product): boolean {
+  if (p.comboId != null) return true;
   const n = p.name.toLowerCase();
   return n.includes("combo") || n.includes(" + ") || n.includes(" e ");
 }

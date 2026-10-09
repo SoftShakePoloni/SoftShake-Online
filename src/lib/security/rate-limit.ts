@@ -65,6 +65,7 @@ export const RATE_LIMITS = {
   imagem: { bucket: "api:imagem", limit: 60, windowSec: 60 },
   admin: { bucket: "api:admin", limit: 100, windowSec: 60 },
   search: { bucket: "api:search", limit: 40, windowSec: 60 },
+  mutation: { bucket: "api:mutation", limit: 20, windowSec: 60 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 export function getClientIp(request: Request): string {

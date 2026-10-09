@@ -36,9 +36,66 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const [meioPagamento, setMeioPagamento] = useState<'dinheiro' | 'pix' | 'cartao'>('dinheiro');
   const [trocoPara, setTrocoPara] = useState("");
   const [enviandoPedido, setEnviandoPedido] = useState(false);
+  const [codigoCupom, setCodigoCupom] = useState("");
+  const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; nome: string; desconto: number } | null>(null);
+  const [validandoCupom, setValidandoCupom] = useState(false);
+  const [erroCupom, setErroCupom] = useState("");
 
-  const frete = tipoEntrega === 'entrega' ? (loja?.taxa_entrega ?? 3) : 0;
-  const total = subtotal + frete;
+  const temFreteGratis = itens.some((item) => item.produto.freteGratis);
+  const frete = tipoEntrega === 'entrega' && !temFreteGratis ? (loja?.taxa_entrega ?? 3) : 0;
+  const descontoCupom = cupomAplicado?.desconto ?? 0;
+  const total = Math.max(0, subtotal - descontoCupom) + frete;
+
+  useEffect(() => {
+    const code = cupomAplicado?.codigo;
+    if (!code) return;
+    let active = true;
+    void fetch("/api/cupons/validar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo: code, subtotal }),
+    }).then(async (resposta) => {
+      const dados = await resposta.json();
+      if (!active) return;
+      if (!resposta.ok) {
+        setCupomAplicado(null);
+        setCodigoCupom("");
+        setErroCupom(dados.erro || "O cupom não se aplica mais ao valor da sacola.");
+        return;
+      }
+      setCupomAplicado(dados.cupom);
+    }).catch(() => {
+      if (active) setErroCupom("Não foi possível atualizar o desconto do cupom.");
+    });
+    return () => { active = false; };
+  }, [subtotal, cupomAplicado?.codigo]);
+
+  const aplicarCupom = async () => {
+    setValidandoCupom(true);
+    setErroCupom("");
+    try {
+      const resposta = await fetch("/api/cupons/validar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigo: codigoCupom, subtotal }),
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.erro || "Não foi possível validar o cupom.");
+      setCupomAplicado(dados.cupom);
+      setCodigoCupom(dados.cupom.codigo);
+    } catch (error) {
+      setCupomAplicado(null);
+      setErroCupom(error instanceof Error ? error.message : "Cupom inválido.");
+    } finally {
+      setValidandoCupom(false);
+    }
+  };
+
+  const removerCupom = () => {
+    setCupomAplicado(null);
+    setCodigoCupom("");
+    setErroCupom("");
+  };
 
   // Carrega dados do cliente quando muda para step info
   useEffect(() => {
@@ -228,6 +285,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         subtotal,
         taxa_entrega: frete,
         total,
+        cupom_codigo: cupomAplicado?.codigo ?? null,
         itens: itens.map(item => {
           const adicionais = resolveSelectionsFromProduct(
             item.produto,
@@ -272,6 +330,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       });
       
       limpar();
+      removerCupom();
       onOpenChange(false);
       
       // Redireciona para pedidos após 1s
@@ -306,7 +365,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
           <div className="flex items-center gap-3 pr-8">
             {itens.length > 0 && step === 'cart' && (
               <button
-                onClick={limpar}
+                onClick={() => { limpar(); removerCupom(); }}
                 className="text-xs font-semibold uppercase tracking-wide text-destructive hover:opacity-75"
               >
                 Limpar
@@ -381,13 +440,18 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                             {resumo && (
                               <p className="truncate text-xs text-muted-foreground">{resumo}</p>
                             )}
+                            {item.produto.comboItems?.length ? (
+                              <p className="text-xs text-muted-foreground">
+                                Inclui {item.produto.comboItems.map((part) => `${part.quantity}× ${part.name}`).join(" · ")}
+                              </p>
+                            ) : null}
                             {item.observacoes && (
                               <p className="text-xs text-muted-foreground">
                                 OBS: {item.observacoes}
                               </p>
                             )}
                             <button
-                              onClick={() => removerItem(item.uid)}
+                              onClick={() => { removerItem(item.uid); removerCupom(); }}
                               className="mt-1.5 flex w-fit items-center gap-1 text-xs font-semibold text-destructive hover:opacity-75"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -398,6 +462,37 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                       );
                     })}
                   </ul>
+
+                  {/* Adicionar mais */}
+                  <div className="mx-5 mb-3 rounded-xl border border-border bg-card p-3.5">
+                    <Label htmlFor="cupom-pedido" className="text-xs font-semibold">Cupom de desconto</Label>
+                    {cupomAplicado ? (
+                      <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <span className="min-w-0 truncate"><strong>{cupomAplicado.codigo}</strong> aplicado · {formatBRL(descontoCupom)} de desconto</span>
+                        <button type="button" onClick={removerCupom} className="shrink-0 text-xs font-semibold underline">Remover</button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex gap-2">
+                        <Input
+                          id="cupom-pedido"
+                          value={codigoCupom}
+                          onChange={(event) => { setCodigoCupom(event.target.value.toUpperCase()); setErroCupom(""); }}
+                          placeholder="Digite seu código"
+                          autoCapitalize="characters"
+                          className="h-10 min-w-0 uppercase"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void aplicarCupom()}
+                          disabled={validandoCupom || codigoCupom.trim().length < 3}
+                          className="h-10 shrink-0 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                        >
+                          {validandoCupom ? "Verificando" : "Aplicar"}
+                        </button>
+                      </div>
+                    )}
+                    {erroCupom && <p role="alert" className="mt-2 text-xs text-destructive">{erroCupom}</p>}
+                  </div>
 
                   {/* Adicionar mais */}
                   <div className="px-5 py-3">
@@ -681,10 +776,16 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium">{formatBRL(subtotal)}</span>
             </div>
+            {cupomAplicado && (
+              <div className="flex justify-between text-sm text-emerald-700">
+                <span>Desconto ({cupomAplicado.codigo})</span>
+                <span className="font-medium">− {formatBRL(descontoCupom)}</span>
+              </div>
+            )}
             {tipoEntrega === 'entrega' && (
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Taxa de entrega</span>
-                <span className="font-medium">{formatBRL(frete)}</span>
+                <span className="text-muted-foreground">{temFreteGratis ? 'Frete grátis na sua sacola!' : 'Taxa de entrega'}</span>
+                <span className={`font-medium ${temFreteGratis ? 'text-emerald-700' : ''}`}>{temFreteGratis ? 'GRÁTIS' : formatBRL(frete)}</span>
               </div>
             )}
             <div className="flex justify-between border-t border-border pt-2 text-base font-bold">

@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getSignedUrls } from "@/integrations/supabase/client.server";
 import { notesOptionGroup, type Category, type OptionGroup, type Product, type Tag } from "./tipos";
+import { getFreteDeadlineLabel, getSaoPauloDateTime, isFreteCampaignActive } from "@/lib/promocoes/frete";
 
 const helperForGroup = (min: number, max: number) => {
   if (min > 0 && max === 1) return "Escolha 1 opção";
@@ -20,6 +21,27 @@ export async function fetchMenu(): Promise<Category[]> {
     .select("id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id")
     .order("ordem", { ascending: true });
   if (prodError) { console.error("[fetchMenu] erro produtos:", prodError); throw prodError; }
+
+  const { data: combos } = await supabase
+    .from("combos")
+    .select("id, nome, descricao, preco, imagem_url")
+    .eq("ativa", true)
+    .order("created_at", { ascending: false });
+  const comboLinksResult = combos?.length
+    ? await supabase.from("combo_itens").select("combo_id, produto_id, quantidade").in("combo_id", combos.map((combo) => combo.id))
+    : null;
+  const comboLinks = comboLinksResult?.data ?? [];
+
+  const agoraBrasil = getSaoPauloDateTime();
+  const { data: campanhasFrete } = await supabase
+    .from("promocoes_frete_gratis")
+    .select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim")
+    .eq("ativa", true)
+    .lte("data_inicio", agoraBrasil.date)
+    .gte("data_fim", agoraBrasil.date);
+  const campanhasAtivas = (campanhasFrete ?? []).filter((campaign) =>
+    isFreteCampaignActive(campaign, agoraBrasil)
+  );
 
   const { data: produtoGrupos, error: pgError } = await supabase
     .from("produto_grupos")
@@ -45,6 +67,7 @@ export async function fetchMenu(): Promise<Category[]> {
   const imagePaths = (produtos ?? [])
     .map((p) => p.imagem_url)
     .filter((url): url is string => !!url && !url.startsWith("http"));
+  imagePaths.push(...(combos ?? []).map((combo) => combo.imagem_url).filter((url): url is string => !!url && !url.startsWith("http")));
 
   const signedUrls = imagePaths.length > 0
     ? await getSignedUrls(imagePaths)
@@ -57,7 +80,7 @@ export async function fetchMenu(): Promise<Category[]> {
     return signedUrls.get(imagem_url) ?? undefined;
   };
 
-  return (categorias ?? []).map((cat) => {
+  const menuCategories = (categorias ?? []).map((cat) => {
     const catProdutos = (produtos ?? []).filter((p) => p.categoria_id === cat.id);
 
     return {
@@ -116,6 +139,18 @@ export async function fetchMenu(): Promise<Category[]> {
             precoPromo != null && Number.isFinite(precoPromo)
               ? precoPromo
               : null,
+          freteGratis: campanhasAtivas.some((campaign) =>
+            campaign.produto_id == null || String(campaign.produto_id) === String(prod.id)
+          ),
+          freteGratisPrazo: (() => {
+            const elegiveis = campanhasAtivas
+              .filter((campaign) => campaign.produto_id == null || String(campaign.produto_id) === String(prod.id))
+              .sort((a, b) => `${a.data_fim}T${a.hora_fim}`.localeCompare(`${b.data_fim}T${b.hora_fim}`));
+            const proxima = elegiveis[0];
+            return proxima
+              ? getFreteDeadlineLabel(proxima.data_fim, proxima.hora_fim ?? "23:59", agoraBrasil.date)
+              : undefined;
+          })(),
           image: resolveImage(prod.imagem_url),
           tag: prod.tag_id ? tagsMap.get(prod.tag_id) : undefined,
           optionGroups: [...optionGroups, notesOptionGroup],
@@ -124,6 +159,44 @@ export async function fetchMenu(): Promise<Category[]> {
       }),
     };
   });
+
+  const productById = new Map((produtos ?? []).map((product) => [product.id, product]));
+  const comboProducts: Product[] = (combos ?? []).flatMap((combo) => {
+    const links = (comboLinks ?? []).filter((link) => link.combo_id === combo.id);
+    const selected = links.flatMap((link) => {
+      const product = productById.get(link.produto_id);
+      return product ? [{ product, quantity: link.quantidade }] : [];
+    });
+    if (selected.length < 2) return [];
+    const referencePrice = selected.reduce((sum, item) => sum + Number(item.product.preco_base) * item.quantity, 0);
+    const comboItems = selected.map(({ product, quantity }) => ({ productId: product.id, name: product.nome, quantity }));
+    const details = comboItems.map((item) => `${item.quantity}× ${item.name}`).join(" · ");
+    const activeFreight = campanhasAtivas.filter((campaign) =>
+      campaign.produto_id == null || selected.some(({ product }) => String(campaign.produto_id) === String(product.id))
+    ).sort((a, b) => `${a.data_fim}T${a.hora_fim}`.localeCompare(`${b.data_fim}T${b.hora_fim}`));
+    const firstImage = selected.find(({ product }) => product.imagem_url)?.product.imagem_url ?? null;
+    return [{
+      id: `combo-${combo.id}`,
+      comboId: combo.id,
+      comboItems,
+      name: combo.nome,
+      description: [combo.descricao, `Inclui: ${details}`].filter(Boolean).join(" "),
+      price: referencePrice,
+      precoPromocional: Number(combo.preco) < referencePrice ? Number(combo.preco) : null,
+      image: resolveImage(combo.imagem_url ?? firstImage),
+      freteGratis: activeFreight.length > 0,
+      freteGratisPrazo: activeFreight[0]
+        ? getFreteDeadlineLabel(activeFreight[0].data_fim, activeFreight[0].hora_fim ?? "23:59", agoraBrasil.date)
+        : undefined,
+      tag: undefined,
+      optionGroups: [notesOptionGroup],
+      disponivel: true,
+    } satisfies Product];
+  });
+
+  return comboProducts.length
+    ? [...menuCategories, { id: "combos", name: "Combos", products: comboProducts }]
+    : menuCategories;
 }
 
 export const getFeaturedProducts = (categories: Category[]) => {
