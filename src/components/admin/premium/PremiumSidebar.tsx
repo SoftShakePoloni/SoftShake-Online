@@ -72,7 +72,6 @@ const menuItems: MenuItem[] = [
     href: "/admin/cupons",
     icon: TicketPercent,
     access: "cupons",
-    badge: "Em breve",
   },
   {
     label: "Clientes",

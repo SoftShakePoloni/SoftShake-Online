@@ -152,11 +152,11 @@ function CategoriaItemInner({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center gap-0.5 rounded-md transition-colors",
-        isDragging && "opacity-80 z-20 bg-white border border-[#E5E7EB]",
+        "group relative flex items-center gap-0.5 rounded-lg transition-colors",
+        isDragging && "z-20 border border-[#E5E7EB] bg-white opacity-80",
         selected
-          ? "bg-[#F3F4F6] text-[#111827]"
-          : "hover:bg-[#F9FAFB] text-[#374151]"
+          ? "bg-[#F1ECF7] text-[#3F1E76]"
+          : "text-[#514B59] hover:bg-[#F8F7FA]"
       )}
     >
       {dragHandleProps ? (
@@ -188,7 +188,7 @@ function CategoriaItemInner({
         <span
           className={cn(
             "ml-auto text-[12px] tabular-nums shrink-0",
-            selected ? "text-[#6B7280]" : "text-[#9CA3AF]"
+            selected ? "text-[#755F91]" : "text-[#96919B]"
           )}
         >
           ({count})
@@ -326,14 +326,17 @@ export function CategoriasSidebar({
   };
 
   return (
-    <aside className="w-full lg:w-[220px] shrink-0 border-r border-[#E5E7EB] bg-white flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#E5E7EB]">
-        <h2 className="text-[13px] font-semibold text-[#111827]">Categorias</h2>
+    <aside className="flex h-full w-full shrink-0 flex-col overflow-hidden rounded-xl border border-[#E7E3EA] bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-[#EEEAF1] px-4 py-3">
+        <div>
+          <h2 className="text-[13px] font-semibold text-[#25212A]">Categorias</h2>
+          <p className="mt-0.5 text-[11px] text-[#89838F]">Organize seu cardápio</p>
+        </div>
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className="h-7 w-7 rounded-md text-[#6B7280] hover:bg-[#F3F4F6]"
+          className="h-8 w-8 rounded-lg text-[#655D6E] hover:bg-[#F5F2F8] hover:text-[#4C258C]"
           onClick={() => {
             setCreating(true);
             setNewName("");
@@ -344,20 +347,20 @@ export function CategoriasSidebar({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5">
+      <div className="flex-1 space-y-1 overflow-y-auto p-2">
         <button
           type="button"
           onClick={() => onSelect(null)}
           className={cn(
-            "w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-[13px] transition-colors",
+            "w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-[13px] transition-colors",
             selectedId == null
-              ? "bg-[#F3F4F6] text-[#111827] font-semibold"
-              : "text-[#374151] hover:bg-[#F9FAFB] font-medium"
+              ? "bg-[#F1ECF7] font-semibold text-[#3F1E76]"
+              : "font-medium text-[#514B59] hover:bg-[#F8F7FA]"
           )}
         >
           <span className="truncate">Todas</span>
-          <span className="ml-auto text-[12px] tabular-nums text-[#9CA3AF]">
-            ({produtos.length})
+          <span className="ml-auto rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] tabular-nums text-[#77717D]">
+            {produtos.length}
           </span>
         </button>
 

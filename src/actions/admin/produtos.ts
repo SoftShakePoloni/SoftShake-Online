@@ -200,6 +200,36 @@ export async function updateProduto(
     throw new Error("Nenhum campo para atualizar");
   }
 
+  // Se está atualizando a imagem, remove a antiga do storage (se existir)
+  if (
+    updates.imagem_url !== undefined &&
+    updates.imagem_url !== null &&
+    updates.imagem_url !== ""
+  ) {
+    const { data: oldProduto } = await supabase
+      .from("produtos")
+      .select("imagem_url")
+      .eq("id", produtoId)
+      .maybeSingle();
+
+    if (
+      oldProduto?.imagem_url &&
+      oldProduto.imagem_url !== updates.imagem_url &&
+      oldProduto.imagem_url.startsWith("Produtos/")
+    ) {
+      // Remove a imagem antiga do storage de forma assíncrona (não bloqueia a atualização)
+      void (async () => {
+        try {
+          await supabase.storage
+            .from("SoftShake Images")
+            .remove([oldProduto.imagem_url!]);
+        } catch (err) {
+          console.error("Erro ao remover imagem antiga:", err);
+        }
+      })();
+    }
+  }
+
   const { data, error } = await supabase
     .from("produtos")
     .update(payload as never)
@@ -224,7 +254,14 @@ export async function deleteProduto(id: string | number) {
   const supabase = createServiceRoleClient();
   const produtoId = toId(id);
 
-  // remove vínculos de grupos
+  // Busca a imagem antes de deletar
+  const { data: produto } = await supabase
+    .from("produtos")
+    .select("imagem_url")
+    .eq("id", produtoId)
+    .maybeSingle();
+
+  // Remove vínculos de grupos
   await supabase.from("produto_grupos").delete().eq("produto_id", produtoId);
 
   const { error } = await supabase.from("produtos").delete().eq("id", produtoId);
@@ -232,6 +269,19 @@ export async function deleteProduto(id: string | number) {
   if (error) {
     console.error("Erro ao excluir produto:", error);
     throw new Error("Não foi possível excluir o produto");
+  }
+
+  // Remove a imagem do storage se existir (não bloqueia o delete)
+  if (produto?.imagem_url && produto.imagem_url.startsWith("Produtos/")) {
+    void (async () => {
+      try {
+        await supabase.storage
+          .from("SoftShake Images")
+          .remove([produto.imagem_url!]);
+      } catch (err) {
+        console.error("Erro ao remover imagem do produto deletado:", err);
+      }
+    })();
   }
 
   return { success: true };

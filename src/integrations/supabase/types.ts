@@ -260,6 +260,8 @@ export type Database = {
           observacoes: string | null
           created_at: string
           updated_at: string
+          cupom_codigo: string | null
+          desconto_cupom: number
         }
         Insert: {
           id?: string
@@ -279,6 +281,8 @@ export type Database = {
           observacoes?: string | null
           created_at?: string
           updated_at?: string
+          cupom_codigo?: string | null
+          desconto_cupom?: number
         }
         Update: {
           id?: string
@@ -298,6 +302,8 @@ export type Database = {
           observacoes?: string | null
           created_at?: string
           updated_at?: string
+          cupom_codigo?: string | null
+          desconto_cupom?: number
         }
         Relationships: [
           {
@@ -308,6 +314,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      combo_itens: {
+        Row: { combo_id: number; produto_id: number; quantidade: number }
+        Insert: { combo_id: number; produto_id: number; quantidade?: number }
+        Update: { combo_id?: number; produto_id?: number; quantidade?: number }
+        Relationships: [
+          {
+            foreignKeyName: "combo_itens_combo_id_fkey"
+            columns: ["combo_id"]
+            isOneToOne: false
+            referencedRelation: "combos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "combo_itens_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      combos: {
+        Row: { id: number; nome: string; descricao: string | null; preco: number; imagem_url: string | null; ativa: boolean; created_at: string }
+        Insert: { id?: number; nome: string; descricao?: string | null; preco: number; imagem_url?: string | null; ativa?: boolean; created_at?: string }
+        Update: { id?: number; nome?: string; descricao?: string | null; preco?: number; imagem_url?: string | null; ativa?: boolean; created_at?: string }
+        Relationships: []
+      }
+      cupons: {
+        Row: { id: number; codigo: string; nome: string; tipo: string; valor: number; valor_minimo: number; limite_usos: number | null; usos: number; data_inicio: string; data_fim: string | null; ativo: boolean; created_at: string }
+        Insert: { id?: number; codigo: string; nome: string; tipo: string; valor: number; valor_minimo?: number; limite_usos?: number | null; usos?: number; data_inicio?: string; data_fim?: string | null; ativo?: boolean; created_at?: string }
+        Update: { id?: number; codigo?: string; nome?: string; tipo?: string; valor?: number; valor_minimo?: number; limite_usos?: number | null; usos?: number; data_inicio?: string; data_fim?: string | null; ativo?: boolean; created_at?: string }
+        Relationships: []
       }
       produto_grupos: {
         Row: {
@@ -392,6 +431,47 @@ export type Database = {
             columns: ["tag_id"]
             isOneToOne: false
             referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promocoes_frete_gratis: {
+        Row: {
+          ativa: boolean
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          id: number
+          hora_fim: string
+          hora_inicio: string
+          produto_id: number | null
+        }
+        Insert: {
+          ativa?: boolean
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          id?: number
+          hora_fim?: string
+          hora_inicio?: string
+          produto_id?: number | null
+        }
+        Update: {
+          ativa?: boolean
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          id?: number
+          hora_fim?: string
+          hora_inicio?: string
+          produto_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promocoes_frete_gratis_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
             referencedColumns: ["id"]
           },
         ]

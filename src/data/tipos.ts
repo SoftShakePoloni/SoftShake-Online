@@ -32,6 +32,10 @@ export type Product = {
   price: number;
   /** Preço promocional opcional; se válido e < price, é o cobrado */
   precoPromocional?: number | null;
+  freteGratis?: boolean;
+  freteGratisPrazo?: string;
+  comboId?: number;
+  comboItems?: { productId: number; name: string; quantity: number }[];
   image?: string;
   tag?: Tag;
   optionGroups?: OptionGroup[];

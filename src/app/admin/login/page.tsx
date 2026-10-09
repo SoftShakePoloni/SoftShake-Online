@@ -41,6 +41,27 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 type Phase = "idle" | "loading" | "success" | "error";
 
+function logAdminLoginError(stage: string, error: unknown) {
+  if (error && typeof error === "object") {
+    const value = error as {
+      code?: unknown;
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      status?: unknown;
+    };
+    console.error(`[AdminLogin] ${stage}`, {
+      code: value.code,
+      message: value.message,
+      details: value.details,
+      hint: value.hint,
+      status: value.status,
+    });
+    return;
+  }
+  console.error(`[AdminLogin] ${stage}`, error);
+}
+
 /** Imagem da loja (coluna esquerda) */
 const HERO_IMAGE =
   "https://juzlblaxwybssbyddnwj.supabase.co/storage/v1/object/sign/SoftShake%20Images/Sorveteria/SoftShake_local.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lNmM0NGQwYS0xYmQ0LTRlZmUtYmEzMy02MWIxYmMxYmU2NTYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJTb2Z0U2hha2UgSW1hZ2VzL1NvcnZldGVyaWEvU29mdFNoYWtlX2xvY2FsLnBuZyIsInNjb3BlIjoiZG93bmxvYWQiLCJpYXQiOjE3ODM3OTEyMjEsImV4cCI6MjA5OTE1MTIyMX0.fvSwYnrCDKc06hbeuzHa7qOB87ncNJ3bXsDYMdvDLZk";
@@ -94,17 +115,20 @@ export default function AdminLoginPage() {
     setFormError(null);
 
     try {
+      console.info("[AdminLogin] Iniciando autenticação no Supabase.");
       const { error } = await supabase.auth.signInWithPassword({
         email: data.email.trim().toLowerCase(),
         password: data.password,
       });
 
       if (error) {
+        logAdminLoginError("signInWithPassword falhou", error);
         setPhase("error");
         // Anti-enumeração: mensagem única
         setFormError("E-mail ou senha inválidos.");
         return;
       }
+      console.info("[AdminLogin] Credenciais aceitas pelo Supabase Auth.");
 
       try {
         if (data.remember) {
@@ -117,11 +141,13 @@ export default function AdminLoginPage() {
       }
 
       // Confirma staff na tabela perfis. Sem linha = sem painel.
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const user = userData.user;
+
+      if (userError) logAdminLoginError("getUser falhou", userError);
 
       if (!user) {
+        console.error("[AdminLogin] Auth não retornou usuário após autenticação.");
         setPhase("error");
         setFormError("E-mail ou senha inválidos.");
         return;
@@ -137,6 +163,7 @@ export default function AdminLoginPage() {
         .maybeSingle();
 
       if (full.error) {
+        logAdminLoginError("Consulta de perfis (role, acessos) falhou; tentando fallback só com role", full.error);
         const basic = await supabase
           .from("perfis")
           .select("role")
@@ -144,9 +171,20 @@ export default function AdminLoginPage() {
           .maybeSingle();
         if (!basic.error && basic.data) {
           perfil = { role: basic.data.role, acessos: null };
+          console.info("[AdminLogin] Fallback de perfis funcionou.", {
+            role: basic.data.role,
+          });
+        } else if (basic.error) {
+          logAdminLoginError("Consulta de fallback de perfis (role) falhou", basic.error);
+        } else {
+          console.error("[AdminLogin] Fallback de perfis não encontrou uma linha para o usuário autenticado.");
         }
       } else {
         perfil = full.data;
+        console.info("[AdminLogin] Consulta de perfil funcionou.", {
+          perfilEncontrado: Boolean(full.data),
+          role: full.data?.role ?? null,
+        });
       }
 
       if (!perfil) {
@@ -161,12 +199,14 @@ export default function AdminLoginPage() {
       const role = resolveAdminRole(perfil.role);
       const acessos = resolveAcessos(role, perfil.acessos ?? null);
       const dest = firstAllowedAdminPath(acessos);
+      console.info("[AdminLogin] Perfil autorizado; redirecionando para", dest);
 
       setPhase("success");
       await new Promise((r) => setTimeout(r, 1100));
       router.push(dest);
       router.refresh();
-    } catch {
+    } catch (error) {
+      logAdminLoginError("Erro inesperado no fluxo de login", error);
       setPhase("error");
       setFormError("E-mail ou senha inválidos.");
     }
