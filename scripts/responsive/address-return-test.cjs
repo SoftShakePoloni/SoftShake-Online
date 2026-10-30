@@ -2,7 +2,7 @@ const fs=require('fs'),path=require('path'),ts=require('typescript'),assert=requ
 const values=new Map(),storage={getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
 const location={href:''};let pushed='';
 const router={push:value=>pushed=value,refresh(){},back(){}};
-function load(file,states,imports){let index=0;const native=createRequire(path.resolve(file)),react={...native('react'),useState:initial=>[states(index++,initial),()=>{}],useEffect(){}};
+function load(file,states,imports){let index=0;const native=createRequire(path.resolve(file)),react={...native('react'),useState:initial=>[states(index++,initial),()=>{}],useEffect(){},useRef:initial=>({current:initial})};
  const mocks={'react':react,'next/navigation':{useRouter:()=>router},'sonner':{toast:{success(){},error(){},info(){}}},...imports};
  const req=name=>mocks[name]??(name.startsWith('@/components/ui/')?new Proxy({},{get:(_,key)=>String(key)}):name.startsWith('@/lib/utils/pedido')?{resolveSelectionsFromProduct:()=>[]}:native(name));
  const mod={exports:{}};

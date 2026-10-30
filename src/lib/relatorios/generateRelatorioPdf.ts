@@ -485,13 +485,4 @@ export async function generateRelatorioPdf({
     filename: `SoftShake_Relatorio_${reportDateKey(data.range.from)}_a_${reportDateKey(data.range.to)}.pdf`,
   };
 }
-export function downloadPdfBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+export {downloadPdfBlob} from "./download";

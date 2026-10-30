@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import {
   MapPin,
   Package,
@@ -427,6 +427,16 @@ export function PedidoDetailPanel({
           {/* Divider */}
           <div className="h-px bg-[#F3F4F6]" aria-hidden="true" />
 
+          {pedido.cupom_codigo && (
+            <section aria-label="Cupom utilizado" className="space-y-2 border-b border-border pb-4 text-sm">
+              <p className="font-medium text-primary">Cupom {pedido.cupom_codigo}</p>
+              <dl className="space-y-1">
+                <div className="flex justify-between gap-3"><dt>Subtotal antes do desconto</dt><dd>{formatCurrency(pedido.subtotal)}</dd></div>
+                <div className="flex justify-between gap-3 text-primary"><dt>Desconto aplicado</dt><dd>− {formatCurrency(Number(pedido.desconto_cupom || 0))}</dd></div>
+                <div className="flex justify-between gap-3 font-semibold"><dt>Total final</dt><dd>{formatCurrency(pedido.total)}</dd></div>
+              </dl>
+            </section>
+          )}
           {/* Total + pagamento â€” uma Ãºnica linha */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-[#6B7280]">

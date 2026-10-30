@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -239,7 +239,6 @@ export function StoreStatusCard({
                   fill
                   className="object-cover"
                   sizes="40px"
-                  unoptimized
                 />
               ) : (
                 <span className="absolute inset-0 flex items-center justify-center text-white font-bold text-sm">
@@ -320,7 +319,6 @@ export function StoreStatusCard({
                         fill
                         className="object-cover"
                         sizes="48px"
-                        unoptimized
                       />
                     ) : (
                       <span className="absolute inset-0 flex items-center justify-center text-white font-bold">

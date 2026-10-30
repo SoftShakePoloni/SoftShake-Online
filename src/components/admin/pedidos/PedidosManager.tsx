@@ -92,6 +92,8 @@ function mapPedido(
       const n = Number(p.troco_para);
       return Number.isFinite(n) ? n : undefined;
     })(),
+    cupom_codigo: typeof p.cupom_codigo === "string" ? p.cupom_codigo : null,
+    desconto_cupom: Number(p.desconto_cupom || 0),
     subtotal: Number(p.subtotal || 0),
     taxa_entrega: Number(p.taxa_entrega || 0),
     total: Number(p.total || 0),

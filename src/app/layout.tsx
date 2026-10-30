@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles.css";
 import { Providers } from "./providers";
-import { AuthProvider } from "@/context/AuthContext";
 import { RouteConditionalLayout } from "@/components/layout/RouteConditionalLayout";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -17,9 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR">
       <body className={inter.className}>
         <Providers>
-          <AuthProvider>
             <RouteConditionalLayout>{children}</RouteConditionalLayout>
-          </AuthProvider>
         </Providers>
       </body>
     </html>

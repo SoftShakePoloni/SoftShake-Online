@@ -1,8 +1,8 @@
 "use client";
 
 import { ShoppingBag, Trash2, X, Clock, ChevronRight, User, Phone, MapPin, CreditCard, Banknote, Home, Truck } from "lucide-react";
-import { useState, useEffect } from "react";
-import Image from "next/image";
+import { useState, useEffect, useRef } from "react";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useCarrinho, resumoOpcoes } from "@/context/CarrinhoContext";
 import { resolveSelectionsFromProduct } from "@/lib/utils/pedido";
@@ -21,7 +21,7 @@ type Props = {
 };
 
 export function ModalSacola({ open, onOpenChange }: Props) {
-  const { itens, removerItem, limpar, subtotal } = useCarrinho();
+  const { itens, removerItem, limpar, subtotal, cupomAplicado, setCupomAplicado } = useCarrinho();
   const { loja } = useLoja();
   const { cliente, session, loading } = useAuth();
   const [step, setStep] = useState<'cart' | 'info' | 'payment'>('cart');
@@ -37,7 +37,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const [trocoPara, setTrocoPara] = useState("");
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [codigoCupom, setCodigoCupom] = useState("");
-  const [cupomAplicado, setCupomAplicado] = useState<{ codigo: string; nome: string; desconto: number } | null>(null);
+  const cupomRequest = useRef(0);
   const [validandoCupom, setValidandoCupom] = useState(false);
   const [erroCupom, setErroCupom] = useState("");
 
@@ -48,7 +48,10 @@ export function ModalSacola({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     const code = cupomAplicado?.codigo;
-    if (!code) return;
+    if (!code || !open) { setValidandoCupom(false); return; }
+    const request = ++cupomRequest.current;
+    setValidandoCupom(true);
+    setErroCupom("");
     let active = true;
     void fetch("/api/cupons/validar", {
       method: "POST",
@@ -56,7 +59,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       body: JSON.stringify({ codigo: code, subtotal }),
     }).then(async (resposta) => {
       const dados = await resposta.json();
-      if (!active) return;
+      if (!active || request !== cupomRequest.current) return;
       if (!resposta.ok) {
         setCupomAplicado(null);
         setCodigoCupom("");
@@ -65,12 +68,16 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       }
       setCupomAplicado(dados.cupom);
     }).catch(() => {
-      if (active) setErroCupom("Não foi possível atualizar o desconto do cupom.");
-    });
+      if (active && request === cupomRequest.current) {
+        setErroCupom("Não foi possível atualizar o desconto. Tente aplicar o cupom novamente.");
+        setCupomAplicado(null);
+      }
+    }).finally(() => { if (active && request === cupomRequest.current) setValidandoCupom(false); });
     return () => { active = false; };
-  }, [subtotal, cupomAplicado?.codigo]);
+  }, [subtotal, cupomAplicado?.codigo, open, setCupomAplicado]);
 
   const aplicarCupom = async () => {
+    const request = ++cupomRequest.current;
     setValidandoCupom(true);
     setErroCupom("");
     try {
@@ -80,18 +87,22 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         body: JSON.stringify({ codigo: codigoCupom, subtotal }),
       });
       const dados = await resposta.json();
+      if (request !== cupomRequest.current) return;
       if (!resposta.ok) throw new Error(dados.erro || "Não foi possível validar o cupom.");
       setCupomAplicado(dados.cupom);
       setCodigoCupom(dados.cupom.codigo);
     } catch (error) {
+      if (request !== cupomRequest.current) return;
       setCupomAplicado(null);
       setErroCupom(error instanceof Error ? error.message : "Cupom inválido.");
     } finally {
-      setValidandoCupom(false);
+      if (request === cupomRequest.current) setValidandoCupom(false);
     }
   };
 
   const removerCupom = () => {
+    cupomRequest.current++;
+    setValidandoCupom(false);
     setCupomAplicado(null);
     setCodigoCupom("");
     setErroCupom("");
@@ -333,7 +344,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       const { pedido } = await resposta.json();
       
       toast.success('Pedido realizado com sucesso!', {
-        description: `Pedido #${pedido.id.slice(0, 8)} criado`,
+        description: `Pedido #${pedido.id.slice(0, 8)} · Total confirmado: ${formatBRL(Number(pedido.total))}`,
       });
       
       limpar();
@@ -423,7 +434,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                       return (
                         <li key={item.uid} className="flex gap-3 bg-card px-5 py-4">
                           {item.produto.image ? (
-                            <Image
+                            <Image preset="thumbnail"
                               src={item.produto.image}
                               alt={item.produto.name}
                               width={64}
@@ -458,7 +469,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                               </p>
                             )}
                             <button
-                              onClick={() => { removerItem(item.uid); removerCupom(); }}
+                              onClick={() => removerItem(item.uid)}
                               className="mt-1.5 flex w-fit items-center gap-1 text-xs font-semibold text-destructive hover:opacity-75"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -474,8 +485,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                   <div className="mx-5 mb-3 rounded-xl border border-border bg-card p-3.5">
                     <Label htmlFor="cupom-pedido" className="text-xs font-semibold">Cupom de desconto</Label>
                     {cupomAplicado ? (
-                      <div className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        <span className="min-w-0 truncate"><strong>{cupomAplicado.codigo}</strong> aplicado · {formatBRL(descontoCupom)} de desconto</span>
+                      <div role="status" className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <span className="min-w-0 truncate"><strong>{cupomAplicado.codigo}</strong> aplicado · você economizou {formatBRL(descontoCupom)}</span>
                         <button type="button" onClick={removerCupom} className="shrink-0 text-xs font-semibold underline">Remover</button>
                       </div>
                     ) : (
@@ -483,9 +494,12 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                         <Input
                           id="cupom-pedido"
                           value={codigoCupom}
-                          onChange={(event) => { setCodigoCupom(event.target.value.toUpperCase()); setErroCupom(""); }}
-                          placeholder="Digite seu código"
+                          onChange={(event) => { cupomRequest.current++; setValidandoCupom(false); setCodigoCupom(event.target.value.toUpperCase()); setErroCupom(""); }}
+                          placeholder="Digite seu código…"
                           autoCapitalize="characters"
+                          spellCheck={false}
+                          autoComplete="off"
+                          name="cupom"
                           className="h-10 min-w-0 uppercase"
                         />
                         <button
@@ -688,6 +702,15 @@ export function ModalSacola({ open, onOpenChange }: Props) {
           ) : (
             // TELA 3: Pagamento
             <div className="p-5 py-6 space-y-5">
+              {cupomAplicado && <section aria-label="Cupom aplicado" className="border-b border-border pb-4">
+                <p className="text-sm font-semibold text-primary">Cupom {cupomAplicado.codigo}</p>
+                <p className="mt-1 text-sm text-muted-foreground">Você economizou {formatBRL(descontoCupom)}</p>
+                <div className="mt-2 flex gap-4">
+                  <button type="button" onClick={() => setStep('cart')} className="min-h-11 text-sm font-medium text-primary underline">Alterar cupom</button>
+                  <button type="button" onClick={removerCupom} className="min-h-11 text-sm text-muted-foreground underline">Remover</button>
+                </div>
+              </section>}
+              {erroCupom && <p role="alert" className="text-sm text-destructive">{erroCupom}</p>}
               <div className="space-y-4">
                 {/* Meio de Pagamento */}
                 <div className="space-y-2">
@@ -809,7 +832,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
             {step === 'cart' ? (
               <button 
                 onClick={handleConfirmarInfo}
-                disabled={loading || !lojaAberta}
+                disabled={loading || validandoCupom || !lojaAberta}
                 className="mt-1 w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading
@@ -838,7 +861,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               <div className="space-y-2 mt-2">
                 <button 
                   onClick={handleFinalizarPedido}
-                  disabled={enviandoPedido || !lojaAberta}
+                  disabled={enviandoPedido || validandoCupom || !lojaAberta}
                   className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {enviandoPedido

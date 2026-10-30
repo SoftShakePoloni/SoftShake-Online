@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import type { Product } from "@/data/tipos";
 import {
   productDiscountPercent,

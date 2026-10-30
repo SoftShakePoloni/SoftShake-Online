@@ -10,7 +10,11 @@ export type ItemCarrinho = {
   total: number;
 };
 
+export type CupomCarrinho = { codigo: string; nome: string; desconto: number };
+
 type CarrinhoContextType = {
+  cupomAplicado: CupomCarrinho | null;
+  setCupomAplicado: (cupom: CupomCarrinho | null) => void;
   itens: ItemCarrinho[];
   adicionarItem: (item: Omit<ItemCarrinho, "uid">) => void;
   removerItem: (uid: string) => void;
@@ -25,11 +29,17 @@ const STORAGE_KEY = 'carrinho-itens';
 
 export function CarrinhoProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
+  const [cupomAplicado, setCupomAplicado] = useState<CupomCarrinho | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   // Carrega do localStorage na montagem
   useEffect(() => {
     try {
+      const savedCoupon = sessionStorage.getItem("sacola-cupom");
+      if (savedCoupon) {
+        const coupon = JSON.parse(savedCoupon);
+        if (typeof coupon.codigo === "string" && typeof coupon.desconto === "number") setCupomAplicado(coupon);
+      }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -52,6 +62,15 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
     }
   }, [itens, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      if (cupomAplicado && itens.length) sessionStorage.setItem("sacola-cupom", JSON.stringify(cupomAplicado));
+      else sessionStorage.removeItem("sacola-cupom");
+    } catch { /* Cart remains usable when storage is unavailable. */ }
+    if (!itens.length && cupomAplicado) setCupomAplicado(null);
+  }, [cupomAplicado, hydrated, itens.length]);
+
   const adicionarItem = (item: Omit<ItemCarrinho, "uid">) => {
     const uid = `${item.produto.id}-${Date.now()}`;
     setItens((prev) => [...prev, { ...item, uid }]);
@@ -61,6 +80,7 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
   
   const limpar = () => { 
     setItens([]);
+    setCupomAplicado(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
@@ -69,7 +89,7 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
 
   return (
     <CarrinhoContext.Provider value={{
-      itens, adicionarItem, removerItem, limpar,
+      itens, adicionarItem, removerItem, limpar, cupomAplicado, setCupomAplicado,
       totalItens, subtotal,
     }}>
       {children}

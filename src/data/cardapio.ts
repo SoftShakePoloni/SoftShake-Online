@@ -7,40 +7,23 @@ import { loadComboOptionGroups, resolveComboChoices, type ComboOptionsConfig } f
 
 export async function fetchMenu(): Promise<Category[]> {
   const supabase = createServerClient();
-  const { data: categorias, error: catError } = await supabase
-    .from("categorias")
-    .select("id, nome, ordem")
-    .order("ordem", { ascending: true });
-  if (catError) { console.error("[fetchMenu] erro categorias:", catError); throw catError; }
-
-  const { data: produtos, error: prodError } = await supabase
-    .from("produtos")
-    .select("id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id")
-    .order("ordem", { ascending: true });
-  if (prodError) { console.error("[fetchMenu] erro produtos:", prodError); throw prodError; }
-
-  const { data: combos } = await supabase
-    .from("combos")
-    .select("*")
-    .eq("ativa", true)
-    .order("created_at", { ascending: false });
-  const comboLinksResult = combos?.length
-    ? await supabase.from("combo_itens").select("combo_id, produto_id, quantidade").in("combo_id", combos.map((combo) => combo.id))
-    : null;
-  const comboLinks = comboLinksResult?.data ?? [];
-
   const agoraBrasil = getSaoPauloDateTime();
-  const { data: campanhasFrete } = await supabase
-    .from("promocoes_frete_gratis")
-    .select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim")
-    .eq("ativa", true)
-    .lte("data_inicio", agoraBrasil.date)
-    .gte("data_fim", agoraBrasil.date);
-  const campanhasAtivas = (campanhasFrete ?? []).filter((campaign) =>
-    isFreteCampaignActive(campaign, agoraBrasil)
-  );
-
-  const { data: tags } = await supabase.from("tags").select("id, nome, cor_fundo, cor_texto");
+  const [categoriesResult,productsResult,combosResult,freightResult,tagsResult] = await Promise.all([
+    supabase.from("categorias").select("id, nome, ordem").order("ordem", {ascending:true}),
+    supabase.from("produtos").select("id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id").order("ordem", {ascending:true}),
+    supabase.from("combos").select("*").eq("ativa",true).order("created_at",{ascending:false}),
+    supabase.from("promocoes_frete_gratis").select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim").eq("ativa",true).lte("data_inicio",agoraBrasil.date).gte("data_fim",agoraBrasil.date),
+    supabase.from("tags").select("id, nome, cor_fundo, cor_texto"),
+  ]);
+  const {data:categorias,error:catError}=categoriesResult;
+  const {data:produtos,error:prodError}=productsResult;
+  if(catError)throw catError;
+  if(prodError)throw prodError;
+  const combos=combosResult.data;
+  const comboLinksResult=combos?.length ? await supabase.from("combo_itens").select("combo_id, produto_id, quantidade").in("combo_id",combos.map(combo=>combo.id)) : null;
+  const comboLinks=comboLinksResult?.data??[];
+  const campanhasAtivas=(freightResult.data??[]).filter(campaign=>isFreteCampaignActive(campaign,agoraBrasil));
+  const tags=tagsResult.data;
   const tagsMap = new Map<number, Tag>((tags ?? []).map((t) => [t.id, t as Tag]));
 
   const menuCategories = (categorias ?? []).map((cat) => {

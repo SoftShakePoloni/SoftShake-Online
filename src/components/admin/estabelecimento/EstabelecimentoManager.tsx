@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { toast } from "sonner";
 import { Loader2, Upload, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -435,6 +435,7 @@ export function EstabelecimentoManager({
                       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-[#E5E7EB] bg-[#F9FAFB]">
                         {config.logo_url ? (
                           <Image
+                            sizes="64px"
                             src={config.logo_url}
                             alt="Logo"
                             fill
@@ -502,6 +503,7 @@ export function EstabelecimentoManager({
                     <div className="relative h-20 w-full overflow-hidden rounded-md border border-[#E5E7EB] bg-[#F9FAFB]">
                       {config.banner_url ? (
                         <Image
+                          sizes="(max-width: 460px) calc(100vw - 64px), 420px"
                           src={config.banner_url}
                           alt="Banner"
                           fill

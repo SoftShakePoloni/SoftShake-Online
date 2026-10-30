@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 
 import {
   GripVertical,

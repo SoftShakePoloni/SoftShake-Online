@@ -49,6 +49,8 @@ export interface Pedido {
   meio_pagamento: string;
   /** Pode vir string do Postgres/JSONB; sempre normalize com Number() na UI */
   troco_para?: number | string | null;
+  cupom_codigo?: string | null;
+  desconto_cupom?: number | string | null;
   subtotal: number;
   taxa_entrega: number;
   total: number;

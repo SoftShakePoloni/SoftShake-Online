@@ -2,7 +2,7 @@
 
 import { Produto } from "@/types/produto";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Package, ImageOff, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 

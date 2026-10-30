@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
+import { PublicDataContext } from "@/context/PublicDataContext";
 
 export type ConfiguracoesLoja = {
   id: number;
@@ -37,6 +44,7 @@ let store = SERVER_SNAPSHOT;
 const listeners = new Set<() => void>();
 let bootstrapped = false;
 let inFlight: Promise<void> | null = null;
+let initialAt = 0;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -52,8 +60,11 @@ async function loadLoja() {
   inFlight = (async () => {
     try {
       const response = await fetch("/api/loja", { cache: "no-store" });
-      if (!response.ok) throw new Error("Não foi possível carregar as informações da loja.");
-      const { loja } = (await response.json()) as { loja: ConfiguracoesLoja | null };
+      if (!response.ok)
+        throw new Error("Não foi possível carregar as informações da loja.");
+      const { loja } = (await response.json()) as {
+        loja: ConfiguracoesLoja | null;
+      };
       setStore({ loja, isLoading: false });
     } catch {
       setStore({ isLoading: false });
@@ -67,7 +78,7 @@ async function loadLoja() {
 function ensureLoaded() {
   if (bootstrapped) return;
   bootstrapped = true;
-  void loadLoja();
+  if (store.isLoading) void loadLoja();
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void loadLoja();
   });
@@ -84,10 +95,38 @@ function subscribe(listener: () => void) {
 }
 
 export function useLoja() {
-  useEffect(() => {
-    ensureLoaded();
-  }, []);
+  const initial = useContext(PublicDataContext);
+  const initialSnapshot = useMemo(
+    () =>
+      initial?.loja !== undefined
+        ? { loja: initial.loja, isLoading: false }
+        : SERVER_SNAPSHOT,
+    [initial],
+  );
+  const primeInitialLoja = useCallback(() => {
+    if (initial?.loja !== undefined && initial.generatedAt > initialAt) {
+      initialAt = initial.generatedAt;
+      store = { loja: initial.loja, isLoading: false };
+      emit();
+    }
+  }, [initial]);
+  const subscribeWithInitial = useCallback(
+    (listener: () => void) => {
+      primeInitialLoja();
+      return subscribe(listener);
+    },
+    [primeInitialLoja],
+  );
 
-  const snapshot = useSyncExternalStore(subscribe, () => store, () => SERVER_SNAPSHOT);
+  useEffect(() => {
+    primeInitialLoja();
+    ensureLoaded();
+  }, [primeInitialLoja]);
+
+  const snapshot = useSyncExternalStore(
+    subscribeWithInitial,
+    () => store,
+    () => initialSnapshot,
+  );
   return { loja: snapshot.loja, isLoading: snapshot.isLoading, live: false };
 }

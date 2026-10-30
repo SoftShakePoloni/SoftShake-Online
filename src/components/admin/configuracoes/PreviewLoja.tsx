@@ -1,7 +1,7 @@
 "use client";
 
 import { ConfiguracaoLoja } from "@/types/configuracoes";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Store, Clock, Truck, DollarSign, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -39,6 +39,7 @@ export function PreviewLoja({ config }: PreviewLojaProps) {
             {config.banner_url ? (
               <div className="relative w-full h-32">
                 <Image
+                  sizes="(max-width: 767px) calc(100vw - 80px), 400px"
                   src={config.banner_url}
                   alt="Banner"
                   fill
@@ -55,6 +56,7 @@ export function PreviewLoja({ config }: PreviewLojaProps) {
               {config.logo_url ? (
                 <div className="absolute -top-10 left-4 w-20 h-20 rounded-full border-4 border-white overflow-hidden bg-white shadow-lg">
                   <Image
+                    sizes="80px"
                     src={config.logo_url}
                     alt="Logo"
                     fill

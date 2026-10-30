@@ -24,7 +24,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 
 interface ClienteDetailPanelProps {
   cliente: Cliente;

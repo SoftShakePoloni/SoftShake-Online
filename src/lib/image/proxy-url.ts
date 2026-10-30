@@ -3,6 +3,15 @@ const STORAGE_BUCKETS = new Set(["SoftShake Images", "images"]);
 /** Replaces a Supabase storage URL or path with an app-owned image endpoint. */
 export function imageProxyUrl(value: string | null | undefined): string | null {
   if (!value) return null;
+  // Already stable, local, or client-only: never wrap these a second time.
+  if (value.startsWith("/api/imagem/arquivo?") || /^(?:data:|blob:)/i.test(value)) return value;
+  if (value.startsWith("/") && !value.startsWith("/api/imagem?")) return value;
+  if (value.startsWith("/api/imagem?")) {
+    const query = new URLSearchParams(value.split("?")[1]);
+    const path = query.get("path");
+    if (!path) return value;
+    return `/api/imagem/arquivo?${new URLSearchParams({ bucket: "SoftShake Images", path })}`;
+  }
 
   let bucket = "SoftShake Images";
   let path = value;

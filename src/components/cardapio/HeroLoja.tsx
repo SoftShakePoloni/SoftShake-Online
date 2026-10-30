@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { useModalHistory } from "@/hooks/useModalHistory";
+import { StorageImage as Image } from "@/components/ui/storage-image";
+import dynamic from "next/dynamic";
 import { Bike, ChevronRight, MapPin } from "lucide-react";
 import { useLoja } from "@/hooks/useLoja";
 import { formatBRL } from "@/data/tipos";
-import { ModalInfoLoja } from "./ModalInfoLoja";
+const ModalInfoLoja=dynamic(()=>import("./ModalInfoLoja").then(module=>module.ModalInfoLoja));
 
 export function StoreHero() {
   const { loja, isLoading } = useLoja();
   const [infoOpen, setInfoOpen] = useState(false);
+  useModalHistory(infoOpen, setInfoOpen);
   const nome = loja?.nome ?? "SoftShake";
   const localizacao = [loja?.cidade, loja?.estado].filter(Boolean).join(", ");
   const estaAberto = isLoading ? true : (loja?.esta_aberto ?? false);
@@ -32,11 +35,12 @@ export function StoreHero() {
         <div className="relative h-40 overflow-hidden rounded-t-[26px] bg-primary/15 sm:h-52 md:h-64">
           {banner ? (
             <Image
+              preset="storeBanner"
               src={banner}
               alt={`Capa de ${nome}`}
               fill
               priority
-              sizes="(max-width: 768px) 100vw, 1152px"
+              fetchPriority="high"
               className="object-cover"
             />
           ) : (
@@ -52,6 +56,7 @@ export function StoreHero() {
           <div className="absolute left-1/2 top-0 flex h-[68px] w-[68px] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden rounded-full border-[3px] border-card bg-card shadow-md sm:h-[76px] sm:w-[76px]">
             {logo ? (
               <Image
+                preset="storeLogo"
                 src={logo}
                 alt={`Logo de ${nome}`}
                 fill
@@ -171,7 +176,7 @@ export function StoreHero() {
         )}
       </section>
 
-      <ModalInfoLoja open={infoOpen} onOpenChange={setInfoOpen} />
+      {infoOpen && <ModalInfoLoja open={infoOpen} onOpenChange={setInfoOpen} />}
     </>
   );
 }

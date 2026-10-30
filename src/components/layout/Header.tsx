@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Home, Tag, ShoppingBag, User } from "lucide-react";
 import type { ComponentType } from "react";
 import { usePromocoesCount } from "@/hooks/useCardapio";
@@ -20,6 +20,7 @@ const items: {
 
 export function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { count: promosCount } = usePromocoesCount();
 
   return (
@@ -35,6 +36,9 @@ export function Header() {
             <Link
               key={item.to}
               href={item.to}
+              prefetch={item.to === '/' || item.to === '/promocoes' ? undefined : false}
+              onMouseEnter={()=>router.prefetch(item.to)}
+              onFocus={()=>router.prefetch(item.to)}
               className={cn(
                 "relative flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
                 active

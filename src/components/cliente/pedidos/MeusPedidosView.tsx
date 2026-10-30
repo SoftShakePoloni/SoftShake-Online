@@ -1,5 +1,7 @@
 "use client";
 
+import { StorageImage as Image } from "@/components/ui/storage-image";
+
 import { useMemo } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
@@ -60,7 +62,7 @@ function PedidoCard({
         <div className="flex items-center gap-3">
           <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#F1EAF8] text-[#432078]">
             {primeiroItem?.produto?.image ? (
-              <img
+              <Image
                 src={primeiroItem.produto.image}
                 alt={primeiroItem.produto.name || ""}
                 width={56}

@@ -1,4 +1,5 @@
 import type { Tag } from "@/data/tipos";
+import {readableTagForeground} from "@/lib/accessibility/contrast";
 import {
   BadgePercent,
   Crown,
@@ -23,7 +24,7 @@ export function TagBadge({ tag }: { tag: Tag }) {
   return (
     <span
       className="inline-flex w-fit items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold leading-none"
-      style={{ backgroundColor: tag.cor_fundo, color: tag.cor_texto }}
+      style={{ backgroundColor: tag.cor_fundo, color: readableTagForeground(tag.cor_fundo,tag.cor_texto) }}
     >
       <Icon aria-hidden="true" className="h-3 w-3 shrink-0" strokeWidth={2.4} />
       {tag.nome}

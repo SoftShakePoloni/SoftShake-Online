@@ -1,5 +1,7 @@
 "use client";
 
+import { StorageImage as Image } from "@/components/ui/storage-image";
+
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -199,7 +201,7 @@ export function DetalhePedidoView({
                 >
                   <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F1EAF8] text-[#5B2C98]">
                     {item.produto?.image ? (
-                      <img
+                      <Image
                         src={item.produto.image}
                         alt={item.produto.name || ""}
                         width={56}
