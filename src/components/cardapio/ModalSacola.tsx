@@ -259,6 +259,12 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     setStep('payment');
   };
 
+  const adicionarEndereco = () => {
+    sessionStorage.setItem('reopenCart', 'true');
+    sessionStorage.setItem('cartStep', 'info');
+    window.location.href = '/perfil/enderecos/novo';
+  };
+
   const lojaAberta = Boolean(loja?.esta_aberto);
 
   const handleFinalizarPedido = async () => {
@@ -295,6 +301,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
             uid: item.uid,
             produto: {
               id: item.produto.id,
+              comboId: item.produto.comboId,
               name: item.produto.name,
               // Preço unitário cobrado (promo se ativa)
               price: getProductUnitPrice(item.produto),
@@ -348,12 +355,12 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const enderecoAtual = enderecosDisponiveis.find(e => e.id === enderecoSelecionado);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
-      <DialogContent className="flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92vh] md:max-h-[92vh] md:rounded-2xl">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent overlayClassName="z-[80] max-md:bottom-0" className="z-[90] flex h-dvh max-h-dvh w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92dvh] md:max-h-[92dvh] md:rounded-2xl">
         <DialogTitle className="sr-only">Sacola</DialogTitle>
 
         {/* Header */}
-        <div className="flex items-center justify-between bg-card px-5 pb-4 pt-10 shadow-sm sm:pt-8">
+        <div className="shrink-0 flex items-center justify-between bg-card px-5 pb-4 pt-10 shadow-sm sm:pt-8">
           <div className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-primary" />
             <h2 className="text-lg font-bold text-foreground">
@@ -376,7 +383,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
 
         {/* Tempo de entrega */}
         {loja && (loja.tempo_entrega_min || loja.tempo_entrega_max) && (
-          <div className="border-b border-border bg-muted/40 px-5 py-3">
+          <div className="shrink-0 border-b border-border bg-muted/40 px-5 py-3">
             <button className="flex w-full items-center justify-between text-sm text-muted-foreground hover:text-foreground">
               <span className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" />
@@ -389,7 +396,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto bg-background">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background">
           {step === 'cart' ? (
             // TELA 1: Carrinho
             <>
@@ -657,7 +664,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                             ))}
                             <button
                               type="button"
-                              onClick={() => window.location.href = '/perfil/enderecos/novo'}
+                              onClick={adicionarEndereco}
                               className="w-full text-center p-3 rounded-lg border-2 border-dashed border-border hover:border-primary text-sm text-muted-foreground hover:text-primary transition"
                             >
                               + Adicionar novo endereço
@@ -666,7 +673,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => window.location.href = '/perfil/enderecos/novo'}
+                            onClick={adicionarEndereco}
                             className="w-full text-center p-4 rounded-lg border-2 border-dashed border-primary text-sm text-primary hover:bg-primary/5 transition"
                           >
                             + Adicionar endereço
@@ -771,7 +778,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
 
         {/* Footer resumo + botões */}
         {itens.length > 0 && (
-          <div className="border-t border-border bg-card px-5 pt-4 pb-5 space-y-2">
+          <div className="shrink-0 border-t border-border bg-card px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>
               <span className="font-medium">{formatBRL(subtotal)}</span>

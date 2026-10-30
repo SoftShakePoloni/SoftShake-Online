@@ -20,6 +20,7 @@ import { sanitizePhone, sanitizeText } from "@/lib/security/sanitize";
 import { securityLog } from "@/lib/security/logger";
 import { getSaoPauloDateTime, isFreteCampaignActive } from "@/lib/promocoes/frete";
 import { validarCupom } from "@/lib/cupons";
+import { loadComboOptionGroups, resolveComboOrder, type ComboOptionsConfig } from "@/lib/combos/options";
 
 const criarPedidoSchema = z.object({
   cliente_nome: z
@@ -152,37 +153,39 @@ export const POST = withApiGuard(
         }
       }
 
-      const comboIds = [...new Set(data.itens.flatMap((raw) => {
-        const item = raw as { produto?: { comboId?: unknown; id?: unknown }; qty?: unknown; total?: unknown };
-        const comboId = Number(item.produto?.comboId);
-        return Number.isInteger(comboId) && comboId > 0 ? [comboId] : [];
-      }))];
-      let comboLinks: { combo_id: number; produto_id: number }[] = [];
+      const getComboId = (raw: Record<string, unknown>) => {
+        const product = raw.produto as {id?: unknown; comboId?: unknown} | undefined;
+        const match = typeof product?.id === 'string' ? /^combo-(\d+)$/.exec(product.id) : null;
+        return match ? Number(match[1]) : Number(product?.comboId) || 0;
+      };
+      const comboIds = [...new Set(data.itens.map(getComboId).filter(id => id > 0))];
+      let comboLinks: { combo_id: number; produto_id: number; quantidade: number }[] = [];
       if (comboIds.length) {
-        const { data: activeCombos, error: comboError } = await supabase
-          .from("combos")
-          .select("id, preco, ativa")
-          .in("id", comboIds);
-        if (comboError) return apiServerError(comboError);
-        if ((activeCombos ?? []).length !== comboIds.length || activeCombos?.some((combo) => !combo.ativa)) {
-          return apiError("Um dos combos não está mais disponível. Atualize a sacola.", 409, { codigo: "COMBO_UNAVAILABLE" });
-        }
-        const comboById = new Map((activeCombos ?? []).map((combo) => [combo.id, Number(combo.preco)]));
-        for (const raw of data.itens) {
-          const item = raw as { produto?: { comboId?: unknown }; qty?: unknown; total?: unknown };
-          const comboId = Number(item.produto?.comboId);
-          if (!comboById.has(comboId)) continue;
-          const expectedTotal = (comboById.get(comboId) ?? 0) * Math.max(1, Number(item.qty) || 1);
-          if (Math.abs(Number(item.total) - expectedTotal) > 0.01) {
-            return apiError("O preço de um combo foi atualizado. Confira a sacola e tente novamente.", 409, { codigo: "COMBO_UPDATED" });
-          }
-        }
-        const { data: links, error: linksError } = await supabase
-          .from("combo_itens")
-          .select("combo_id, produto_id")
-          .in("combo_id", comboIds);
-        if (linksError) return apiServerError(linksError);
+        const [{data: activeCombos, error: comboError}, {data: links, error: linksError}] = await Promise.all([
+          supabase.from("combos").select("*").in("id", comboIds),
+          supabase.from("combo_itens").select("combo_id, produto_id, quantidade").in("combo_id", comboIds),
+        ]);
+        if (comboError || linksError) return apiServerError(comboError || linksError);
+        if ((activeCombos ?? []).length !== comboIds.length || activeCombos?.some(combo => !combo.ativa)) return apiError("Um dos combos não está mais disponível. Atualize a sacola.", 409, {codigo: "COMBO_UNAVAILABLE"});
         comboLinks = links ?? [];
+        try {
+          const configurations = new Map(await Promise.all((activeCombos ?? []).map(async combo => {
+            const items = comboLinks.filter(link => link.combo_id === combo.id);
+            if (items.length < 2) throw new Error("Um combo não está mais disponível.");
+            return [combo.id, {combo, groups: await loadComboOptionGroups(supabase, items)}] as const;
+          })));
+          for (const item of data.itens) {
+            const comboId = getComboId(item);
+            if (!comboId) continue;
+            const {combo, groups} = configurations.get(comboId)!;
+            const resolved = resolveComboOrder(groups, combo.opcoes_config as ComboOptionsConfig | null, item.selections, item.qty, item.total, Number(combo.preco));
+            Object.assign(item, resolved, {produto: {...(item.produto as object), id: 'combo-' + comboId, comboId, name: combo.nome, price: Number(combo.preco)}});
+          }
+          const itemsTotal = data.itens.reduce((sum, item) => sum + Number(item.total), 0);
+          if (!Number.isFinite(itemsTotal) || Math.abs(itemsTotal - data.subtotal) > 0.01) return apiValidation("Confira o subtotal da sacola.");
+        } catch (error) {
+          return apiError(error instanceof Error ? error.message : "Confira as opções do combo.", 409, {codigo: "COMBO_UPDATED"});
+        }
       }
       const idsNoCarrinho = new Set(data.itens.flatMap((raw) => {
         const item = raw as { produto?: { id?: unknown; comboId?: unknown } };

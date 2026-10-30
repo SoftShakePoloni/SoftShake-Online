@@ -16,6 +16,7 @@ export default async function ProdutosPage() {
 
   let produtos: CatalogProduto[] = [];
   let categorias: CatalogCategoria[] = [];
+  let catalogoErro = false;
   let promocoesFrete: PromocaoFrete[] = [];
   let promocoesFreteErro: string | null = null;
   let combos: ComboAdmin[] = [];
@@ -29,6 +30,7 @@ export default async function ProdutosPage() {
     produtos = (p || []) as CatalogProduto[];
     categorias = (c || []) as CatalogCategoria[];
   } catch (error) {
+    catalogoErro = true;
     console.error("Erro ao carregar catálogo:", error);
   }
 
@@ -52,6 +54,7 @@ export default async function ProdutosPage() {
     <CatalogoManager
       produtosIniciais={produtos}
       categoriasIniciais={categorias}
+      loadError={catalogoErro}
       promocoesFreteIniciais={promocoesFrete}
       promocoesFreteErro={promocoesFreteErro}
       combosIniciais={combos}

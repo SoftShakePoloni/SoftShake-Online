@@ -5,9 +5,8 @@ import { StoreHero } from "@/components/cardapio/HeroLoja";
 import { CategoryBar } from "@/components/cardapio/BarraCategorias";
 import { FeaturedCarousel } from "@/components/cardapio/CarrosselDestaques";
 import { ProductSection } from "@/components/cardapio/SecaoProdutos";
-import { getFeaturedProducts } from "@/data/cardapio";
 import { useMenu } from "@/hooks/useCardapio";
-import type { Category } from "@/data/tipos";
+import { getFeaturedProducts, hasProductPromo, type Category } from "@/data/tipos";
 
 function normalize(text: string) {
   return text
@@ -45,14 +44,32 @@ export default function PaginaInicio() {
   );
   const [searchQuery, setSearchQuery] = useState("");
 
+  const orderedCategories = useMemo(() => {
+    const products = categories.flatMap(category => category.products);
+    const combos = products.filter(product => product.disponivel !== false &&
+      (product.comboId != null || normalize(product.name).includes("combo do dia")));
+    const comboIds = new Set(combos.map(product => product.id));
+    const promotions = products.filter(product => product.disponivel !== false &&
+      !comboIds.has(product.id) && (hasProductPromo(product) || product.freteGratis));
+    const highlightedIds = new Set([...combos, ...promotions].map(product => product.id));
+    const remaining = categories.map(category => ({ ...category,
+      products: category.products.filter(product => !highlightedIds.has(product.id)),
+    })).filter(category => category.products.length > 0);
+    return [
+      ...(combos.length ? [{ id: "ofertas-combos", name: "Combo do dia", products: combos }] : []),
+      ...(promotions.length ? [{ id: "ofertas-promocoes", name: "Promoções", products: promotions }] : []),
+      ...remaining,
+    ];
+  }, [categories]);
+
   const featuredProducts = useMemo(
-    () => getFeaturedProducts(categories),
-    [categories]
+    () => getFeaturedProducts(orderedCategories.filter(category => !category.id.startsWith("ofertas-"))),
+    [orderedCategories]
   );
 
   const filteredCategories = useMemo(
-    () => filterCategories(categories, selectedCategoryId, searchQuery),
-    [categories, selectedCategoryId, searchQuery]
+    () => filterCategories(orderedCategories, selectedCategoryId, searchQuery),
+    [orderedCategories, selectedCategoryId, searchQuery]
   );
 
   const isFiltering = Boolean(selectedCategoryId || searchQuery.trim());
@@ -78,7 +95,7 @@ export default function PaginaInicio() {
       <main className="space-y-8">
         <StoreHero />
         <CategoryBar
-          categories={categories}
+          categories={orderedCategories}
           selectedCategoryId={selectedCategoryId}
           searchQuery={searchQuery}
           onSelectCategory={handleSelectCategory}
@@ -106,7 +123,10 @@ export default function PaginaInicio() {
           </p>
         )}
         {!isFiltering && featuredProducts.length > 0 && (
-          <FeaturedCarousel products={featuredProducts} />
+          <>
+            {filteredCategories.filter(category => category.id.startsWith("ofertas-")).map(category => <ProductSection key={category.id} category={category} />)}
+            <FeaturedCarousel products={featuredProducts} />
+          </>
         )}
         {!isLoading &&
           !error &&
@@ -118,7 +138,7 @@ export default function PaginaInicio() {
                 : "Nenhum produto nesta categoria."}
             </div>
           )}
-        {filteredCategories.map((c) => (
+        {filteredCategories.filter(category => isFiltering || featuredProducts.length === 0 || !category.id.startsWith("ofertas-")).map((c) => (
           <ProductSection key={c.id} category={c} />
         ))}
       </main>

@@ -90,12 +90,12 @@ function Row({
   return (
     <div
       className={cn(
-        "flex justify-between gap-6 px-5 sm:px-6 py-4 min-h-[64px]",
+        "admin-settings-row px-4 sm:px-6 py-4 min-h-[64px]",
         align === "center" ? "items-center" : "items-start",
         !last && "border-b border-[#E5E7EB]"
       )}
     >
-      <div className="min-w-0 flex-1 pr-4">
+      <div className="min-w-0">
         <p className="text-[17px] font-semibold leading-snug text-[#111827]">
           {title}
         </p>
@@ -105,7 +105,7 @@ function Row({
           </p>
         ) : null}
       </div>
-      <div className="shrink-0 pl-2 w-full max-w-[min(100%,420px)] flex justify-end">
+      <div className="admin-settings-value">
         {children}
       </div>
     </div>
@@ -298,7 +298,7 @@ export function EstabelecimentoManager({
 
   return (
     <div className="min-h-full bg-[#F9FAFB]">
-      <div className="flex w-full gap-6 lg:gap-10 px-4 sm:px-6 lg:px-8 py-5">
+      <div className="flex flex-col md:flex-row w-full gap-6 lg:gap-10 px-4 sm:px-6 lg:px-8 py-5">
         {/* Nav */}
         <nav
           className="hidden w-52 shrink-0 md:block"
@@ -360,7 +360,7 @@ export function EstabelecimentoManager({
           </Select>
         </div>
 
-        <div className="min-w-0 flex-1 pb-10">
+        <div className="admin-settings-content min-w-0 flex-1 pb-10">
           {/* ——— GERAL ——— */}
           {section === "geral" && (
             <div>

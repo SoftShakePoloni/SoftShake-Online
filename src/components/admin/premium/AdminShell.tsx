@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PremiumSidebar } from "./PremiumSidebar";
 import { PremiumTopbar } from "./PremiumTopbar";
 import { cn } from "@/lib/utils";
 import type { AdminPageAccess } from "@/lib/security/rbac";
+import { usePathname } from "next/navigation";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import "./admin-responsive.css";
 
 const SIDEBAR_KEY = "softshake-admin-sidebar-collapsed";
 
@@ -27,6 +30,17 @@ export function AdminShell({
 }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const menuTrigger = useRef<HTMLElement | null>(null);
+
+  useEffect(() => setMenuOpen(false), [pathname]);
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    const closeOnDesktop = () => { if (desktop.matches) setMenuOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => desktop.removeEventListener("change", closeOnDesktop);
+  }, []);
 
   useEffect(() => {
     try {
@@ -51,8 +65,10 @@ export function AdminShell({
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F7F8FC]">
+    <div className="admin-shell min-h-dvh bg-[#F7F8FC]">
+      <a href="#admin-content" className="admin-skip-link">Ir para o conteúdo</a>
       <div className="flex">
+        <div className="hidden xl:block">
         <PremiumSidebar
           adminEmail={adminEmail}
           adminName={adminName}
@@ -62,16 +78,31 @@ export function AdminShell({
           collapsed={collapsed}
           onToggleCollapsed={toggleCollapsed}
         />
+        </div>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetContent side="left" className="admin-mobile-menu w-[min(320px,100%)] max-w-full p-0"
+            onCloseAutoFocus={(event) => { event.preventDefault(); menuTrigger.current?.focus(); }}>
+            <SheetTitle className="sr-only">Navegação administrativa</SheetTitle>
+            <SheetDescription className="sr-only">Acesse as áreas do painel SoftShake.</SheetDescription>
+            <PremiumSidebar adminEmail={adminEmail} adminName={adminName} roleLabel={roleLabel}
+              acessos={acessos} canManageStore={canManageStore} mobile onNavigate={() => setMenuOpen(false)} />
+          </SheetContent>
+        </Sheet>
         <main
+          id="admin-content"
+          tabIndex={-1}
           className={cn(
-            "flex-1 min-h-screen flex flex-col transition-[margin] duration-300 ease-in-out",
+            "min-w-0 flex-1 min-h-dvh flex flex-col transition-[margin] duration-300 ease-in-out motion-reduce:transition-none",
             // evita “pulo” de layout antes de hidratar preferência
-            !hydrated && "ml-[270px]",
-            hydrated && (collapsed ? "ml-[72px]" : "ml-[270px]")
+            !hydrated && "xl:ml-[270px]",
+            hydrated && (collapsed ? "xl:ml-[72px]" : "xl:ml-[270px]")
           )}
         >
-          <PremiumTopbar adminName={adminName} adminEmail={adminEmail} />
-          <div className="flex-1">{children}</div>
+          <PremiumTopbar adminName={adminName} adminEmail={adminEmail} onOpenMenu={() => {
+            menuTrigger.current = document.activeElement as HTMLElement;
+            setMenuOpen(true);
+          }} menuOpen={menuOpen} />
+          <div className="min-w-0 flex-1">{children}</div>
         </main>
       </div>
     </div>

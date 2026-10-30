@@ -3,7 +3,6 @@ import { RATE_LIMITS } from "@/lib/security/rate-limit";
 import {
   apiOk,
   apiServerError,
-  apiUnauthorized,
 } from "@/lib/security/api-response";
 import { obterSessao } from "@/lib/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
@@ -17,7 +16,8 @@ export const GET = withApiGuard(
   async () => {
     try {
       const sessao = await obterSessao();
-      if (!sessao) return apiUnauthorized();
+      // Visitantes sem cookie têm uma sessão vazia, não uma falha HTTP.
+      if (!sessao) return apiOk({ autenticado: false, cliente: null });
 
       const supabase = createServerClient();
       const { data: clienteCompleto } = await supabase

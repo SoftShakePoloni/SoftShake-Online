@@ -24,6 +24,7 @@ interface PedidoKanbanColumnProps {
   busy?: boolean;
   /** Layout vertical (lista empilhada) vs coluna Kanban */
   vertical?: boolean;
+  mobileActive?: boolean;
 }
 
 export function PedidoKanbanColumn({
@@ -35,6 +36,7 @@ export function PedidoKanbanColumn({
   onAction,
   busy,
   vertical = true,
+  mobileActive = false,
 }: PedidoKanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `col-${column.id}`,
@@ -46,7 +48,7 @@ export function PedidoKanbanColumn({
       <section
         className={cn(
           "rounded-md border border-[#E5E7EB] bg-white overflow-hidden",
-          isOver && "ring-1 ring-[#4C258C]/40"
+          isOver && "ring-1 ring-[#4C258C]/40",
         )}
       >
         <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-[#E5E7EB] bg-[#FAFAFA]">
@@ -95,42 +97,50 @@ export function PedidoKanbanColumn({
   // Fallback coluna (não usado no layout atual)
   return (
     <section
+      data-mobile-active={mobileActive}
       className={cn(
-        "flex flex-col min-w-0 h-full rounded-md border border-[#E5E7EB] bg-[#F3F4F6]/60",
-        isOver && "ring-1 ring-[#4C258C]/40 bg-[#EEE8FA]/30"
+        "admin-kanban-column flex flex-col min-w-0 h-full border-r border-[#E7E1EB] bg-[#FBFAFC] last:border-r-0",
+        isOver && "ring-1 ring-[#4C258C]/40 bg-[#EEE8FA]/30",
       )}
     >
-      <header className="shrink-0 flex items-center justify-between gap-2 px-2.5 py-2 border-b border-[#E5E7EB] bg-white rounded-t-md">
+      <header className="shrink-0 flex items-center justify-between gap-2 px-3 py-3 border-b border-[#E7E1EB] bg-[#F4F1F7]">
         <div className="flex items-center gap-2 min-w-0">
           <span
-            className={cn("w-1.5 h-1.5 rounded-full shrink-0", column.accent)}
+            className={cn("w-2 h-2 rounded-full shrink-0", column.accent)}
           />
-          <h3 className="text-[13px] font-semibold text-[#111827] truncate">
+          <h3 className="text-[13px] font-semibold text-[#2A2033] truncate">
             {column.label}
           </h3>
         </div>
-        <span className="text-[12px] font-semibold tabular-nums text-[#6B7280] bg-[#F3F4F6] min-w-[1.5rem] h-5 px-1.5 rounded flex items-center justify-center">
+        <span className="text-[11px] font-semibold tabular-nums text-[#675B70] bg-white min-w-[1.5rem] h-5 px-1.5 rounded-full flex items-center justify-center">
           {pedidos.length}
         </span>
       </header>
       <div
         ref={setNodeRef}
-        className="flex-1 overflow-y-auto overscroll-contain p-2 space-y-2 min-h-[120px]"
+        className="flex-1 overflow-y-auto overscroll-contain p-2.5 space-y-2 min-h-[120px]"
       >
         <SortableContext
           items={pedidos.map((p) => p.id)}
           strategy={verticalListSortingStrategy}
         >
-          {pedidos.map((p) => (
-            <PedidoKanbanCard
-              key={p.id}
-              pedido={p}
-              isHighlighted={highlightedIds?.has(p.id)}
-              onOpen={onOpen}
-              onAction={onAction}
-              disabled={busy}
-            />
-          ))}
+          {pedidos.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-[#E7E1EB] px-2 py-5 text-center text-[11px] text-[#9A929F]">
+              Nenhum pedido
+            </p>
+          ) : (
+            pedidos.map((p) => (
+              <PedidoKanbanCard
+                key={p.id}
+                pedido={p}
+                isHighlighted={highlightedIds?.has(p.id)}
+                onOpen={onOpen}
+                onAction={onAction}
+                disabled={busy}
+                layout="card"
+              />
+            ))
+          )}
         </SortableContext>
       </div>
     </section>

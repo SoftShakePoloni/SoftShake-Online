@@ -4,6 +4,7 @@ import { Package, FolderOpen, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type EmptyKind =
+  | "catalogo"
   | "produtos"
   | "categorias"
   | "busca"
@@ -14,6 +15,11 @@ const COPY: Record<
   EmptyKind,
   { icon: typeof Package; title: string; description: string }
 > = {
+  catalogo: {
+    icon: Package,
+    title: "Seu catálogo está vazio",
+    description: "Adicione o primeiro produto ao seu cardápio.",
+  },
   produtos: {
     icon: Package,
     title: "Nenhum produto nesta categoria",
@@ -58,7 +64,7 @@ export function CatalogEmpty({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center text-center py-12 px-6",
+        "flex flex-col items-center justify-center text-center py-7 px-5",
         className
       )}
     >
@@ -75,7 +81,7 @@ export function CatalogEmpty({
         <button
           type="button"
           onClick={onAction}
-          className="h-8 px-3 rounded-md bg-[#111827] text-white text-[12px] font-medium hover:bg-black"
+          className="h-8 px-3 rounded-md bg-[#4C258C] text-white text-[12px] font-medium hover:bg-[#3F1E76]"
         >
           {actionLabel}
         </button>

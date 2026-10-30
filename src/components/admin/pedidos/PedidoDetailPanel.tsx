@@ -1,11 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import { format, formatDistanceToNow } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import Image from "next/image";
 import {
-  Phone,
   MapPin,
   Package,
   ExternalLink,
@@ -17,34 +14,26 @@ import {
   ChefHat,
   Flag,
   XCircle,
-  ShoppingBag,
   MessageSquare,
-  CreditCard,
-  Clock,
-  ArrowLeft,
 } from "lucide-react";
 import type { Pedido } from "@/types/pedido";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/formatters";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  extractComplementos,
-  groupComplementos,
-} from "@/lib/utils/pedido";
+import { extractComplementos, groupComplementos } from "@/lib/utils/pedido";
 import { toast } from "sonner";
 import { OrderPrint, type OrderPrintTipo } from "./OrderPrint";
 import {
-  STATUS_META,
   shortOrderId,
   tipoEntregaLabel,
   isDeliveryType,
   getOrderActions,
+  STATUS_META,
   type OrderAction,
 } from "./order-status";
 import { OrderElapsedTimer } from "./OrderElapsedTimer";
@@ -52,7 +41,7 @@ import { OrderElapsedTimer } from "./OrderElapsedTimer";
 interface PedidoDetailPanelProps {
   pedido: Pedido;
   onStatusChange: (
-    status: Pedido["status"]
+    status: Pedido["status"],
   ) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
   busy?: boolean;
@@ -69,12 +58,31 @@ const actionIcons = {
 };
 
 const actionStyles: Record<OrderAction["variant"], string> = {
-  primary: "bg-[#4C258C] hover:bg-[#3d1d70] text-white",
-  success: "bg-emerald-600 hover:bg-emerald-700 text-white",
-  warning: "bg-orange-500 hover:bg-orange-600 text-white",
-  danger: "bg-white hover:bg-red-50 text-red-600 border border-red-200",
+  primary:
+    "bg-[#4C258C] hover:bg-[#5E35B1] text-white transition-colors duration-150",
+  success:
+    "bg-emerald-600 hover:bg-emerald-700 text-white transition-colors duration-150",
+  warning:
+    "bg-orange-500 hover:bg-orange-600 text-white transition-colors duration-150",
+  danger:
+    "text-red-600 hover:bg-red-50 border border-red-200 transition-colors duration-150",
   secondary:
-    "bg-white hover:bg-[#F9FAFB] text-[#111827] border border-[#E5E7EB]",
+    "text-[#4C258C] hover:bg-[#F3EEFA] border border-[#D4C4F0] transition-colors duration-150",
+};
+
+const orderDateTime = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+// Compact status badge colors
+const STATUS_BADGE: Record<Pedido["status"], string> = {
+  pendente:   "bg-purple-100 text-purple-800",
+  confirmado: "bg-indigo-100 text-indigo-700",
+  preparando: "bg-blue-100   text-blue-700",
+  saiu_entrega: "bg-orange-100 text-orange-700",
+  entregue:   "bg-emerald-100 text-emerald-700",
+  cancelado:  "bg-red-100    text-red-700",
 };
 
 export function PedidoDetailPanel({
@@ -84,24 +92,29 @@ export function PedidoDetailPanel({
   busy = false,
 }: PedidoDetailPanelProps) {
   const [printTipo, setPrintTipo] = useState<OrderPrintTipo | null>(null);
-  const meta = STATUS_META[pedido.status] ?? STATUS_META.pendente;
   const actions = getOrderActions(pedido);
   const delivery = isDeliveryType(pedido.tipo_entrega);
 
+  const primaryActions = actions.filter(
+    (a) => a.variant === "primary" || a.variant === "success" || a.variant === "warning",
+  );
+  const secondaryActions = actions.filter((a) => a.variant === "secondary");
+  const dangerActions    = actions.filter((a) => a.variant === "danger");
+
+  const statusLabel = STATUS_META[pedido.status]?.label ?? pedido.status;
+  const statusBadge = STATUS_BADGE[pedido.status] ?? "bg-gray-100 text-gray-600";
+
+  const hasPrimaryEnterHint = primaryActions.some(
+    (a) => a.status === "preparando" && !a.printAfter,
+  );
+
+  // â”€â”€ Print logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!printTipo) return;
     let printed = false;
     let finished = false;
-    const runPrint = () => {
-      if (printed) return;
-      printed = true;
-      window.print();
-    };
-    const done = () => {
-      if (finished) return;
-      finished = true;
-      setPrintTipo(null);
-    };
+    const runPrint = () => { if (printed) return; printed = true; window.print(); };
+    const done    = () => { if (finished) return; finished = true; setPrintTipo(null); };
     const t1 = window.setTimeout(runPrint, 250);
     const t2 = window.setTimeout(done, 8000);
     window.addEventListener("afterprint", done);
@@ -112,29 +125,22 @@ export function PedidoDetailPanel({
     };
   }, [printTipo]);
 
+  // â”€â”€ Keyboard shortcuts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-        return;
-      }
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
       if (e.key === "Enter" && !busy) {
-        const accept = actions.find(
-          (a) => a.status === "preparando" && !a.printAfter
-        );
-        if (accept) {
-          e.preventDefault();
-          void onStatusChange(accept.status);
-        }
+        const accept = actions.find((a) => a.status === "preparando" && !a.printAfter);
+        if (accept) { e.preventDefault(); void onStatusChange(accept.status); }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [actions, busy, onClose, onStatusChange]);
 
+  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const copy = (text: string) => {
     void navigator.clipboard.writeText(text);
     toast.success("Copiado");
@@ -149,65 +155,40 @@ export function PedidoDetailPanel({
   const openMaps = () => {
     if (!pedido.endereco_completo) return;
     window.open(
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        pedido.endereco_completo
-      )}`,
-      "_blank"
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pedido.endereco_completo)}`,
+      "_blank",
     );
   };
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
-      {/* Header */}
-      <div className="shrink-0 border-b border-[#E5E7EB] px-4 lg:px-5 py-3 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={onClose}
-                className="lg:hidden h-8 w-8 -ml-1 rounded-md flex items-center justify-center text-[#6B7280] hover:bg-[#F3F4F6]"
-                aria-label="Voltar"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-              <h2 className="text-[15px] font-semibold text-[#111827]">
-                Pedido #{shortOrderId(pedido.id)}
-              </h2>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border",
-                  meta.badge
-                )}
-              >
-                <span className={cn("w-1.5 h-1.5 rounded-full", meta.dot)} />
-                {meta.label}
-              </span>
-              <OrderElapsedTimer createdAt={pedido.created_at} compact />
-            </div>
-            <p className="text-[12px] text-[#6B7280] mt-1 flex items-center gap-1 pl-0 lg:pl-0">
-              <Clock className="w-3 h-3" />
-              {format(new Date(pedido.created_at), "dd/MM/yyyy 'às' HH:mm", {
-                locale: ptBR,
-              })}
-              <span className="text-[#D1D5DB]">·</span>
-              {formatDistanceToNow(new Date(pedido.created_at), {
-                addSuffix: true,
-                locale: ptBR,
-              })}
-            </p>
+
+      {/* â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="shrink-0 border-b border-[#F0EEF3] px-3 sm:px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+            <h2 className="text-lg font-bold text-[#111827] leading-none">
+              #{shortOrderId(pedido.id)}
+            </h2>
+
+            <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none", statusBadge)}>
+              {statusLabel}
+            </span>
           </div>
+
+          {/* Right side */}
           <div className="flex items-center gap-1 shrink-0">
+            <OrderElapsedTimer createdAt={pedido.created_at} compact />
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 rounded-md border-[#E5E7EB] text-[13px]"
+                <button
+                  type="button"
+                  aria-label="Imprimir pedido"
+                  className="ml-1 flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F9FAFB] hover:text-[#374151] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
                 >
-                  <Printer className="w-3.5 h-3.5 mr-1" />
-                  Imprimir
-                </Button>
+                  <Printer aria-hidden="true" className="h-4 w-4" />
+                </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setPrintTipo("cozinha")}>
@@ -218,258 +199,254 @@ export function PedidoDetailPanel({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
             <button
               type="button"
               onClick={onClose}
-              className="hidden lg:flex h-8 w-8 rounded-md items-center justify-center text-[#6B7280] hover:bg-[#F3F4F6]"
               aria-label="Fechar"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F9FAFB] hover:text-[#374151] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
             >
-              <X className="w-4 h-4" />
+              <X aria-hidden="true" className="h-4 w-4" />
             </button>
           </div>
         </div>
 
-        {actions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {actions.map((action) => {
+        {/* Sub-line: time */}
+        <p className="mt-1 text-xs text-[#9CA3AF]">
+          {orderDateTime.format(new Date(pedido.created_at))}
+          {" · "}
+          {tipoEntregaLabel(pedido.tipo_entrega)}
+        </p>
+      </div>
+
+      {/* â”€â”€ ACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {actions.length > 0 && (
+        <div className="shrink-0 border-b border-[#F0EEF3] px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {primaryActions.map((action) => {
               const Icon = actionIcons[action.icon];
               return (
-                <Button
-                  key={`${action.label}-${action.status}-${action.printAfter ? "p" : ""}`}
-                  size="sm"
+                <button
+                  key={`${action.label}-${action.status}`}
+                  type="button"
                   disabled={busy}
                   onClick={() => {
                     void (async () => {
                       const result = await onStatusChange(action.status);
-                      if (action.printAfter && result !== false) {
-                        setPrintTipo("completo");
-                      }
+                      if (action.printAfter && result !== false) setPrintTipo("completo");
                     })();
                   }}
+                  aria-label={action.label}
                   className={cn(
-                    "h-8 rounded-md text-[13px] font-medium",
-                    actionStyles[action.variant]
+                    "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40",
+                    actionStyles[action.variant],
+                    primaryActions.length === 1 && "flex-1 justify-center",
                   )}
                 >
-                  <Icon className="w-3.5 h-3.5 mr-1" />
+                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
                   {action.label}
-                </Button>
+                </button>
               );
             })}
+
+            {secondaryActions.map((action) => {
+              const Icon = actionIcons[action.icon];
+              return (
+                <button
+                  key={`${action.label}-${action.status}-s`}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void (async () => {
+                      const result = await onStatusChange(action.status);
+                      if (action.printAfter && result !== false) setPrintTipo("completo");
+                    })();
+                  }}
+                  aria-label={action.label}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40",
+                    actionStyles[action.variant],
+                  )}
+                >
+                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  {action.label}
+                </button>
+              );
+            })}
+
+            {dangerActions.map((action) => {
+              const Icon = actionIcons[action.icon];
+              return (
+                <button
+                  key={`${action.label}-${action.status}-d`}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => { void onStatusChange(action.status); }}
+                  aria-label={action.label}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
+                    actionStyles[action.variant],
+                  )}
+                >
+                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  {action.label}
+                </button>
+              );
+            })}
+
+            {hasPrimaryEnterHint && (
+              <span className="ml-auto text-[11px] text-[#D1D5DB] select-none">
+                Enter â†µ
+              </span>
+            )}
           </div>
-        )}
-        <p className="text-[11px] text-[#9CA3AF]">Enter aceita · Esc fecha</p>
-      </div>
+        </div>
+      )}
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto px-4 lg:px-5 py-3 space-y-3">
-        <section className="rounded-md border border-[#E5E7EB] p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF] mb-2">
-            Cliente
-          </p>
-          <p className="text-[15px] font-semibold text-[#111827]">
-            {pedido.cliente_nome}
-          </p>
-          {pedido.cliente_telefone && (
-            <p className="text-[13px] text-[#6B7280] mt-0.5">
-              {pedido.cliente_telefone}
-            </p>
-          )}
-          <p className="text-[12px] text-[#9CA3AF] mt-1">
-            {tipoEntregaLabel(pedido.tipo_entrega)}
-          </p>
-          {pedido.cliente_telefone && (
-            <div className="flex gap-1.5 mt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 rounded-md border-[#E5E7EB] text-[12px]"
-                onClick={() => copy(pedido.cliente_telefone!)}
-              >
-                <Copy className="w-3 h-3 mr-1" />
-                Copiar
-              </Button>
-              <Button
-                size="sm"
-                className="h-8 rounded-md bg-[#25D366] hover:bg-[#20BA5A] text-white text-[12px]"
-                onClick={openWhatsApp}
-              >
-                <Phone className="w-3 h-3 mr-1" />
-                WhatsApp
-              </Button>
-            </div>
-          )}
-        </section>
+      {/* â”€â”€ CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="px-3 sm:px-5 py-4 space-y-5">
 
-        {pedido.endereco_completo && (
-          <section className="rounded-md border border-[#E5E7EB] p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF] mb-2 flex items-center gap-1">
-              <MapPin className="w-3 h-3" />
-              Endereço
-            </p>
-            <p className="text-[13px] text-[#374151] leading-relaxed">
-              {pedido.endereco_completo}
-            </p>
-            <button
-              type="button"
-              onClick={openMaps}
-              className="inline-flex items-center gap-1 text-[12px] font-medium text-[#4C258C] hover:underline mt-2"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Abrir no mapa
-            </button>
-          </section>
-        )}
-
-        <section>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF] mb-2 flex items-center gap-1">
-            <ShoppingBag className="w-3 h-3" />
-            Itens ({pedido.itens.length})
-          </p>
-          <ul className="rounded-md border border-[#E5E7EB] divide-y divide-[#E5E7EB]">
+          {/* Items */}
+          <ul className="divide-y divide-[#F3F4F6]">
             {pedido.itens.map((item, index) => {
               const complementos = extractComplementos(item);
               const grupos = groupComplementos(complementos);
               return (
-                <li
-                  key={item.uid || item.id || index}
-                  className="p-3 flex gap-2.5"
-                >
-                  {item.produto.image ? (
-                    <div className="relative w-10 h-10 rounded overflow-hidden bg-[#F3F4F6] shrink-0">
-                      <Image
-                        src={item.produto.image}
-                        alt={item.produto.name}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 rounded bg-[#F3F4F6] flex items-center justify-center shrink-0">
-                      <Package className="w-4 h-4 text-[#9CA3AF]" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between gap-2">
-                      <p className="text-[13px] font-medium text-[#111827]">
-                        <span className="text-[#4C258C] font-bold mr-1">
-                          {item.qty}x
-                        </span>
+                <li key={item.uid || item.id || index} className="py-3 first:pt-0">
+                  <div className="flex items-start gap-2.5">
+                    {/* Qty */}
+                    <span className="mt-px flex h-5 min-w-[24px] items-center justify-center rounded bg-[#F3EEFA] px-1 text-[11px] font-bold text-[#4C258C] tabular-nums shrink-0">
+                      {item.qty}x
+                    </span>
+
+                    {/* Name + extras */}
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium text-[#111827] leading-snug">
                         {item.produto.name}
-                      </p>
-                      <span className="text-[13px] font-semibold tabular-nums shrink-0">
+                      </span>
+
+                      {grupos.map((grupo, gi) => (
+                        <div key={gi} className="mt-0.5">
+                          {grupo.items.map((opcao, oi) => (
+                            <p key={oi} className="text-xs text-[#9CA3AF]">
+                              + {opcao.name}
+                              {Number(opcao.price) > 0 ? ` · ${formatCurrency(opcao.price)}` : ""}
+                            </p>
+                          ))}
+                        </div>
+                      ))}
+
+                      {item.observacoes && (
+                        <p className="mt-0.5 text-xs text-[#9CA3AF] italic">
+                          {item.observacoes}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Price + image */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className="text-sm font-semibold text-[#111827] tabular-nums">
                         {formatCurrency(item.total)}
                       </span>
+                      {item.produto.image && (
+                        <div className="relative h-9 w-9 overflow-hidden rounded-md bg-[#F3F4F6] shrink-0">
+                          <Image
+                            src={item.produto.image}
+                            alt={item.produto.name}
+                            fill
+                            sizes="36px"
+                            className="object-cover"
+                          />
+                        </div>
+                      )}
                     </div>
-                    {grupos.length > 0 && (
-                      <div className="mt-1.5 space-y-1">
-                        {grupos.map((g, gi) => (
-                          <div key={gi}>
-                            <p className="text-[10px] font-semibold text-[#6B7280] uppercase">
-                              {g.groupName}
-                            </p>
-                            {g.items.map((c, ci) => (
-                              <div
-                                key={ci}
-                                className="flex justify-between text-[12px] text-[#6B7280]"
-                              >
-                                <span>+ {c.name}</span>
-                                {Number(c.price) > 0 && (
-                                  <span>+{formatCurrency(c.price)}</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {item.observacoes && (
-                      <p className="text-[12px] text-[#6B7280] italic mt-1">
-                        {item.observacoes}
-                      </p>
-                    )}
                   </div>
                 </li>
               );
             })}
           </ul>
-        </section>
 
-        {pedido.observacoes && (
-          <section className="rounded-md border border-amber-200 bg-amber-50 p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800 mb-1 flex items-center gap-1">
-              <MessageSquare className="w-3 h-3" />
-              Observações
+          {/* ObservaÃ§Ãµes do pedido */}
+          {pedido.observacoes && (
+            <p className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2 text-sm text-amber-900 leading-relaxed">
+              {pedido.observacoes}
             </p>
-            <p className="text-[13px] text-amber-900/90">{pedido.observacoes}</p>
-          </section>
-        )}
-
-        <section className="rounded-md border border-[#E5E7EB] p-3 space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF] mb-1 flex items-center gap-1">
-            <CreditCard className="w-3 h-3" />
-            Pagamento
-          </p>
-          <Row label="Forma" value={pedido.meio_pagamento} />
-          {pedido.troco_para != null && Number(pedido.troco_para) > 0 && (
-            <Row
-              label="Troco para"
-              value={formatCurrency(pedido.troco_para)}
-            />
           )}
-          <div className="border-t border-[#E5E7EB] pt-2 space-y-1.5">
-            <Row label="Subtotal" value={formatCurrency(pedido.subtotal)} />
-            <Row
-              label={delivery ? "Taxa de entrega" : "Taxa (retirada)"}
-              value={formatCurrency(pedido.taxa_entrega)}
-            />
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-[14px] font-semibold text-[#111827]">
-                Total
-              </span>
-              <span className="text-[16px] font-bold text-[#111827] tabular-nums">
-                {formatCurrency(pedido.total)}
-              </span>
-            </div>
+
+          {/* Divider */}
+          <div className="h-px bg-[#F3F4F6]" aria-hidden="true" />
+
+          {/* Cliente */}
+          <div className="space-y-1">
+            <p className="font-medium text-[#111827]">{pedido.cliente_nome}</p>
+
+            {pedido.cliente_telefone && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm text-[#6B7280]">{pedido.cliente_telefone}</span>
+                <button
+                  type="button"
+                  onClick={openWhatsApp}
+                  aria-label="WhatsApp"
+                  className="flex h-6 w-6 items-center justify-center rounded text-[#9CA3AF] hover:text-[#25D366] hover:bg-[#F0FDF4] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
+                >
+                  <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copy(pedido.cliente_telefone!)}
+                  aria-label="Copiar telefone"
+                  className="flex h-6 w-6 items-center justify-center rounded text-[#9CA3AF] hover:text-[#374151] hover:bg-[#F9FAFB] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
+                >
+                  <Copy aria-hidden="true" className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {pedido.endereco_completo && (
+              <div className="flex items-start gap-1.5 mt-1">
+                <MapPin aria-hidden="true" className="h-3.5 w-3.5 mt-0.5 text-[#9CA3AF] shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm text-[#6B7280] leading-relaxed">
+                    {pedido.endereco_completo}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={openMaps}
+                    aria-label="Abrir no mapa"
+                    className="mt-0.5 inline-flex items-center gap-1 text-xs text-[#4C258C] hover:underline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
+                  >
+                    <ExternalLink aria-hidden="true" className="h-3 w-3" />
+                    Ver no mapa
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </section>
 
-        <section className="rounded-md border border-[#E5E7EB] p-3 space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF] mb-1">
-            Histórico
-          </p>
-          <p className="text-[13px] text-[#374151]">
-            Criado em{" "}
-            {format(new Date(pedido.created_at), "dd/MM/yyyy HH:mm", {
-              locale: ptBR,
-            })}
-          </p>
-          {pedido.updated_at !== pedido.created_at && (
-            <p className="text-[13px] text-[#374151]">
-              Atualizado em{" "}
-              {format(new Date(pedido.updated_at), "dd/MM/yyyy HH:mm", {
-                locale: ptBR,
-              })}
-            </p>
-          )}
-          <p className="text-[13px] text-[#6B7280]">
-            Status atual: {meta.label}
-          </p>
-        </section>
+          {/* Divider */}
+          <div className="h-px bg-[#F3F4F6]" aria-hidden="true" />
+
+          {/* Total + pagamento â€” uma Ãºnica linha */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#6B7280]">
+              {pedido.meio_pagamento}
+              {Number(pedido.troco_para) > 0 && ` · troco p/ ${formatCurrency(pedido.troco_para)}`}
+              {" · "}
+              {Number(pedido.taxa_entrega) > 0
+                ? `entrega ${formatCurrency(pedido.taxa_entrega)}`
+                : delivery ? "entrega grátis" : "retirada"}
+            </span>
+            <span className="text-base font-bold text-[#111827] tabular-nums">
+              {formatCurrency(pedido.total)}
+            </span>
+          </div>
+
+        </div>
       </div>
 
+      {/* Print */}
       {printTipo && <OrderPrint pedido={pedido} tipo={printTipo} />}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-3 text-[13px]">
-      <span className="text-[#6B7280]">{label}</span>
-      <span className="font-medium text-[#111827] text-right capitalize">
-        {value}
-      </span>
     </div>
   );
 }

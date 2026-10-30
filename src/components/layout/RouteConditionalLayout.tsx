@@ -12,12 +12,14 @@ export function RouteConditionalLayout({
 }) {
   const pathname = usePathname();
   const isAdminRoute = pathname.startsWith("/admin");
+  const isStandaloneAuth = pathname === "/entrar" || pathname === "/cadastrar";
+  const showStoreNavigation = !isAdminRoute && !isStandaloneAuth;
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-0">
-      {!isAdminRoute && <Header />}
+    <div className={`min-h-screen bg-background ${showStoreNavigation ? "pb-20 md:pb-0" : ""}`}>
+      {showStoreNavigation && <Header />}
       {children}
-      {!isAdminRoute && (
+      {showStoreNavigation && (
         <>
           <BarraSacola />
           <BottomNav />

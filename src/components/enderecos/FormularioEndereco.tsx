@@ -43,6 +43,10 @@ export function FormularioEndereco() {
       }
 
       toast.success('Endereço adicionado!');
+      if (sessionStorage.getItem('reopenCart') === 'true') {
+        window.location.href = '/';
+        return;
+      }
       router.push('/perfil/enderecos');
       router.refresh();
     } catch {

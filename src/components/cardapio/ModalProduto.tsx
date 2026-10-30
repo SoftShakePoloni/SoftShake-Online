@@ -18,6 +18,7 @@ import { TagBadge } from "@/components/ui/TagBadge";
 import { FreteGratisBadge } from "@/components/ui/FreteGratisBadge";
 import { useLoja } from "@/hooks/useLoja";
 import { toast } from "sonner";
+import { comboGroupLimit, isSharedComboAddon, resolveComboChoices } from "@/lib/combos/options";
 
 type Props = {
   product: Product | null;
@@ -30,7 +31,30 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const { loja, isLoading } = useLoja();
   const pathname = usePathname();
   const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
-  const groups = product?.optionGroups ?? [notesOptionGroup];
+  const [loadedOptionGroups, setLoadedOptionGroups] = useState<OptionGroup[] | null>(null);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const groups = loadedOptionGroups ?? product?.optionGroups ?? [notesOptionGroup];
+
+  useEffect(() => {
+    setLoadedOptionGroups(null);
+    if (!open || !product || product.comboId || !/^\d+$/.test(product.id)) return;
+    if ((product.optionGroups ?? []).some((group) => group.id !== "obs")) return;
+
+    let cancelled = false;
+    setOptionsLoading(true);
+    fetch(`/api/cardapio/produto/${product.id}/opcoes`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Não foi possível carregar as opções do produto.");
+        return response.json() as Promise<{ optionGroups: OptionGroup[] }>;
+      })
+      .then((data) => { if (!cancelled) setLoadedOptionGroups(data.optionGroups); })
+      .catch((error: unknown) => {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : "Falha ao carregar opções.");
+      })
+      .finally(() => { if (!cancelled) setOptionsLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [open, product]);
 
   // Fecha ao trocar de aba na bottom nav
   useEffect(() => {
@@ -52,61 +76,11 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
 
   if (!product) return null;
 
-  // Lógica dinâmica de limites para açaí
-  const getDynamicMaxForGroup = (group: OptionGroup): number => {
-    // Verifica se o produto é açaí pelo nome
-    const isAcai = product.name.toLowerCase().includes('açaí') || product.name.toLowerCase().includes('acai');
-    
-    if (!isAcai) return group.max;
-
-    // Identifica grupos que são de tamanho ou sabor (obrigatórios, não devem ter limite dinâmico)
-    const groupNameLower = group.name.toLowerCase();
-    const isSizeOrFlavorGroup = groupNameLower.includes('tamanho') || groupNameLower.includes('sabor');
-
-    // Se for grupo de tamanho ou sabor, retorna o max original
-    if (isSizeOrFlavorGroup) return group.max;
-
-    // Para qualquer outro grupo (cremes, adicionais, etc), aplicar a lógica dinâmica
-    // Busca o grupo de tamanho para verificar qual foi selecionado
-    const sizeGroup = groups.find(g => 
-      g.name.toLowerCase().includes('tamanho')
-    );
-
-    if (!sizeGroup) return group.max;
-
-    const selectedSizeId = selections[sizeGroup.id]?.[0];
-    if (!selectedSizeId) return group.max;
-
-    const selectedSizeItem = sizeGroup.items.find(item => item.id === selectedSizeId);
-    if (!selectedSizeItem) return group.max;
-
-    // Extrai o tamanho em ml do nome da opção
-    const sizeName = selectedSizeItem.name.toLowerCase();
-    if (sizeName.includes('300')) return 3;
-    if (sizeName.includes('400')) return 4;
-    if (sizeName.includes('500')) return 5;
-
-    return group.max;
-  };
-
-  // Verifica se é um grupo de adicionais compartilhados (para açaí)
-  const isSharedAddonsGroup = (group: OptionGroup): boolean => {
-    const isAcai = product.name.toLowerCase().includes('açaí') || product.name.toLowerCase().includes('acai');
-    if (!isAcai) return false;
-    
-    const groupNameLower = group.name.toLowerCase();
-    const isSizeOrFlavorGroup = groupNameLower.includes('tamanho') || groupNameLower.includes('sabor');
-    return !isSizeOrFlavorGroup && group.id !== 'obs';
-  };
-
-  // Calcula total de itens selecionados em todos os grupos de adicionais compartilhados
-  const getTotalSharedAddonsSelected = (): number => {
-    return groups
-      .filter(isSharedAddonsGroup)
-      .reduce((total, g) => {
-        return total + (selections[g.id] ?? []).length;
-      }, 0);
-  };
+  const getDynamicMaxForGroup = (group: OptionGroup) => comboGroupLimit(group, groups, selections, product.name);
+  const isSharedAddonsGroup = (group: OptionGroup) => isSharedComboAddon(group, product.name);
+  const getTotalSharedAddonsSelected = (group: OptionGroup) => groups
+    .filter(g => g.comboUnitKey === group.comboUnitKey && isSharedAddonsGroup(g))
+    .reduce((total, g) => total + (selections[g.id] ?? []).length, 0);
 
   // Função para rolar para a próxima seção
   const scrollToNextSection = (currentGroupId: string) => {
@@ -138,11 +112,12 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
       const current = prev[group.id] ?? [];
       const has = current.includes(itemId);
       const dynamicMax = getDynamicMaxForGroup(group);
+      if (!has && group.max !== 1 && current.length >= dynamicMax) return prev;
       
       // Para grupos compartilhados, verifica o total geral
       if (isSharedAddonsGroup(group)) {
         const totalSelected = groups
-          .filter(isSharedAddonsGroup)
+          .filter(g => g.comboUnitKey === group.comboUnitKey && isSharedAddonsGroup(g))
           .reduce((total, g) => {
             return total + (prev[g.id] ?? []).length;
           }, 0);
@@ -182,7 +157,11 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const unitPrice = getProductUnitPrice(product);
   const total = (unitPrice + extras) * qty;
 
-  const canAdd = groups.every((g) => {
+  let comboValid = true;
+  if (product.comboOptionsMode === "cliente") {
+    try { resolveComboChoices(groups.filter(group => group.id !== "obs"), selections); } catch { comboValid = false; }
+  }
+  const canAdd = comboValid && !optionsLoading && product.disponivel !== false && groups.every((g) => {
     if (!g.required) return true;
     const count = (selections[g.id] ?? []).length;
     return count >= (g.min ?? 1);
@@ -196,8 +175,9 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
       return;
     }
 
+    if (!canAdd) return;
     adicionarItem({
-      produto: product,
+      produto: { ...product, optionGroups: groups },
       qty,
       selections,
       observacoes: notes,
@@ -213,12 +193,12 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
-      <DialogContent className="flex h-[calc(100dvh-4rem)] max-h-[calc(100dvh-4rem)] w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92vh] md:max-h-[92vh] md:rounded-2xl">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent overlayClassName="z-[80] max-md:bottom-0" className="z-[90] flex h-dvh max-h-dvh w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92dvh] md:max-h-[92dvh] md:rounded-2xl">
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
         <DialogDescription className="sr-only">{product.description}</DialogDescription>
 
-        <div className="flex-1 overflow-y-auto" ref={scrollContainerRef}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" ref={scrollContainerRef}>
           {/* Image */}
           <div className="relative aspect-square w-full bg-muted">
             {product.image ? (
@@ -239,13 +219,17 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
             </div>
           </div>
 
+          {product.comboOptionsMode === "fixo" && Boolean(product.comboFixedChoices?.length) && <section className="space-y-2 bg-card px-5 pb-5">
+            <h3 className="text-sm font-semibold">Este combo inclui</h3>
+            <ul className="space-y-1 text-sm text-muted-foreground">{product.comboFixedChoices?.map(choice => <li key={choice.groupId + choice.id}>{choice.groupName}: {choice.name}</li>)}</ul>
+          </section>}
           {/* Option groups */}
           <div className="space-y-3 pb-4">
             {groups.map((g) => {
               const selected = selections[g.id] ?? [];
               const dynamicMax = getDynamicMaxForGroup(g);
               const isShared = isSharedAddonsGroup(g);
-              const totalSharedSelected = isShared ? getTotalSharedAddonsSelected() : selected.length;
+              const totalSharedSelected = isShared ? getTotalSharedAddonsSelected(g) : selected.length;
               const displayMax = isShared ? dynamicMax : g.max;
               
               if (g.id === "obs") {
@@ -265,6 +249,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         rows={3}
+                        aria-label="Observações do pedido"
                         placeholder="Ex: sem amendoim, capricha na cobertura..."
                         className="w-full resize-none rounded-lg border border-border bg-background p-3 text-sm outline-none focus:border-primary"
                       />
@@ -464,7 +449,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 border-t border-border bg-card px-4 py-3">
+        <div className="shrink-0 flex items-center gap-3 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center gap-3 rounded-full border border-border px-2 py-1.5">
             <button
               type="button"

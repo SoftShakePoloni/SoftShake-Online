@@ -1,4 +1,5 @@
 "use client";
+import "./catalog.css";
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -38,13 +39,10 @@ import { CombosTab } from "./CombosTab";
 import { PromocoesFreteTab } from "./PromocoesFreteTab";
 import type { PromocaoFrete } from "@/actions/admin/promocoes-frete";
 import type { ComboAdmin } from "@/actions/admin/combos";
-import type {
-  CatalogTab,
-  CatalogProduto,
-  CatalogCategoria,
-} from "./types";
+import type { CatalogTab, CatalogProduto, CatalogCategoria } from "./types";
 
 interface CatalogoManagerProps {
+  loadError?: boolean;
   produtosIniciais: CatalogProduto[];
   categoriasIniciais: CatalogCategoria[];
   promocoesFreteIniciais: PromocaoFrete[];
@@ -54,6 +52,7 @@ interface CatalogoManagerProps {
 }
 
 export function CatalogoManager({
+  loadError = false,
   produtosIniciais,
   categoriasIniciais,
   promocoesFreteIniciais,
@@ -61,23 +60,21 @@ export function CatalogoManager({
   combosIniciais,
   combosErro,
 }: CatalogoManagerProps) {
+  const [manageCategories, setManageCategories] = useState(false);
   const [tab, setTab] = useState<CatalogTab>("produtos");
-  const [produtos, setProdutos] =
-    useState<CatalogProduto[]>(produtosIniciais);
+  const [produtos, setProdutos] = useState<CatalogProduto[]>(produtosIniciais);
   const [categorias, setCategorias] =
     useState<CatalogCategoria[]>(categoriasIniciais);
   const [selectedCategoriaId, setSelectedCategoriaId] = useState<string | null>(
-    null
+    null,
   );
   const [search, setSearch] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerProduto, setDrawerProduto] = useState<CatalogProduto | null>(
-    null
+    null,
   );
   const [drawerReadOnly, setDrawerReadOnly] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<CatalogProduto | null>(
-    null
-  );
+  const [deleteTarget, setDeleteTarget] = useState<CatalogProduto | null>(null);
 
   const supabase = createClient();
 
@@ -93,7 +90,7 @@ export function CatalogoManager({
             const old = payload.old as { id?: number };
             if (old?.id != null) {
               setProdutos((prev) =>
-                prev.filter((p) => String(p.id) !== String(old.id))
+                prev.filter((p) => String(p.id) !== String(old.id)),
               );
             }
             return;
@@ -105,7 +102,7 @@ export function CatalogoManager({
           const { data } = await supabase
             .from("produtos")
             .select(
-              `*, categoria:categorias(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)`
+              `*, categoria:categorias(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)`,
             )
             .eq("id", row.id)
             .maybeSingle();
@@ -120,7 +117,7 @@ export function CatalogoManager({
             copy[idx] = full;
             return copy;
           });
-        }
+        },
       )
       .on(
         "postgres_changes",
@@ -130,10 +127,10 @@ export function CatalogoManager({
             const old = payload.old as { id?: number };
             if (old?.id != null) {
               setCategorias((prev) =>
-                prev.filter((c) => String(c.id) !== String(old.id))
+                prev.filter((c) => String(c.id) !== String(old.id)),
               );
               setSelectedCategoriaId((cur) =>
-                cur === String(old.id) ? null : cur
+                cur === String(old.id) ? null : cur,
               );
             }
             return;
@@ -144,16 +141,16 @@ export function CatalogoManager({
             const idx = prev.findIndex((c) => String(c.id) === String(row.id));
             if (idx === -1) {
               return [...prev, row].sort(
-                (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
+                (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0),
               );
             }
             const copy = prev.slice();
             copy[idx] = { ...copy[idx], ...row };
             return copy.sort(
-              (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
+              (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0),
             );
           });
-        }
+        },
       )
       .subscribe();
 
@@ -181,7 +178,7 @@ export function CatalogoManager({
       if (e.key === "/") {
         e.preventDefault();
         const el = document.querySelector<HTMLInputElement>(
-          'input[aria-label="Buscar produtos"]'
+          'input[aria-label="Buscar produtos"]',
         );
         el?.focus();
       }
@@ -301,8 +298,8 @@ export function CatalogoManager({
       prev.map((item) =>
         String(item.id) === String(p.id)
           ? { ...item, esta_disponivel: next }
-          : item
-      )
+          : item,
+      ),
     );
 
     try {
@@ -313,8 +310,8 @@ export function CatalogoManager({
         prev.map((item) =>
           String(item.id) === String(p.id)
             ? ({ ...item, ...updated } as CatalogProduto)
-            : item
-        )
+            : item,
+        ),
       );
       toast.success(next ? "Produto ativado" : "Produto desativado");
     } catch (e) {
@@ -323,13 +320,13 @@ export function CatalogoManager({
         prev.map((item) =>
           String(item.id) === String(p.id)
             ? { ...item, esta_disponivel: p.esta_disponivel }
-            : item
-        )
+            : item,
+        ),
       );
       toast.error(
         e instanceof Error
           ? e.message
-          : "Não foi possível atualizar disponibilidade"
+          : "Não foi possível atualizar disponibilidade",
       );
     }
   };
@@ -392,11 +389,9 @@ export function CatalogoManager({
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-[#F7F8FC]">
+    <div className="catalog-page flex flex-col bg-[#F7F8FC]">
       <CatalogoHeader
         activeTab={tab}
-        search={search}
-        onSearchChange={setSearch}
         onNovoProduto={openNovo}
         onImport={() =>
           toast.message("Importação em breve", {
@@ -407,10 +402,54 @@ export function CatalogoManager({
       />
 
       <CatalogoTabs active={tab} onChange={setTab} />
+      {loadError && tab === "produtos" && <div role="alert" className="my-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Não foi possível carregar o catálogo. <button type="button" className="underline" onClick={() => window.location.reload()}>Tentar novamente</button></div>}
 
       {tab === "produtos" && (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 bg-[#F7F8FC] p-3 sm:p-5 md:flex-row">
-          <div className="hidden h-full w-[232px] shrink-0 md:flex">
+        <div className="catalog-body">
+          <div className="catalog-mobile-categories">
+            <label htmlFor="catalog-category" className="sr-only">
+              Categoria
+            </label>
+            <select
+              id="catalog-category"
+              value={selectedCategoriaId ?? "__all__"}
+              onChange={(e) =>
+                setSelectedCategoriaId(
+                  e.target.value === "__all__" ? null : e.target.value,
+                )
+              }
+            >
+              <option value="__all__">
+                Todas as categorias ({produtos.length})
+              </option>
+              {categorias.map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.nome} (
+                  {
+                    produtos.filter(
+                      (p) => String(p.categoria_id) === String(c.id),
+                    ).length
+                  }
+                  )
+                </option>
+              ))}
+              <option value="__none__">Sem categoria</option>
+            </select>
+            <button
+              type="button"
+              aria-expanded={manageCategories}
+              onClick={() => setManageCategories((v) => !v)}
+            >
+              Gerenciar
+            </button>
+          </div>
+          <div
+            className={
+              manageCategories
+                ? "catalog-categories is-open"
+                : "catalog-categories"
+            }
+          >
             <CategoriasSidebar
               categorias={categorias}
               produtos={produtos}
@@ -436,30 +475,12 @@ export function CatalogoManager({
             />
           </div>
 
-          {/* Mobile categorias strip */}
-          <div className="shrink-0 overflow-x-auto rounded-xl border border-[#E7E3EA] bg-white p-2 shadow-sm md:hidden">
-            <div className="flex gap-1.5">
-              <Chip
-                active={selectedCategoriaId == null}
-                onClick={() => setSelectedCategoriaId(null)}
-                label="Todas"
-              />
-              {categorias.map((c) => (
-                <Chip
-                  key={c.id}
-                  active={selectedCategoriaId === String(c.id)}
-                  onClick={() => setSelectedCategoriaId(String(c.id))}
-                  label={c.nome}
-                />
-              ))}
-            </div>
-          </div>
-
           <ProdutosArea
             categorias={categorias}
             produtos={produtos}
             selectedCategoriaId={selectedCategoriaId}
             search={search}
+            onSearchChange={setSearch}
             onReorder={(ids) => void handleReorderProdutos(ids)}
             onEdit={openEdit}
             onDuplicate={(p) => void handleDuplicate(p)}
@@ -473,8 +494,20 @@ export function CatalogoManager({
 
       {tab === "complementos" && <ComplementosTab mode="complementos" />}
       {tab === "opcoes" && <ComplementosTab mode="opcoes" />}
-      {tab === "combos" && <CombosTab products={produtos} initial={combosIniciais} loadError={combosErro} />}
-      {tab === "promocoes" && <PromocoesFreteTab products={produtos} initial={promocoesFreteIniciais} loadError={promocoesFreteErro} />}
+      {tab === "combos" && (
+        <CombosTab
+          products={produtos}
+          initial={combosIniciais}
+          loadError={combosErro}
+        />
+      )}
+      {tab === "promocoes" && (
+        <PromocoesFreteTab
+          products={produtos}
+          initial={promocoesFreteIniciais}
+          loadError={promocoesFreteErro}
+        />
+      )}
 
       <ProdutoDrawer
         open={drawerOpen}
@@ -510,29 +543,5 @@ export function CatalogoManager({
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        active
-          ? "shrink-0 rounded-lg border border-[#DCCFEA] bg-[#F4F0F8] px-3 py-2 text-[12px] font-semibold text-[#4C258C]"
-          : "shrink-0 rounded-lg border border-transparent bg-white px-3 py-2 text-[12px] font-medium text-[#716B77] hover:bg-[#F8F7FA]"
-      }
-    >
-      {label}
-    </button>
   );
 }

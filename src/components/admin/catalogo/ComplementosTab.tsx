@@ -16,13 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  GripVertical,
-  Layers,
-  Plus,
-  ChevronRight,
-  Loader2,
-} from "lucide-react";
+import { GripVertical, Plus, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
   createGrupoOpcoes,
@@ -32,6 +26,12 @@ import {
 } from "@/actions/admin/grupos-opcoes";
 import { updateOpcao, deleteOpcao } from "@/actions/admin/adicionais";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -159,7 +159,7 @@ function OptionRowInner({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(opcao.nome);
   const [priceStr, setPriceStr] = useState(
-    String(Number(opcao.preco_adicional || 0).toFixed(2))
+    String(Number(opcao.preco_adicional || 0).toFixed(2)),
   );
   const [editingPrice, setEditingPrice] = useState(false);
   const disponivel = isOpcaoDisponivel(opcao);
@@ -192,8 +192,8 @@ function OptionRowInner({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-[#E5E7EB] group",
-        !disponivel && "opacity-70 bg-[#FAFAFA]"
+        "catalog-option-row flex flex-wrap items-center gap-2 px-3 py-2 bg-white group",
+        !disponivel && "opacity-70 bg-[#FAFAFA]",
       )}
     >
       {dragHandleProps ? (
@@ -208,7 +208,7 @@ function OptionRowInner({
       ) : (
         <span className="w-3.5" aria-hidden />
       )}
-      <div className="flex-1 min-w-0 flex items-center gap-1.5">
+      <div className="basis-[calc(100%-3.5rem)] sm:basis-auto flex-1 min-w-0 flex items-center gap-1.5">
         {editing ? (
           <Input
             autoFocus
@@ -226,7 +226,7 @@ function OptionRowInner({
         ) : (
           <button
             type="button"
-            className="min-w-0 text-left text-sm font-medium text-[#111827] truncate"
+            className="min-w-0 text-left text-sm font-medium text-[#111827] break-words"
             onClick={() => setEditing(true)}
             title="Clique para renomear"
           >
@@ -259,7 +259,7 @@ function OptionRowInner({
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               if (e.key === "Escape") {
                 setPriceStr(
-                  String(Number(opcao.preco_adicional || 0).toFixed(2))
+                  String(Number(opcao.preco_adicional || 0).toFixed(2)),
                 );
                 setEditingPrice(false);
               }
@@ -274,7 +274,7 @@ function OptionRowInner({
             className={cn(
               "h-8 min-w-[72px] px-2 rounded-lg text-sm tabular-nums text-right font-semibold",
               "border border-transparent hover:border-[#D4C4F0] hover:bg-[#F3EEFA] text-[#111827]",
-              "transition-colors"
+              "transition-colors",
             )}
             title="Clique para editar o valor"
           >
@@ -296,7 +296,7 @@ function OptionRowInner({
         <span
           className={cn(
             "text-[9px] font-semibold uppercase",
-            disponivel ? "text-emerald-600" : "text-[#9CA3AF]"
+            disponivel ? "text-emerald-600" : "text-[#9CA3AF]",
           )}
         >
           {disponivel ? "On" : "Off"}
@@ -304,7 +304,7 @@ function OptionRowInner({
       </div>
       <button
         type="button"
-        className="text-[11px] text-red-500 opacity-0 group-hover:opacity-100"
+        className="text-[11px] text-red-500 opacity-100"
         onClick={onDelete}
       >
         Excluir
@@ -313,7 +313,11 @@ function OptionRowInner({
   );
 }
 
-export function ComplementosTab({ mode = "complementos" }: { mode?: "complementos" | "opcoes" }) {
+export function ComplementosTab({
+  mode = "complementos",
+}: {
+  mode?: "complementos" | "opcoes";
+}) {
   const [grupos, setGrupos] = useState<GrupoComOpcoes[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -339,7 +343,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
         supabase
           .from("opcoes")
           .select(
-            "*, grupo:grupos_opcoes(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)"
+            "*, grupo:grupos_opcoes(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)",
           )
           .order("ordem", { ascending: true }),
       ]);
@@ -367,12 +371,12 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "grupos_opcoes" },
-        () => void load()
+        () => void load(),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "opcoes" },
-        () => void load()
+        () => void load(),
       )
       .subscribe();
     return () => {
@@ -382,11 +386,11 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
 
   const selected = useMemo(
     () => grupos.find((g) => String(g.id) === selectedId) || null,
-    [grupos, selectedId]
+    [grupos, selectedId],
   );
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
   const createGrupo = async () => {
@@ -440,9 +444,9 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
         opcoes: g.opcoes.map((o) =>
           String(o.id) === String(opcao.id)
             ? { ...o, preco_adicional: preco }
-            : o
+            : o,
         ),
-      }))
+      })),
     );
     try {
       await updateOpcao(opcao.id, { preco_adicional: preco });
@@ -451,7 +455,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
       });
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Não foi possível atualizar o preço"
+        e instanceof Error ? e.message : "Não foi possível atualizar o preço",
       );
       await load();
     }
@@ -460,7 +464,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
   const handleOpcaoTag = async (
     opcao: Opcao,
     tagId: string | null,
-    tag: TagRow | null
+    tag: TagRow | null,
   ) => {
     setGrupos((prev) =>
       prev.map((g) => ({
@@ -479,18 +483,18 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                     }
                   : null,
               }
-            : o
+            : o,
         ),
-      }))
+      })),
     );
     try {
       await updateOpcao(opcao.id, { tag_id: tagId });
       toast.success(
-        tag ? `Tag “${tag.nome}” na opção` : "Tag removida da opção"
+        tag ? `Tag “${tag.nome}” na opção` : "Tag removida da opção",
       );
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Não foi possível atualizar a tag"
+        e instanceof Error ? e.message : "Não foi possível atualizar a tag",
       );
       await load();
     }
@@ -499,7 +503,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
   const handleGrupoTag = async (
     grupo: GrupoComOpcoes,
     tagId: string | null,
-    tag: TagRow | null
+    tag: TagRow | null,
   ) => {
     setGrupos((prev) =>
       prev.map((g) =>
@@ -516,17 +520,17 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                   }
                 : null,
             }
-          : g
-      )
+          : g,
+      ),
     );
     try {
       await updateGrupoOpcoes(grupo.id, { tag_id: tagId });
       toast.success(
-        tag ? `Tag “${tag.nome}” no grupo` : "Tag removida do grupo"
+        tag ? `Tag “${tag.nome}” no grupo` : "Tag removida do grupo",
       );
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "Não foi possível atualizar a tag"
+        e instanceof Error ? e.message : "Não foi possível atualizar a tag",
       );
       await load();
     }
@@ -543,12 +547,12 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
     const reordered = arrayMove(selected.opcoes, oldIndex, newIndex);
     setGrupos((prev) =>
       prev.map((g) =>
-        String(g.id) === String(selected.id) ? { ...g, opcoes: reordered } : g
-      )
+        String(g.id) === String(selected.id) ? { ...g, opcoes: reordered } : g,
+      ),
     );
     try {
       await Promise.all(
-        reordered.map((o, i) => updateOpcao(o.id, { ordem: i + 1 }))
+        reordered.map((o, i) => updateOpcao(o.id, { ordem: i + 1 })),
       );
     } catch {
       toast.error("Não foi possível reordenar");
@@ -573,9 +577,9 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                 // Mantém status ativo para o item continuar listado no cardápio
                 status: "ativo",
               }
-            : o
+            : o,
         ),
-      }))
+      })),
     );
 
     try {
@@ -588,21 +592,21 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
       toast.success(
         next
           ? "Opção disponível no cardápio"
-          : "Opção marcada como esgotada (continua visível para o cliente)"
+          : "Opção marcada como esgotada (continua visível para o cliente)",
       );
     } catch (e) {
       setGrupos((prev) =>
         prev.map((g) => ({
           ...g,
           opcoes: g.opcoes.map((o) =>
-            String(o.id) === String(opcao.id) ? opcao : o
+            String(o.id) === String(opcao.id) ? opcao : o,
           ),
-        }))
+        })),
       );
       toast.error(
         e instanceof Error
           ? e.message
-          : "Não foi possível atualizar disponibilidade"
+          : "Não foi possível atualizar disponibilidade",
       );
     } finally {
       setTogglingId(null);
@@ -626,8 +630,24 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
       : "Caldas, frutas, coberturas e adicionais";
 
   return (
-    <div className="flex-1 flex min-h-0 bg-[#F7F8FC]">
-      <aside className="w-full lg:w-[280px] border-r border-[#E5E7EB] bg-white flex flex-col">
+    <div className="catalog-groups">
+      <aside className="catalog-groups-nav">
+        <div className="catalog-group-selector">
+          <label htmlFor={`group-selector-${mode}`} className="sr-only">
+            Grupo selecionado
+          </label>
+          <select
+            id={`group-selector-${mode}`}
+            value={selectedId ?? ""}
+            onChange={(e) => setSelectedId(e.target.value)}
+          >
+            {grupos.map((g) => (
+              <option key={g.id} value={String(g.id)}>
+                {g.nome} ({g.opcoes.length})
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="px-4 py-3 border-b border-[#E5E7EB]">
           <h2 className="text-sm font-semibold text-[#111827]">{title}</h2>
           <p className="text-[11px] text-[#9CA3AF] mt-0.5">{subtitle}</p>
@@ -636,12 +656,14 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
           <Input
             value={newGrupo}
             onChange={(e) => setNewGrupo(e.target.value)}
+            aria-label="Nome do novo grupo"
             placeholder="Novo grupo…"
             className="h-9 text-sm rounded-lg"
             onKeyDown={(e) => e.key === "Enter" && void createGrupo()}
           />
           <Button
             size="icon"
+            aria-label="Criar grupo"
             className="h-9 w-9 shrink-0 bg-[#4C258C] hover:bg-[#5E35B1]"
             disabled={busy}
             onClick={() => void createGrupo()}
@@ -662,13 +684,12 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                   type="button"
                   onClick={() => setSelectedId(String(g.id))}
                   className={cn(
-                    "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left transition-colors",
+                    "w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-colors",
                     active
                       ? "bg-[#F3EEFA] text-[#4C258C]"
-                      : "hover:bg-[#F7F8FC] text-[#374151]"
+                      : "hover:bg-[#F7F8FC] text-[#374151]",
                   )}
                 >
-                  <Layers className="w-4 h-4 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <p className="text-sm font-medium truncate">{g.nome}</p>
@@ -679,7 +700,6 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                       {obrigatorio ? "Obrigatório" : "Opcional"}
                     </p>
                   </div>
-                  <ChevronRight className="w-4 h-4 opacity-40" />
                 </button>
               );
             })
@@ -687,12 +707,12 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
         </div>
       </aside>
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="catalog-group-detail">
         {!selected ? (
           <CatalogEmpty kind="complementos" className="flex-1" />
         ) : (
           <>
-            <div className="px-6 py-4 border-b border-[#E5E7EB] bg-white flex items-start justify-between gap-3">
+            <div className="px-4 sm:px-6 py-4 border-b border-[#E5E7EB] bg-white flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-lg font-bold text-[#111827]">
@@ -706,66 +726,69 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                   {selected.opcoes.length} opções · min{" "}
                   {selected.min_escolha ?? 0} · max {selected.max_escolha}
                 </p>
-                <p className="text-[11px] text-[#9CA3AF] mt-1">
-                  Tags aparecem no cardápio do cliente igual ao admin
-                </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-end">
                 <TagSelectPopover
                   value={selected.tag_id}
                   tag={selected.tag}
-                  onChange={(id, tag) =>
-                    void handleGrupoTag(selected, id, tag)
-                  }
+                  onChange={(id, tag) => void handleGrupoTag(selected, id, tag)}
                   placeholder="Tag do grupo"
                   size="md"
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={async () => {
-                    const nome = window.prompt("Novo nome", selected.nome);
-                    if (!nome?.trim()) return;
-                    try {
-                      await updateGrupoOpcoes(selected.id, {
-                        nome: nome.trim(),
-                      });
-                      toast.success("Grupo atualizado");
-                      await load();
-                    } catch {
-                      toast.error("Falha ao atualizar");
-                    }
-                  }}
-                >
-                  Renomear
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
-                  onClick={async () => {
-                    if (!confirm("Excluir este grupo e suas opções?")) return;
-                    try {
-                      await deleteGrupoOpcoes(selected.id);
-                      toast.success("Grupo excluído");
-                      setSelectedId(null);
-                      await load();
-                    } catch {
-                      toast.error("Falha ao excluir");
-                    }
-                  }}
-                >
-                  Excluir
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      Ações do grupo
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {" "}
+                    <DropdownMenuItem
+                      className="rounded-xl"
+                      onClick={async () => {
+                        const nome = window.prompt("Novo nome", selected.nome);
+                        if (!nome?.trim()) return;
+                        try {
+                          await updateGrupoOpcoes(selected.id, {
+                            nome: nome.trim(),
+                          });
+                          toast.success("Grupo atualizado");
+                          await load();
+                        } catch {
+                          toast.error("Falha ao atualizar");
+                        }
+                      }}
+                    >
+                      Renomear
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="rounded-xl text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={async () => {
+                        if (!confirm("Excluir este grupo e suas opções?"))
+                          return;
+                        try {
+                          await deleteGrupoOpcoes(selected.id);
+                          toast.success("Grupo excluído");
+                          setSelectedId(null);
+                          await load();
+                        } catch {
+                          toast.error("Falha ao excluir");
+                        }
+                      }}
+                    >
+                      Excluir
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
-            <div className="p-4 sm:p-6 space-y-3 overflow-y-auto flex-1">
-              <div className="flex flex-wrap gap-2 max-w-xl items-center">
+            <div className="catalog-group-options space-y-3">
+              <div className="flex flex-wrap gap-2 w-full items-center">
                 <Input
                   value={newOpcao}
                   onChange={(e) => setNewOpcao(e.target.value)}
+                  aria-label="Nome da nova opção"
                   placeholder="Nova opção (ex.: Granola)"
                   className="h-10 rounded-xl flex-1 min-w-[140px]"
                   onKeyDown={(e) => e.key === "Enter" && void createOption()}
@@ -791,7 +814,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                   Adicionar
                 </Button>
               </div>
-              <p className="text-[11px] text-[#9CA3AF] max-w-xl">
+              <p className="text-[11px] text-[#9CA3AF] w-full">
                 Clique no nome para renomear · clique no valor para alterar o
                 preço · arraste para reordenar
               </p>
@@ -806,7 +829,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                     items={selected.opcoes.map((o) => `op-${o.id}`)}
                     strategy={verticalListSortingStrategy}
                   >
-                    <div className="space-y-1.5 max-w-xl">
+                    <div className="space-y-1.5 w-full">
                       {selected.opcoes.map((o) => (
                         <OptionRow
                           key={o.id}
@@ -845,7 +868,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                   </SortableContext>
                 </DndContext>
               ) : (
-                <div className="space-y-1.5 max-w-xl">
+                <div className="space-y-1.5 w-full">
                   {selected.opcoes.map((o) => (
                     <OptionRow
                       key={o.id}
@@ -855,9 +878,7 @@ export function ComplementosTab({ mode = "complementos" }: { mode?: "complemento
                       onPriceChange={(preco) =>
                         void handlePriceChange(o, preco)
                       }
-                      onTagChange={(id, tag) =>
-                        void handleOpcaoTag(o, id, tag)
-                      }
+                      onTagChange={(id, tag) => void handleOpcaoTag(o, id, tag)}
                       onRename={async (nome) => {
                         try {
                           await updateOpcao(o.id, { nome });

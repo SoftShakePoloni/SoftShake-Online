@@ -1,678 +1,497 @@
 import { jsPDF } from "jspdf";
-import autoTable from "jspdf-autotable";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import type { RelatorioData } from "@/types/relatorios";
+import autoTable, { type RowInput } from "jspdf-autotable";
+import type { RelatorioData, RelatorioFiltros } from "@/types/relatorios";
+import {
+  primaryReportKpis,
+  reportClientStats,
+  reportDate,
+  reportDateKey,
+  reportFilterLabels,
+  reportMoney,
+  reportNumber,
+  reportValueLabel,
+  validReportTrend,
+} from "./presentation";
 
-const BRAND = {
-  primary: [76, 37, 140] as [number, number, number],
-  primaryLight: [124, 58, 237] as [number, number, number],
-  dark: [17, 24, 39] as [number, number, number],
-  muted: [107, 114, 128] as [number, number, number],
-  border: [229, 231, 235] as [number, number, number],
-  soft: [238, 232, 250] as [number, number, number],
-  white: [255, 255, 255] as [number, number, number],
-  success: [16, 185, 129] as [number, number, number],
-  danger: [239, 68, 68] as [number, number, number],
-  rowAlt: [249, 250, 251] as [number, number, number],
-};
-
-const MARGIN = 14;
-const PAGE_W = 210;
-const PAGE_H = 297;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-const VERSION = "1.0.0";
-
-type AutoTableDoc = jsPDF & {
-  lastAutoTable?: { finalY: number };
-};
-
-function money(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function ensureSpace(doc: jsPDF, y: number, need: number): number {
-  if (y + need > PAGE_H - 22) {
-    doc.addPage();
-    return MARGIN + 8;
-  }
-  return y;
-}
-
-function drawFooter(doc: jsPDF, page: number, total: number, emittedAt: Date) {
-  const y = PAGE_H - 12;
-  doc.setDrawColor(...BRAND.border);
-  doc.setLineWidth(0.3);
-  doc.line(MARGIN, y - 4, PAGE_W - MARGIN, y - 4);
-
-  doc.setFontSize(7.5);
-  doc.setTextColor(...BRAND.muted);
-  doc.setFont("helvetica", "normal");
-  doc.text(
-    `SoftShake Admin · v${VERSION} · Emitido em ${format(emittedAt, "dd/MM/yyyy HH:mm", { locale: ptBR })}`,
-    MARGIN,
-    y
-  );
-  doc.text(`Página ${page} de ${total}`, PAGE_W - MARGIN, y, {
-    align: "right",
-  });
-}
-
-function sectionTitle(doc: jsPDF, title: string, y: number): number {
-  y = ensureSpace(doc, y, 14);
-  doc.setFillColor(...BRAND.primary);
-  doc.roundedRect(MARGIN, y - 3.5, 1.8, 6, 0.5, 0.5, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND.dark);
-  doc.text(title, MARGIN + 5, y);
-  doc.setDrawColor(...BRAND.border);
-  doc.setLineWidth(0.25);
-  doc.line(MARGIN, y + 3, PAGE_W - MARGIN, y + 3);
-  return y + 9;
-}
-
-function kpiBox(
-  doc: jsPDF,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  label: string,
-  value: string
-) {
-  doc.setFillColor(...BRAND.soft);
-  doc.setDrawColor(...BRAND.border);
-  doc.roundedRect(x, y, w, h, 2, 2, "FD");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...BRAND.muted);
-  doc.text(label, x + 3.5, y + 5);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...BRAND.primary);
-  doc.text(value, x + 3.5, y + 12);
-}
-
-function drawBarChart(
-  doc: jsPDF,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  title: string,
-  labels: string[],
-  values: number[],
-  color: [number, number, number]
-) {
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...BRAND.dark);
-  doc.text(title, x, y);
-
-  const chartY = y + 4;
-  const chartH = h - 14;
-  const chartW = w;
-  const max = Math.max(...values, 1);
-  const n = values.length || 1;
-  const gap = 1.2;
-  const barW = Math.max(1.5, (chartW - gap * (n + 1)) / n);
-
-  doc.setDrawColor(...BRAND.border);
-  doc.setLineWidth(0.2);
-  doc.line(x, chartY + chartH, x + chartW, chartY + chartH);
-
-  values.forEach((v, i) => {
-    const bh = (v / max) * (chartH - 2);
-    const bx = x + gap + i * (barW + gap);
-    const by = chartY + chartH - bh;
-    doc.setFillColor(...color);
-    doc.roundedRect(bx, by, barW, Math.max(bh, 0.4), 0.4, 0.4, "F");
-  });
-
-  // Labels: show every nth if many
-  doc.setFontSize(5.5);
-  doc.setTextColor(...BRAND.muted);
-  doc.setFont("helvetica", "normal");
-  const step = n > 20 ? Math.ceil(n / 10) : n > 12 ? 2 : 1;
-  labels.forEach((lab, i) => {
-    if (i % step !== 0 && i !== n - 1) return;
-    const bx = x + gap + i * (barW + gap) + barW / 2;
-    doc.text(String(lab).slice(0, 6), bx, chartY + chartH + 3.5, {
-      align: "center",
-    });
-  });
-}
-
-function drawPieLegend(
-  doc: jsPDF,
-  x: number,
-  y: number,
-  title: string,
-  items: { name: string; value: number; percent?: number }[],
-  colors: [number, number, number][]
-) {
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...BRAND.dark);
-  doc.text(title, x, y);
-
-  const total = items.reduce((s, i) => s + i.value, 0) || 1;
-  let cy = y + 5;
-
-  // Mini donut using arcs approximated by wedges via triangles is complex in jspdf;
-  // use colored bars + legend for print clarity
-  items.slice(0, 6).forEach((item, i) => {
-    const pct = item.percent ?? Number(((item.value / total) * 100).toFixed(1));
-    const barW = (Math.min(pct, 100) / 100) * 55;
-    const color = colors[i % colors.length];
-
-    doc.setFillColor(...color);
-    doc.roundedRect(x, cy - 2.2, 3, 3, 0.5, 0.5, "F");
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(...BRAND.dark);
-    doc.text(item.name.slice(0, 22), x + 5, cy);
-
-    doc.setFillColor(...BRAND.rowAlt);
-    doc.roundedRect(x + 42, cy - 2, 55, 3, 0.5, 0.5, "F");
-    doc.setFillColor(...color);
-    doc.roundedRect(x + 42, cy - 2, Math.max(barW, 0.5), 3, 0.5, 0.5, "F");
-
-    doc.setTextColor(...BRAND.muted);
-    doc.text(`${pct}% (${item.value})`, x + 100, cy);
-    cy += 6;
-  });
-
-  return cy;
-}
-
-async function loadImageAsDataUrl(
-  url: string
-): Promise<{ dataUrl: string; format: "PNG" | "JPEG" | "WEBP" } | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    const buf = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-    const base64 = btoa(binary);
-    const type = blob.type || "image/png";
-    const format: "PNG" | "JPEG" | "WEBP" = type.includes("jpeg") || type.includes("jpg")
-      ? "JPEG"
-      : type.includes("webp")
-        ? "WEBP"
-        : "PNG";
-    return { dataUrl: `data:${type};base64,${base64}`, format };
-  } catch {
-    return null;
-  }
-}
-
+const INK: [number, number, number] = [41, 35, 47],
+  MUTED: [number, number, number] = [112, 104, 121],
+  PURPLE: [number, number, number] = [76, 37, 140],
+  BORDER: [number, number, number] = [231, 227, 234];
+const M = 16,
+  W = 178,
+  BOTTOM = 274;
+type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
 export type GeneratePdfOptions = {
   data: RelatorioData;
   emitidoPor: string;
+  filtros?: RelatorioFiltros;
 };
 
+/** Vector content throughout: independent of viewport size and browser chart rendering. */
 export async function generateRelatorioPdf({
   data,
   emitidoPor,
+  filtros,
 }: GeneratePdfOptions): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4",
     compress: true,
-  }) as AutoTableDoc;
-
-  const emittedAt = new Date();
-  let y = MARGIN;
-
-  // ========== HEADER ==========
-  doc.setFillColor(...BRAND.primary);
-  doc.rect(0, 0, PAGE_W, 32, "F");
-  doc.setFillColor(...BRAND.primaryLight);
-  doc.rect(0, 32, PAGE_W, 1.2, "F");
-
-  // Logo (optional)
+  }) as PdfDoc;
+  doc.setProperties({
+    title: "Relatório de desempenho",
+    subject: data.range.label,
+    author: data.empresa.nome || "SoftShake",
+    creator: "SoftShake",
+  });
+  let y = 20;
+  const text = (
+    value: string,
+    x: number,
+    at: number,
+    size = 9,
+    color = INK,
+    bold = false,
+    align: "left" | "right" | "center" = "left",
+  ) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    doc.setTextColor(...color);
+    doc.text(value, x, at, { align });
+  };
+  const ensure = (height: number) => {
+    if (y + height > BOTTOM) {
+      doc.addPage();
+      y = 24;
+    }
+  };
+  const paragraph = (value: string, size = 8, color = MUTED) => {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(size);
+    const lines: string[] = doc.splitTextToSize(value, W);
+    for (const line of lines) {
+      ensure(5);
+      text(line, M, y, size, color);
+      y += 4.5;
+    }
+    y += 2;
+  };
+  const title = (value: string, room = 26) => {
+    ensure(room);
+    text(value, M, y, 12, INK, true);
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.2);
+    doc.line(M, y + 3, M + W, y + 3);
+    y += 10;
+  };
+  const table = (
+    heading: string,
+    head: string[],
+    body: RowInput[],
+    rightColumns: number[] = [],
+  ) => {
+    title(heading, body.length ? 34 : 20);
+    if (!body.length) {
+      paragraph("Sem registros neste período.");
+      y += 3;
+      return;
+    }
+    autoTable(doc, {
+      startY: y,
+      margin: { left: M, right: M, top: 24, bottom: 24 },
+      tableWidth: W,
+      head: [head],
+      body,
+      theme: "plain",
+      showHead: "everyPage",
+      rowPageBreak: "avoid",
+      styles: {
+        font: "helvetica",
+        fontSize: 8,
+        cellPadding: 2.5,
+        textColor: INK,
+        lineColor: BORDER,
+        lineWidth: 0,
+        overflow: "linebreak",
+        valign: "top",
+      },
+      headStyles: {
+        fillColor: [246, 244, 249],
+        textColor: INK,
+        fontStyle: "bold",
+        fontSize: 7.5,
+        lineColor: BORDER,
+        lineWidth: { bottom: 0.2 },
+      },
+      bodyStyles: { lineColor: BORDER, lineWidth: { bottom: 0.1 } },
+      columnStyles: Object.fromEntries(
+        rightColumns.map((index) => [index, { halign: "right" }]),
+      ),
+      didParseCell: (hook) => {
+        if (hook.section === "head" && rightColumns.includes(hook.column.index))
+          hook.cell.styles.halign = "right";
+      },
+    });
+    y = (doc.lastAutoTable?.finalY ?? y) + 12;
+  };
+  // Optional original logo; preserve its native aspect ratio.
+  let logoWidth = 0;
   if (data.empresa.logoUrl) {
     try {
-      const img = await loadImageAsDataUrl(data.empresa.logoUrl);
-      if (img) {
-        // WEBP may not work in all jspdf builds — try PNG/JPEG only
-        if (img.format !== "WEBP") {
-          doc.addImage(img.dataUrl, img.format, MARGIN, 6, 14, 14);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      try {
+        const res = await fetch(data.empresa.logoUrl, {
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const bytes = new Uint8Array(await res.arrayBuffer());
+          const image = doc.getImageProperties(bytes);
+          const scale = Math.min(18 / image.width, 16 / image.height);
+          logoWidth = image.width * scale;
+          doc.addImage(
+            bytes,
+            image.fileType,
+            M,
+            13,
+            logoWidth,
+            image.height * scale,
+          );
         }
+      } finally {
+        clearTimeout(timer);
       }
     } catch {
-      // ignore logo errors
+      /* The report remains usable if the optional logo cannot be fetched. */
     }
   }
-
-  doc.setTextColor(...BRAND.white);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text(data.empresa.nome || "SoftShake", MARGIN + 18, 11);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(220, 210, 245);
-  doc.text("Painel Administrativo", MARGIN + 18, 16.5);
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(...BRAND.white);
-  doc.text("RELATÓRIO GERENCIAL", PAGE_W - MARGIN, 11, { align: "right" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(220, 210, 245);
-  doc.text("Resumo das vendas e pedidos", PAGE_W - MARGIN, 16.5, {
-    align: "right",
+  text(
+    data.empresa.nome || "SoftShake",
+    M + (logoWidth ? logoWidth + 5 : 0),
+    19,
+    11,
+    PURPLE,
+    true,
+  );
+  text("Relatório de desempenho", M, 36, 22, INK, true);
+  text(
+    `${reportDate(data.range.from)} a ${reportDate(data.range.to)}`,
+    M,
+    44,
+    10,
+  );
+  const emitted = new Date().toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "short",
+    timeStyle: "short",
   });
-
-  y = 40;
-
-  // Meta block
-  doc.setFillColor(...BRAND.rowAlt);
-  doc.roundedRect(MARGIN, y, CONTENT_W, 16, 2, 2, "F");
-  doc.setFontSize(8);
-  doc.setTextColor(...BRAND.muted);
-  doc.setFont("helvetica", "normal");
-
-  const metaL = [
-    `Período: ${data.range.label}`,
-    `Emissão: ${format(emittedAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
-  ];
-  const metaR = [
-    `Responsável: ${emitidoPor}`,
-    `Pedidos analisados: ${data.totalPedidosPeriodo}`,
-  ];
-  doc.text(metaL[0], MARGIN + 4, y + 6);
-  doc.text(metaL[1], MARGIN + 4, y + 11.5);
-  doc.text(metaR[0], PAGE_W - MARGIN - 4, y + 6, { align: "right" });
-  doc.text(metaR[1], PAGE_W - MARGIN - 4, y + 11.5, { align: "right" });
-
-  y += 22;
-
-  // ========== RESUMO EXECUTIVO ==========
-  y = sectionTitle(doc, "1. Resumo Executivo", y);
-
-  const kpis = [
-    { label: "Faturamento Total", value: money(data.financeiro.faturamentoBruto) },
-    { label: "Qtd. de Pedidos", value: String(data.kpis.find((k) => k.key === "pedidos")?.value || "0") },
-    { label: "Ticket Médio", value: data.kpis.find((k) => k.key === "ticket")?.value || money(0) },
-    { label: "Clientes Atendidos", value: data.kpis.find((k) => k.key === "clientes")?.value || "0" },
-    { label: "Pedidos Finalizados", value: String(data.status.find((s) => s.name === "Finalizado")?.value || 0) },
-    { label: "Pedidos Cancelados", value: data.kpis.find((k) => k.key === "cancelados")?.value || "0" },
-  ];
-
-  const boxW = (CONTENT_W - 6) / 3;
-  const boxH = 16;
-  kpis.forEach((k, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const bx = MARGIN + col * (boxW + 3);
-    const by = y + row * (boxH + 3);
-    kpiBox(doc, bx, by, boxW, boxH, k.label, k.value);
+  text(`Emitido em ${emitted}`, M + W, 19, 8, MUTED, false, "right");
+  y = 51;
+  paragraph(`Período: ${data.range.label}`);
+  const selectedFilters = reportFilterLabels(filtros);
+  paragraph(
+    selectedFilters.length
+      ? `Filtros: ${selectedFilters.join(" | ")}`
+      : "Filtros: todos os status, pagamentos e canais.",
+  );
+  if (emitidoPor) paragraph(`Emitido por: ${emitidoPor}`);
+  y += 4;
+  title("Resumo executivo", 42);
+  const kpis = primaryReportKpis(data.kpis);
+  const cellWidth = W / 4;
+  kpis.forEach((kpi, index) => {
+    const x = M + index * cellWidth;
+    text(kpi.label, x, y, 8, MUTED);
+    doc.setFontSize(17);
+    const size = Math.min(
+      17,
+      (17 * (cellWidth - 4)) /
+        Math.max(doc.getTextWidth(kpi.value), cellWidth - 4),
+    );
+    text(kpi.value, x, y + 9, size, INK, true);
+    const trend = validReportTrend(kpi);
+    text(
+      trend == null
+        ? "Sem base comparável"
+        : `${trend > 0 ? "+" : ""}${reportNumber(trend, 1)}% vs. anterior`,
+      x,
+      y + 16,
+      7,
+      MUTED,
+    );
   });
-  y += 2 * (boxH + 3) + 6;
-
-  // ========== FINANCEIRO ==========
-  y = sectionTitle(doc, "2. Resumo Financeiro", y);
-  autoTable(doc, {
-    startY: y,
-    margin: { left: MARGIN, right: MARGIN },
-    head: [["Indicador", "Valor"]],
-    body: [
-      ["Faturamento Bruto", money(data.financeiro.faturamentoBruto)],
-      ["Descontos", money(data.financeiro.descontos)],
-      ["Taxa de entrega (soma)", money(data.financeiro.taxaEntrega)],
-      ["Total líquido", money(data.financeiro.totalLiquido)],
-      ["Forma de pagamento mais usada", data.financeiro.pagamentoMaisUsado],
-    ],
-    theme: "plain",
-    styles: {
-      fontSize: 8.5,
-      cellPadding: 2.8,
-      textColor: BRAND.dark,
-      lineColor: BRAND.border,
-      lineWidth: 0.2,
-    },
-    headStyles: {
-      fillColor: BRAND.primary,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-      fontSize: 8,
-    },
-    alternateRowStyles: { fillColor: BRAND.rowAlt },
-    columnStyles: {
-      0: { cellWidth: 90 },
-      1: { halign: "right", fontStyle: "bold" },
-    },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + 10;
-
-  // ========== GRÁFICOS ==========
-  y = ensureSpace(doc, y, 55);
-  y = sectionTitle(doc, "3. Gráficos de Desempenho", y);
-
-  const fatLabels = data.faturamentoDiario.map((d) => d.label);
-  const fatValues = data.faturamentoDiario.map((d) => d.faturamento);
-  const pedValues = data.pedidosDiarios.map((d) => d.pedidos);
-
-  drawBarChart(
-    doc,
-    MARGIN,
-    y,
-    CONTENT_W / 2 - 3,
-    42,
-    "Faturamento diário (R$)",
-    fatLabels,
-    fatValues,
-    BRAND.primary
+  y += 25;
+  paragraph(
+    `Comparação: ${reportDate(data.prevRange.from)} a ${reportDate(data.prevRange.to)}. Percentuais apresentados somente com base anterior maior que zero.`,
+    7,
   );
-  drawBarChart(
-    doc,
-    MARGIN + CONTENT_W / 2 + 3,
-    y,
-    CONTENT_W / 2 - 3,
-    42,
-    "Pedidos por dia",
-    fatLabels,
-    pedValues,
-    BRAND.primaryLight
-  );
-  y += 48;
-
-  y = ensureSpace(doc, y, 50);
-  const pieColors: [number, number, number][] = [
-    BRAND.primary,
-    BRAND.primaryLight,
-    [167, 139, 250],
-    BRAND.success,
-    [59, 130, 246],
-    BRAND.danger,
-  ];
-  const yPay = drawPieLegend(
-    doc,
-    MARGIN,
-    y,
-    "Métodos de pagamento",
-    data.pagamentos,
-    pieColors
-  );
-  const ySt = drawPieLegend(
-    doc,
-    MARGIN + CONTENT_W / 2 + 2,
-    y,
-    "Status dos pedidos",
-    data.status,
-    pieColors
-  );
-  y = Math.max(yPay, ySt) + 8;
-
-  // ========== PRODUTOS ==========
-  y = ensureSpace(doc, y, 40);
-  y = sectionTitle(doc, "4. Produtos mais vendidos", y);
-  autoTable(doc, {
-    startY: y,
-    margin: { left: MARGIN, right: MARGIN },
-    head: [["#", "Produto", "Qtd", "Receita", "Part. %"]],
-    body: data.produtos.slice(0, 15).map((p, i) => [
-      String(i + 1),
-      p.nome,
-      String(p.quantidade),
-      money(p.faturamento),
-      `${p.participacao}%`,
-    ]),
-    theme: "plain",
-    styles: {
-      fontSize: 8,
-      cellPadding: 2.4,
-      textColor: BRAND.dark,
-      lineColor: BRAND.border,
-      lineWidth: 0.15,
-    },
-    headStyles: {
-      fillColor: BRAND.primary,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-    },
-    didParseCell: (hook) => {
-      if (hook.section === "body" && hook.row.index < 3) {
-        hook.cell.styles.fontStyle = "bold";
-        if (hook.column.index === 0) {
-          hook.cell.styles.textColor = BRAND.primary;
-        }
+  y += 3;
+  title("Evolução das vendas", 84);
+  const series = data.faturamentoDiario;
+  const valid = series.filter((row) => Number.isFinite(row.faturamento));
+  if (!valid.length) {
+    paragraph("Sem informações de vendas para o período.");
+  } else if (!valid.some((row) => row.faturamento > 0)) {
+    paragraph(
+      `Nenhuma venda registrada no período. Faturamento: ${reportMoney(0)}.`,
+    );
+  } else {
+    const x = M + 20,
+      chartW = W - 24,
+      top = y + 3,
+      h = 42,
+      max = Math.max(...valid.map((row) => row.faturamento), 1);
+    for (let tick = 0; tick <= 3; tick++) {
+      const cy = top + h - (tick * h) / 3;
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.15);
+      doc.line(x, cy, x + chartW, cy);
+      text(
+        new Intl.NumberFormat("pt-BR", {
+          notation: "compact",
+          maximumFractionDigits: 1,
+        }).format((max * tick) / 3),
+        x - 3,
+        cy + 1,
+        7,
+        MUTED,
+        false,
+        "right",
+      );
+    }
+    text("R$", M, top - 2, 7, MUTED);
+    const px = (index: number) =>
+      x +
+      (series.length === 1
+        ? chartW / 2
+        : (index * chartW) / (series.length - 1));
+    doc.setDrawColor(...PURPLE);
+    doc.setLineWidth(0.6);
+    series.forEach((row, index) => {
+      if (!Number.isFinite(row.faturamento)) return;
+      const cy = top + h - (row.faturamento / max) * h;
+      const previous = series[index - 1];
+      if (previous && Number.isFinite(previous.faturamento))
+        doc.line(
+          px(index - 1),
+          top + h - (previous.faturamento / max) * h,
+          px(index),
+          cy,
+        );
+      if (series.length <= 7) {
+        doc.setFillColor(...PURPLE);
+        doc.circle(px(index), cy, 0.8, "F");
+        text(
+          reportMoney(row.faturamento),
+          px(index),
+          cy - 3,
+          6.5,
+          MUTED,
+          false,
+          "center",
+        );
       }
-    },
-    columnStyles: {
-      0: { cellWidth: 10, halign: "center" },
-      2: { halign: "right", cellWidth: 18 },
-      3: { halign: "right", cellWidth: 32 },
-      4: { halign: "right", cellWidth: 20 },
-    },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + 10;
-
-  // ========== SABORES ==========
-  y = ensureSpace(doc, y, 35);
-  y = sectionTitle(doc, "5. Sabores mais vendidos", y);
-  if (data.sabores.length === 0) {
-    doc.setFontSize(8);
-    doc.setTextColor(...BRAND.muted);
-    doc.text("Sem dados de sabores no período.", MARGIN, y);
-    y += 8;
-  } else {
-    autoTable(doc, {
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["#", "Sabor", "Qtd", "Receita"]],
-      body: data.sabores.slice(0, 12).map((p, i) => [
-        String(i + 1),
-        p.nome,
-        String(p.quantidade),
-        money(p.faturamento),
-      ]),
-      theme: "plain",
-      styles: {
-        fontSize: 8,
-        cellPadding: 2.2,
-        textColor: BRAND.dark,
-        lineColor: BRAND.border,
-        lineWidth: 0.15,
-      },
-      headStyles: {
-        fillColor: BRAND.primary,
-        textColor: BRAND.white,
-        fontStyle: "bold",
-      },
-      alternateRowStyles: { fillColor: BRAND.rowAlt },
     });
-    y = (doc.lastAutoTable?.finalY || y) + 10;
-  }
-
-  // ========== ADICIONAIS ==========
-  y = ensureSpace(doc, y, 35);
-  y = sectionTitle(doc, "6. Adicionais mais vendidos", y);
-  if (data.adicionais.length === 0) {
-    doc.setFontSize(8);
-    doc.setTextColor(...BRAND.muted);
-    doc.text("Sem dados de adicionais no período.", MARGIN, y);
-    y += 8;
-  } else {
-    autoTable(doc, {
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      head: [["#", "Adicional", "Qtd", "Receita"]],
-      body: data.adicionais.slice(0, 12).map((p, i) => [
-        String(i + 1),
-        p.nome,
-        String(p.quantidade),
-        money(p.faturamento),
-      ]),
-      theme: "plain",
-      styles: {
-        fontSize: 8,
-        cellPadding: 2.2,
-        textColor: BRAND.dark,
-        lineColor: BRAND.border,
-        lineWidth: 0.15,
-      },
-      headStyles: {
-        fillColor: BRAND.primary,
-        textColor: BRAND.white,
-        fontStyle: "bold",
-      },
-      alternateRowStyles: { fillColor: BRAND.rowAlt },
+    const step = Math.max(1, Math.ceil(series.length / 6));
+    series.forEach((row, index) => {
+      if (index % step === 0 || index === series.length - 1)
+        text(row.label, px(index), top + h + 5, 7, MUTED, false, "center");
     });
-    y = (doc.lastAutoTable?.finalY || y) + 10;
+    y = top + h + 13;
+    paragraph(
+      `Valores diários em reais. Linhas retas entre os registros, com escala iniciando em zero. Maior valor diário: ${reportMoney(max)}.`,
+      7,
+    );
   }
-
-  // ========== CLIENTES ==========
-  y = ensureSpace(doc, y, 40);
-  y = sectionTitle(doc, "7. Clientes", y);
-  autoTable(doc, {
-    startY: y,
-    margin: { left: MARGIN, right: MARGIN },
-    head: [["Nome", "Pedidos", "Total gasto", "Última compra", "Ticket médio"]],
-    body: data.clientes.slice(0, 15).map((c) => [
-      c.nome,
-      String(c.pedidos),
-      money(c.totalGasto),
-      format(new Date(c.ultimaCompra), "dd/MM/yyyy HH:mm", { locale: ptBR }),
-      money(c.ticketMedio),
+  y += 3;
+  table(
+    "Resumo financeiro",
+    ["Indicador", "Valor"],
+    [
+      ["Faturamento bruto", reportMoney(data.financeiro.faturamentoBruto)],
+      ["Descontos", reportMoney(data.financeiro.descontos)],
+      ["Taxas de entrega", reportMoney(data.financeiro.taxaEntrega)],
+      ["Total líquido", reportMoney(data.financeiro.totalLiquido)],
+      ["Pagamento mais usado", data.financeiro.pagamentoMaisUsado],
+    ],
+    [1],
+  );
+  const distribution = (rows: { name: string; value: number }[]) => {
+    const total = rows.reduce((sum, row) => sum + row.value, 0);
+    return rows.map((row) => [
+      row.name,
+      reportNumber(row.value),
+      total > 0 ? `${reportNumber((row.value / total) * 100, 1)}%` : "Sem base",
+    ]);
+  };
+  table(
+    "Análise operacional · Status",
+    ["Status", "Pedidos", "Participação"],
+    distribution(data.status),
+    [1, 2],
+  );
+  table(
+    "Canais e tipos de pedido",
+    ["Canal", "Pedidos", "Participação"],
+    distribution(data.entregaVsRetirada),
+    [1, 2],
+  );
+  // Preserve all hourly intervals; split across columns without removing zero counts.
+  const hours = data.porHora,
+    mid = Math.ceil(hours.length / 2);
+  table(
+    "Pedidos por horário",
+    ["Horário", "Pedidos", "Horário", "Pedidos"],
+    hours
+      .slice(0, mid)
+      .map((row, index) => [
+        row.hora,
+        reportNumber(row.pedidos),
+        hours[index + mid]?.hora ?? "",
+        hours[index + mid] ? reportNumber(hours[index + mid].pedidos) : "",
+      ]),
+    [1, 3],
+  );
+  table(
+    "Análise comercial · Produtos mais vendidos",
+    ["Produto", "Quantidade", "Receita", "Participação"],
+    data.produtos.map((row) => [
+      row.nome,
+      reportNumber(row.quantidade),
+      reportMoney(row.faturamento),
+      `${reportNumber(row.participacao, 1)}%`,
     ]),
-    theme: "plain",
-    styles: {
-      fontSize: 7.5,
-      cellPadding: 2.2,
-      textColor: BRAND.dark,
-      lineColor: BRAND.border,
-      lineWidth: 0.15,
-    },
-    headStyles: {
-      fillColor: BRAND.primary,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-      fontSize: 7.5,
-    },
-    alternateRowStyles: { fillColor: BRAND.rowAlt },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + 10;
-
-  // ========== PEDIDOS ==========
-  y = ensureSpace(doc, y, 40);
-  y = sectionTitle(doc, "8. Pedidos do período", y);
-  autoTable(doc, {
-    startY: y,
-    margin: { left: MARGIN, right: MARGIN },
-    head: [["Número", "Cliente", "Data", "Status", "Pagamento", "Total"]],
-    body: data.pedidosLista.map((p) => [
-      `#${p.id.slice(0, 8).toUpperCase()}`,
-      p.cliente.slice(0, 22),
-      format(new Date(p.data), "dd/MM/yy HH:mm", { locale: ptBR }),
-      p.status,
-      p.pagamento,
-      money(p.total),
+    [1, 2, 3],
+  );
+  table(
+    "Formas de pagamento",
+    ["Pagamento", "Pedidos", "Participação"],
+    distribution(data.pagamentos),
+    [1, 2],
+  );
+  title("Indicadores de clientes", 48);
+  if (!data.clientes.length)
+    paragraph("Nenhum cliente identificado no período.");
+  else {
+    const stats = reportClientStats(data.clientes);
+    paragraph(
+      `Base: ${data.clientes.length} clientes do ranking disponível. Não representa necessariamente toda a base de clientes. Uma compra no período não significa cliente novo.`,
+      8,
+    );
+    paragraph(
+      `Uma compra: ${reportNumber(stats.single)} | Duas ou mais: ${reportNumber(stats.repeat)} | Frequência média: ${reportNumber(stats.frequency, 1)} pedidos`,
+      9,
+      INK,
+    );
+    paragraph(
+      `Média dos tickets por cliente: ${reportMoney(stats.ticket)}`,
+      9,
+      INK,
+    );
+  }
+  table(
+    "Clientes do período",
+    ["Cliente", "Pedidos", "Total gasto", "Ticket médio", "Última compra"],
+    data.clientes.map((row) => [
+      row.nome,
+      reportNumber(row.pedidos),
+      reportMoney(row.totalGasto),
+      reportMoney(row.ticketMedio),
+      reportDate(row.ultimaCompra),
     ]),
-    theme: "plain",
-    styles: {
-      fontSize: 7,
-      cellPadding: 2,
-      textColor: BRAND.dark,
-      lineColor: BRAND.border,
-      lineWidth: 0.12,
-    },
-    headStyles: {
-      fillColor: BRAND.primary,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-      fontSize: 7,
-    },
-    alternateRowStyles: { fillColor: BRAND.rowAlt },
-    columnStyles: {
-      5: { halign: "right", fontStyle: "bold" },
-    },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + 10;
-
-  // ========== ESTATÍSTICAS ==========
-  y = ensureSpace(doc, y, 40);
-  y = sectionTitle(doc, "9. Estatísticas e destaques", y);
-  autoTable(doc, {
-    startY: y,
-    margin: { left: MARGIN, right: MARGIN },
-    head: [["Indicador", "Valor"]],
-    body: [
-      ["Maior venda", money(data.destaques.maiorVenda)],
-      ["Menor venda", money(data.destaques.menorVenda)],
+    [1, 2, 3],
+  );
+  if (data.sabores.length)
+    table(
+      "Sabores mais vendidos",
+      ["Sabor", "Quantidade", "Receita"],
+      data.sabores.map((row) => [
+        row.nome,
+        reportNumber(row.quantidade),
+        reportMoney(row.faturamento),
+      ]),
+      [1, 2],
+    );
+  if (data.adicionais.length)
+    table(
+      "Adicionais mais vendidos",
+      ["Adicional", "Quantidade", "Receita"],
+      data.adicionais.map((row) => [
+        row.nome,
+        reportNumber(row.quantidade),
+        reportMoney(row.faturamento),
+      ]),
+      [1, 2],
+    );
+  table(
+    "Pedidos do período",
+    ["Pedido", "Cliente", "Data", "Status", "Pagamento", "Total"],
+    data.pedidosLista.map((row) => [
+      "#" + row.id.slice(0, 8),
+      row.cliente,
+      reportDate(row.data),
+      reportValueLabel(row.status),
+      reportValueLabel(row.pagamento),
+      reportMoney(row.total),
+    ]),
+    [5],
+  );
+  table(
+    "Destaques do período",
+    ["Indicador", "Resultado"],
+    [
+      ["Maior venda", reportMoney(data.destaques.maiorVenda)],
+      ["Menor venda", reportMoney(data.destaques.menorVenda)],
       ["Horário de maior movimento", data.destaques.horarioPico],
       ["Dia com mais pedidos", data.destaques.diaMaisPedidos],
-      ["Produto campeão de vendas", data.destaques.produtoCampeao],
+      ["Produto mais vendido", data.destaques.produtoCampeao],
       ["Cliente que mais comprou", data.destaques.clienteTop],
       [
         "Tempo médio até conclusão",
         data.tempoMedioMinutos != null
-          ? `${data.tempoMedioMinutos} min`
-          : "—",
+          ? `${reportNumber(data.tempoMedioMinutos)} min`
+          : "Sem informação",
       ],
     ],
-    theme: "plain",
-    styles: {
-      fontSize: 8.5,
-      cellPadding: 2.6,
-      textColor: BRAND.dark,
-      lineColor: BRAND.border,
-      lineWidth: 0.2,
-    },
-    headStyles: {
-      fillColor: BRAND.primary,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-    },
-    alternateRowStyles: { fillColor: BRAND.rowAlt },
-    columnStyles: {
-      1: { fontStyle: "bold", halign: "right" },
-    },
-  });
-  y = (doc.lastAutoTable?.finalY || y) + 10;
-
-  // ========== OBSERVAÇÕES ==========
-  y = ensureSpace(doc, y, 28);
-  y = sectionTitle(doc, "10. Observações", y);
-  doc.setFillColor(...BRAND.rowAlt);
-  doc.roundedRect(MARGIN, y, CONTENT_W, 18, 2, 2, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(...BRAND.muted);
-  const obs =
-    data.observacoes?.trim() || "Nenhuma observação registrada.";
-  const lines = doc.splitTextToSize(obs, CONTENT_W - 8);
-  doc.text(lines, MARGIN + 4, y + 6);
-
-  // Footer on all pages
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    drawFooter(doc, i, totalPages, emittedAt);
+  );
+  if (data.observacoes?.trim()) {
+    title("Observações");
+    paragraph(data.observacoes.trim());
   }
-
-  const stamp = format(emittedAt, "yyyy-MM-dd_HH-mm");
-  const filename = `Relatorio_${stamp}.pdf`;
-  const blob = doc.output("blob");
-  return { blob, filename };
+  const pages = doc.getNumberOfPages();
+  for (let page = 1; page <= pages; page++) {
+    doc.setPage(page);
+    if (page > 1) {
+      text("Relatório de desempenho", M, 14, 8, PURPLE, true);
+      text(data.range.label, M + W, 14, 8, MUTED, false, "right");
+      doc.setDrawColor(...BORDER);
+      doc.setLineWidth(0.2);
+      doc.line(M, 18, M + W, 18);
+    }
+    doc.setDrawColor(...BORDER);
+    doc.line(M, 280, M + W, 280);
+    text(
+      `SoftShake | ${reportDate(data.range.from)} a ${reportDate(data.range.to)}`,
+      M,
+      286,
+      7,
+      MUTED,
+    );
+    text(`Página ${page} de ${pages}`, M + W, 286, 7, MUTED, false, "right");
+  }
+  return {
+    blob: doc.output("blob"),
+    filename: `SoftShake_Relatorio_${reportDateKey(data.range.from)}_a_${reportDateKey(data.range.to)}.pdf`,
+  };
 }
-
 export function downloadPdfBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -25,6 +25,22 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+let sessaoEmAndamento: Promise<ClienteData | null> | null = null;
+
+async function consultarSessao(): Promise<ClienteData | null> {
+  if (!sessaoEmAndamento) {
+    sessaoEmAndamento = fetch('/api/auth/sessao', { cache: 'no-store' })
+      .then(async (resposta) => {
+        if (!resposta.ok) throw new Error('Não foi possível consultar a sessão.');
+        const dados = await resposta.json();
+        return (dados.cliente as ClienteData | null) ?? null;
+      })
+      .finally(() => {
+        sessaoEmAndamento = null;
+      });
+  }
+  return sessaoEmAndamento;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [cliente, setCliente] = useState<ClienteData | null>(null);
@@ -39,18 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Busca a sessão do cliente via API
   const fetchSessao = async () => {
     try {
-      const resposta = await fetch('/api/auth/sessao');
-      
-      if (resposta.ok) {
-        const dados = await resposta.json();
-        if (dados.cliente) {
-          setCliente(dados.cliente);
-        } else {
-          setCliente(null);
-        }
-      } else {
-        setCliente(null);
-      }
+      setCliente(await consultarSessao());
     } catch {
       toast.error('Erro ao buscar sessão');
       setCliente(null);

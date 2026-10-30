@@ -37,6 +37,8 @@ interface PremiumSidebarProps {
   canManageStore?: boolean;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  mobile?: boolean;
+  onNavigate?: () => void;
 }
 
 type MenuItem = {
@@ -154,12 +156,14 @@ function SidebarLink({
       prefetch
       scroll={false}
       title={collapsed ? label : undefined}
+      aria-current={active ? "page" : undefined}
+      aria-label={collapsed ? label : undefined}
       className={cn(
-        "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-150 relative",
+        "group flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors duration-150 relative",
         active
           ? "bg-[#EEE8FA] text-[#4C258C]"
           : "text-[#6B7280] hover:bg-gray-50 hover:text-[#111827]",
-        collapsed && "justify-center px-0"
+        collapsed && "justify-center px-0",
       )}
     >
       {active && !collapsed && (
@@ -168,7 +172,7 @@ function SidebarLink({
       <Icon
         className={cn(
           "w-5 h-5 shrink-0",
-          active ? "text-[#4C258C]" : "text-[#6B7280]"
+          active ? "text-[#4C258C]" : "text-[#6B7280]",
         )}
       />
       {!collapsed && (
@@ -180,7 +184,7 @@ function SidebarLink({
                 "text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-md shrink-0",
                 active
                   ? "bg-white/80 text-[#4C258C]"
-                  : "bg-amber-50 text-amber-700 border border-amber-100"
+                  : "bg-amber-50 text-amber-700 border border-amber-100",
               )}
             >
               {badge}
@@ -213,21 +217,23 @@ export function PremiumSidebar({
   canManageStore = false,
   collapsed = false,
   onToggleCollapsed,
+  mobile = false,
+  onNavigate,
 }: PremiumSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
   const allowedItems = useMemo(
     () => menuItems.filter((item) => acessos.includes(item.access)),
-    [acessos]
+    [acessos],
   );
   const mainItems = useMemo(
     () => allowedItems.filter((item) => !item.group),
-    [allowedItems]
+    [allowedItems],
   );
   const configItems = useMemo(
     () => allowedItems.filter((item) => item.group === "config"),
-    [allowedItems]
+    [allowedItems],
   );
   const canOpenConfig = acessos.includes("configuracoes");
 
@@ -247,7 +253,7 @@ export function PremiumSidebar({
       window as Window & {
         requestIdleCallback?: (
           cb: () => void,
-          opts?: { timeout: number }
+          opts?: { timeout: number },
         ) => number;
       }
     ).requestIdleCallback;
@@ -275,15 +281,16 @@ export function PremiumSidebar({
     <TooltipProvider delayDuration={200}>
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen bg-white border-r border-[#E5E7EB] flex flex-col z-50 transition-[width] duration-300 ease-in-out",
-          collapsed ? "w-[72px]" : "w-[270px]"
+          "bg-white border-r border-[#E5E7EB] flex flex-col transition-[width] duration-300 ease-in-out motion-reduce:transition-none",
+          mobile ? "relative h-full w-full" : "fixed left-0 top-0 h-dvh z-40",
+          !mobile && (collapsed ? "w-[72px]" : "w-[270px]"),
         )}
       >
         {/* Topo: seta para recolher/expandir */}
         <div
           className={cn(
             "relative shrink-0 border-b border-[#E5E7EB]",
-            collapsed ? "h-12" : "h-12"
+            collapsed ? "h-12" : "h-12",
           )}
         >
           {!collapsed && (
@@ -304,9 +311,7 @@ export function PremiumSidebar({
                   onClick={onToggleCollapsed}
                   className={cn(
                     "absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#6B7280] shadow-sm transition-colors hover:border-[#D4C4F0] hover:bg-[#F9F7FD] hover:text-[#4C258C]",
-                    collapsed
-                      ? "left-1/2 -translate-x-1/2"
-                      : "right-3"
+                    collapsed ? "left-1/2 -translate-x-1/2" : "right-3",
                   )}
                   aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
                 >
@@ -331,9 +336,13 @@ export function PremiumSidebar({
         />
 
         <nav
+          aria-label="Navegação administrativa"
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest("a")) onNavigate?.();
+          }}
           className={cn(
             "flex-1 py-4 overflow-y-auto overflow-x-hidden",
-            collapsed ? "px-2" : "px-4"
+            collapsed ? "px-2" : "px-4",
           )}
         >
           {mainItems.length > 0 && (
@@ -366,7 +375,9 @@ export function PremiumSidebar({
                   Configurações
                 </p>
               )}
-              {collapsed && <div className="my-3 mx-2 border-t border-[#E5E7EB]" />}
+              {collapsed && (
+                <div className="my-3 mx-2 border-t border-[#E5E7EB]" />
+              )}
               <div className={cn("space-y-1", !collapsed && "mt-0")}>
                 {configItems.map((item) => (
                   <SidebarLink
@@ -385,15 +396,12 @@ export function PremiumSidebar({
         </nav>
 
         <div
-          className={cn(
-            "border-t border-[#E5E7EB]",
-            collapsed ? "p-2" : "p-4"
-          )}
+          className={cn("border-t border-[#E5E7EB]", collapsed ? "p-2" : "p-4")}
         >
           {collapsed ? (
             <div className="flex flex-col items-center gap-2">
               <div
-                className="w-9 h-9 rounded-full bg-gradient-to-br from-[#4C258C] to-[#7C3AED] flex items-center justify-center"
+                className="w-9 h-9 rounded-full bg-[#4C258C] flex items-center justify-center"
                 title={`${displayName} · ${roleName}`}
               >
                 <span className="text-white font-semibold text-xs">
@@ -417,7 +425,7 @@ export function PremiumSidebar({
           ) : (
             <>
               <div className="flex items-center gap-3 px-3 py-2">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4C258C] to-[#7C3AED] flex items-center justify-center">
+                <div className="w-10 h-10 rounded-full bg-[#4C258C] flex items-center justify-center">
                   <span className="text-white font-semibold text-sm">
                     {initial}
                   </span>

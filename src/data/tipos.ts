@@ -14,6 +14,9 @@ export type OptionItem = {
 };
 
 export type OptionGroup = {
+  productName?: string;
+  comboUnitKey?: string;
+  sourceGroupName?: string;
   id: string;
   name: string;
   helper?: string;
@@ -35,6 +38,8 @@ export type Product = {
   freteGratis?: boolean;
   freteGratisPrazo?: string;
   comboId?: number;
+  comboOptionsMode?: "cliente" | "fixo";
+  comboFixedChoices?: { id: string; name: string; price: number; groupId: string; groupName: string }[];
   comboItems?: { productId: number; name: string; quantity: number }[];
   image?: string;
   tag?: Tag;
@@ -75,6 +80,12 @@ export type Category = {
   subtitle?: string;
   products: Product[];
 };
+
+export function getFeaturedProducts(categories: Category[]) {
+  const products = categories.flatMap((category) => category.products);
+  const highlighted = products.filter((product) => product.tag);
+  return (highlighted.length ? highlighted : products).slice(0, 6);
+}
 
 export const notesOptionGroup: OptionGroup = {
   id: "obs",

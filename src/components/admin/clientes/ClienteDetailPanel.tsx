@@ -85,14 +85,14 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
   };
 
   return (
-    <div className="flex-1 h-full bg-white flex flex-col">
+    <div className="admin-client-detail min-w-0 flex-1 min-h-full bg-white flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-[#E5E7EB]">
+      <div className="px-3 sm:px-6 py-4 border-b border-[#E5E7EB]">
         <div className="flex items-start gap-4 mb-3">
           <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#4C258C] to-[#7C3AED] flex items-center justify-center text-white font-bold text-xl flex-shrink-0">
             {iniciais}
           </div>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold text-[#111827] mb-1">
               {cliente.nome}
             </h1>
@@ -114,7 +114,7 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {cliente.telefone && (
             <>
               <Button
@@ -139,8 +139,8 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="informacoes" className="flex-1 flex flex-col">
-        <div className="px-6 border-b border-[#E5E7EB]">
+      <Tabs defaultValue="informacoes" className="min-w-0 flex-1 flex flex-col">
+        <div className="overflow-x-auto px-3 sm:px-6 border-b border-[#E5E7EB]">
           <TabsList className="h-12 bg-transparent p-0 gap-1">
             <TabsTrigger
               value="informacoes"
@@ -173,23 +173,23 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
           </TabsList>
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-w-0 flex-1">
           {/* Aba: Informações */}
-          <TabsContent value="informacoes" className="p-6 space-y-5 mt-0">
+          <TabsContent value="informacoes" className="p-3 sm:p-6 space-y-5 mt-0">
             <section>
-              <h3 className="font-semibold text-[#111827] mb-3 text-sm flex items-center gap-2">
+              <h3 className="font-semibold text-[#111827] mb-3 text-sm flex flex-wrap items-center gap-2">
                 <User className="w-4 h-4 text-[#4C258C]" />
                 Dados do Cliente
               </h3>
               <div className="bg-[#F8F9FC] rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-[#6B7280]">Nome Completo</span>
                   <span className="text-sm font-medium text-[#111827]">
                     {cliente.nome}
                   </span>
                 </div>
                 <Separator />
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-[#6B7280]">Telefone</span>
                   <span className="text-sm font-medium text-[#111827]">
                     {cliente.telefone || "Não informado"}
@@ -198,7 +198,7 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
                 {cliente.email && (
                   <>
                     <Separator />
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm text-[#6B7280]">E-mail</span>
                       <span className="text-sm font-medium text-[#111827]">
                         {cliente.email}
@@ -209,7 +209,7 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
                 {cliente.cpf && (
                   <>
                     <Separator />
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm text-[#6B7280]">CPF</span>
                       <span className="text-sm font-medium text-[#111827]">
                         {cliente.cpf}
@@ -218,14 +218,14 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
                   </>
                 )}
                 <Separator />
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-[#6B7280]">ID do Cliente</span>
                   <span className="text-sm font-mono text-[#111827]">
                     {cliente.id.slice(0, 8)}
                   </span>
                 </div>
                 <Separator />
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-[#6B7280]">Cliente desde</span>
                   <span className="text-sm font-medium text-[#111827]">
                     {format(new Date(cliente.created_at), "dd/MM/yyyy", {
@@ -238,12 +238,12 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
           </TabsContent>
 
           {/* Aba: Endereços */}
-          <TabsContent value="enderecos" className="p-6 space-y-5 mt-0">
+          <TabsContent value="enderecos" className="p-3 sm:p-6 space-y-5 mt-0">
             {cliente.enderecos_adicionais && cliente.enderecos_adicionais.length > 0 ? (
               cliente.enderecos_adicionais.map((endereco) => (
                 <section key={endereco.id} className="bg-[#F8F9FC] rounded-xl p-4">
                   <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Home className="w-4 h-4 text-[#4C258C]" />
                       <h4 className="font-semibold text-[#111827]">
                         {endereco.apelido || "Endereço"}
@@ -288,7 +288,7 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
           </TabsContent>
 
           {/* Aba: Pedidos */}
-          <TabsContent value="pedidos" className="p-6 space-y-3 mt-0">
+          <TabsContent value="pedidos" className="p-3 sm:p-6 space-y-3 mt-0">
             {loadingPedidos ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 text-[#4C258C] animate-spin" />
@@ -303,7 +303,7 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           <h4 className="font-semibold text-[#111827] text-sm">
                             Pedido #{pedido.id.slice(0, 8)}
                           </h4>
@@ -376,12 +376,12 @@ export function ClienteDetailPanel({ cliente }: ClienteDetailPanelProps) {
           </TabsContent>
 
           {/* Aba: Estatísticas */}
-          <TabsContent value="estatisticas" className="p-6 space-y-5 mt-0">
+          <TabsContent value="estatisticas" className="p-3 sm:p-6 space-y-5 mt-0">
             <section>
               <h3 className="font-semibold text-[#111827] mb-3 text-sm">
                 Resumo de Compras
               </h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="bg-[#F8F9FC] rounded-xl p-4">
                   <p className="text-xs text-[#6B7280] mb-1">Total de Pedidos</p>
                   <p className="text-2xl font-bold text-[#111827]">

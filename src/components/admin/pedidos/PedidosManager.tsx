@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   useSensor,
   useSensors,
   closestCorners,
@@ -39,7 +39,6 @@ import { toast } from "sonner";
 import { PedidosToolbar } from "./PedidosToolbar";
 import { PedidoKanbanColumn } from "./PedidoKanbanColumn";
 import { PedidoDetailPanel } from "./PedidoDetailPanel";
-import { OrdersEmptyDetail } from "./OrdersEmptyDetail";
 import { OrderPrint, type OrderPrintTipo } from "./OrderPrint";
 import { OrdersSkeleton } from "./OrdersSkeleton";
 import {
@@ -53,6 +52,7 @@ import {
   type KanbanColumnId,
 } from "./kanban-columns";
 import { shortOrderId } from "./order-status";
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 
 export const SOUND_KEY = "softshake-orders-sound";
 
@@ -66,12 +66,12 @@ interface PedidosManagerProps {
 function mapPedido(
   p: PedidoRow,
   opcoes: OpcaoLookup[],
-  grupos: GrupoLookup[]
+  grupos: GrupoLookup[],
 ): Pedido {
   const itensEnriquecidos = enrichPedidoItens(
     Array.isArray(p.itens) ? p.itens : [],
     opcoes,
-    grupos
+    grupos,
   ) as unknown as Pedido["itens"];
 
   const rawStatus = (p.status as Pedido["status"]) || "pendente";
@@ -84,10 +84,7 @@ function mapPedido(
     endereco_completo:
       formatEndereco(
         p.endereco_completo as
-          | string
-          | import("@/types/pedido").EnderecoObject
-          | null
-          | undefined
+          string | import("@/types/pedido").EnderecoObject | null | undefined,
       ) || undefined,
     meio_pagamento: p.meio_pagamento || "Não informado",
     troco_para: (() => {
@@ -112,6 +109,12 @@ export function PedidosManager({
   canManageStore = false,
 }: PedidosManagerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEffect(() => {
+    const pedidoId = new URLSearchParams(window.location.search).get("pedido");
+    if (pedidoId) setSelectedId(pedidoId);
+  }, []);
+  const [mobileColumn, setMobileColumn] = useState<KanbanColumnId | "todos">("todos");
+  const detailTrigger = useRef<HTMLElement | null>(null);
   const [opcoes, setOpcoes] = useState<OpcaoLookup[]>([]);
   const [grupos, setGrupos] = useState<GrupoLookup[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
@@ -137,9 +140,10 @@ export function PedidosManager({
   } = usePedidosRealtime(pedidosIniciais);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    // Touch uses the existing explicit actions; vertical scrolling must not drag orders.
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
-    })
+    }),
   );
 
   // Som
@@ -202,7 +206,7 @@ export function PedidosManager({
           supabase
             .from("opcoes")
             .select(
-              "id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)"
+              "id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)",
             ),
           supabase.from("grupos_opcoes").select("id, nome"),
         ]);
@@ -233,27 +237,24 @@ export function PedidosManager({
 
   const pedidos: Pedido[] = useMemo(
     () => pedidosRows.map((p) => mapPedido(p, opcoes, grupos)),
-    [pedidosRows, opcoes, grupos]
+    [pedidosRows, opcoes, grupos],
   );
 
   const filtered = useMemo(
     () => filterPedidos(pedidos, search, filters),
-    [pedidos, search, filters]
+    [pedidos, search, filters],
   );
 
-  const byColumn = useMemo(
-    () => groupPedidosByColumn(filtered),
-    [filtered]
-  );
+  const byColumn = useMemo(() => groupPedidosByColumn(filtered), [filtered]);
 
   const selectedPedido = useMemo(
     () => pedidos.find((p) => p.id === selectedId) ?? null,
-    [pedidos, selectedId]
+    [pedidos, selectedId],
   );
 
   const activeDragPedido = useMemo(
     () => (activeDragId ? pedidos.find((p) => p.id === activeDragId) : null),
-    [activeDragId, pedidos]
+    [activeDragId, pedidos],
   );
 
   useEffect(() => {
@@ -294,7 +295,7 @@ export function PedidosManager({
       try {
         const updated = await updatePedidoStatus(
           pedidoId,
-          newStatus as PedidoStatusUpdate
+          newStatus as PedidoStatusUpdate,
         );
         replacePedido(updated as PedidoRow);
         toast.success("Alterações salvas.");
@@ -308,7 +309,7 @@ export function PedidosManager({
         setStatusBusy(false);
       }
     },
-    [pedidosRows, patchPedido, replacePedido]
+    [pedidosRows, patchPedido, replacePedido],
   );
 
   const handleDrawerStatusChange = useCallback(
@@ -316,10 +317,11 @@ export function PedidosManager({
       if (!selectedId) return false;
       return handleStatusChange(selectedId, newStatus);
     },
-    [selectedId, handleStatusChange]
+    [selectedId, handleStatusChange],
   );
 
   const handleOpen = useCallback((pedido: Pedido) => {
+    detailTrigger.current = document.activeElement as HTMLElement;
     setSelectedId(pedido.id);
   }, []);
 
@@ -333,7 +335,7 @@ export function PedidosManager({
       action:
         | { type: "status"; status: Pedido["status"]; printAfter?: boolean }
         | { type: "print" }
-        | { type: "details" }
+        | { type: "details" },
     ) => {
       if (action.type === "details") {
         handleOpen(pedido);
@@ -351,7 +353,7 @@ export function PedidosManager({
         }
       })();
     },
-    [handleOpen, handleStatusChange]
+    [handleOpen, handleStatusChange],
   );
 
   const handleAutoAcceptChange = useCallback(
@@ -362,7 +364,7 @@ export function PedidosManager({
       try {
         await setAutoAcceptOrders(value);
         toast.success(
-          value ? "Aceite automático ativado" : "Aceite automático desativado"
+          value ? "Aceite automático ativado" : "Aceite automático desativado",
         );
       } catch {
         setAutoAccept(previous);
@@ -371,7 +373,7 @@ export function PedidosManager({
         setAutoAcceptLoading(false);
       }
     },
-    [autoAccept]
+    [autoAccept],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -433,7 +435,7 @@ export function PedidosManager({
       if (e.key === "/" && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>(
-          'input[type="search"]'
+          'input[type="search"]',
         );
         input?.focus();
       }
@@ -444,14 +446,14 @@ export function PedidosManager({
 
   if (!catalogReady && pedidosIniciais.length === 0) {
     return (
-      <div className="h-[calc(100vh-4rem)]">
+      <div className="admin-workspace">
         <OrdersSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-[#F9FAFB]">
+    <div className="admin-workspace flex flex-col overflow-hidden bg-[#F9FAFB]">
       <PedidosToolbar
         search={search}
         onSearchChange={setSearch}
@@ -468,22 +470,19 @@ export function PedidosManager({
         totalCount={filtered.length}
       />
 
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Esquerda — lista vertical */}
-        <aside
-          className={
-            selectedPedido
-              ? "hidden lg:flex lg:flex-col lg:w-[380px] xl:w-[420px] shrink-0 h-full border-r border-[#E5E7EB] bg-[#F9FAFB]"
-              : "flex flex-col w-full lg:w-[380px] xl:w-[420px] shrink-0 h-full border-r border-[#E5E7EB] bg-[#F9FAFB]"
-          }
+      <div className="relative flex-1 min-h-0 min-w-0 bg-[#F7F6F9]">
+        <div className="px-3 pt-3 md:hidden"><label htmlFor="mobile-order-stage" className="sr-only">Etapa dos pedidos</label><select id="mobile-order-stage" value={mobileColumn} onChange={(event) => {setMobileColumn(event.target.value as KanbanColumnId | "todos");setFilters(prev => ({...prev,status:"todos"}));}} className="h-11 w-full rounded-lg border border-[#E7E1EB] bg-white px-3 text-sm font-medium text-[#4C258C]">
+          <option value="todos">Todos os pedidos ({filtered.length})</option>
+          {KANBAN_COLUMNS.map(col => <option key={col.id} value={col.id}>{col.label} ({byColumn[col.id].length})</option>)}
+        </select></div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={(e) => void handleDragEnd(e)}
         >
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2 space-y-2">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCorners}
-              onDragStart={handleDragStart}
-              onDragEnd={(e) => void handleDragEnd(e)}
-            >
+          <div className="admin-kanban-scroll h-full overflow-x-auto overflow-y-hidden p-3 sm:p-4">
+            <div className="admin-kanban-board orders-mobile-board grid h-full min-w-[1120px] grid-cols-4 overflow-hidden rounded-xl border border-[#E7E1EB] bg-white shadow-sm">
               {KANBAN_COLUMNS.map((col) => (
                 <PedidoKanbanColumn
                   key={col.id}
@@ -494,51 +493,49 @@ export function PedidosManager({
                   onOpen={handleOpen}
                   onAction={handleCardAction}
                   busy={statusBusy}
-                  vertical
+                  vertical={false}
+                  mobileActive={mobileColumn === col.id || (mobileColumn === "todos" && byColumn[col.id].length > 0)}
                 />
               ))}
+            </div>
 
-              <DragOverlay>
-                {activeDragPedido ? (
-                  <div className="w-[340px] opacity-95 shadow-md rounded-md border border-[#4C258C] bg-white px-3 py-2">
-                    <p className="text-[15px] font-semibold">
-                      #{shortOrderId(activeDragPedido.id)}
-                    </p>
-                    <p className="text-[13px] text-[#6B7280] truncate">
-                      {activeDragPedido.cliente_nome}
-                    </p>
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-
-            {filtered.length === 0 && (
-              <p className="text-center text-[13px] text-[#9CA3AF] py-10">
-                Nenhum pedido encontrado.
-              </p>
-            )}
           </div>
-        </aside>
 
-        {/* Direita — detalhes */}
-        <div
-          className={
-            selectedPedido
-              ? "flex flex-1 min-w-0 h-full"
-              : "hidden lg:flex flex-1 min-w-0 h-full"
-          }
-        >
-          {selectedPedido ? (
-            <PedidoDetailPanel
-              pedido={selectedPedido}
-              onStatusChange={handleDrawerStatusChange}
-              onClose={handleClose}
-              busy={statusBusy}
-            />
-          ) : (
-            <OrdersEmptyDetail />
-          )}
-        </div>
+          {filtered.length === 0 && <div className="px-4 py-10 text-center text-sm text-[#817A89]"><p>Nenhum pedido encontrado.</p><p className="mt-1 text-xs">Os pedidos aparecerão aqui. Confira o período em Filtros e opções.</p></div>}
+          <DragOverlay>
+            {activeDragPedido ? (
+              <div className="w-[280px] rounded-lg border border-[#D9CBEA] bg-white px-3 py-3 shadow-xl">
+                <p className="text-sm font-semibold text-[#241631]">
+                  #{shortOrderId(activeDragPedido.id)}
+                </p>
+                <p className="truncate text-xs text-[#817A89]">
+                  {activeDragPedido.cliente_nome}
+                </p>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+
+        <Sheet open={!!selectedPedido} onOpenChange={(open) => { if (!open) handleClose(); }}>
+          <SheetContent className="admin-detail-sheet w-full sm:max-w-[min(900px,90vw)] border-l border-[#E7E1EB] bg-white"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              const trigger = detailTrigger.current;
+              if (trigger?.isConnected && trigger.getClientRects().length) trigger.focus();
+              else document.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+            }}>
+            <SheetTitle className="sr-only">Detalhes do pedido</SheetTitle>
+            <SheetDescription className="sr-only">Itens, cliente, pagamento e ações do pedido selecionado.</SheetDescription>
+            {selectedPedido && (
+              <PedidoDetailPanel
+                pedido={selectedPedido}
+                onStatusChange={handleDrawerStatusChange}
+                onClose={handleClose}
+                busy={statusBusy}
+              />
+            )}
+          </SheetContent>
+        </Sheet>
       </div>
 
       {printPedido && (

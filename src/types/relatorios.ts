@@ -27,6 +27,7 @@ export type KpiCard = {
   value: string;
   subtitle?: string;
   trend?: number | null;
+  comparisonBase?: number;
   trendLabel?: string;
   variant: "purple" | "blue" | "green" | "orange" | "pink" | "red";
   icon:

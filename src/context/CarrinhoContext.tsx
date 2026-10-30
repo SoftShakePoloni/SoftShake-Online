@@ -84,12 +84,13 @@ export function useCarrinho() {
 }
 
 export function resumoOpcoes(produto: Product, selections: Record<string, string[]>): string {
+  if (produto.comboOptionsMode === "fixo") return (produto.comboFixedChoices ?? []).map(choice => `${choice.groupName}: ${choice.name}`).join(", ");
   const partes: string[] = [];
   for (const grupo of produto.optionGroups ?? []) {
     if (grupo.id === "obs") continue;
     const ids = selections[grupo.id] ?? [];
     const nomes = ids.map((id) => grupo.items.find((i) => i.id === id)?.name ?? "").filter(Boolean);
-    if (nomes.length) partes.push(...nomes);
+    if (nomes.length) partes.push(...nomes.map(name => produto.comboId ? `${grupo.name}: ${name}` : name));
   }
   return partes.join(", ");
 }

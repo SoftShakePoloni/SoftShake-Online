@@ -95,12 +95,7 @@ function PedidoKanbanCardComponent({
       className={cn(
         layout === "row"
           ? "shrink-0"
-          : "absolute top-1.5 right-1.5",
-        layout === "row"
-          ? ""
-          : menuOpen
-            ? "opacity-100"
-            : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+          : "absolute top-1.5 right-1.5"
       )}
       onPointerDown={(e) => e.stopPropagation()}
     >
@@ -199,7 +194,7 @@ function PedidoKanbanCardComponent({
             <p className="text-[15px] font-semibold text-[#111827] leading-tight">
               #{shortOrderId(pedido.id)}
             </p>
-            <p className="text-[13px] text-[#6B7280] truncate mt-0.5">
+            <p className="text-[13px] text-[#6B7280] break-words mt-0.5">
               {pedido.cliente_nome}
             </p>
           </div>
@@ -286,14 +281,14 @@ function PedidoKanbanCardComponent({
       <button
         type="button"
         onClick={() => onOpen(pedido)}
-        className="w-full pl-3 pr-2 py-2.5 text-left"
+        className="w-full pl-3 pr-3 pt-14 md:pt-3 pb-3 text-left"
       >
-        <div className="flex items-start justify-between gap-1">
+        <div className="flex items-start justify-between gap-1 md:pr-10">
           <div className="min-w-0">
             <p className="text-[15px] font-semibold text-[#111827] leading-tight">
               #{shortOrderId(pedido.id)}
             </p>
-            <p className="text-[13px] text-[#6B7280] truncate mt-0.5">
+            <p className="text-[13px] text-[#6B7280] break-words mt-0.5">
               {pedido.cliente_nome}
             </p>
           </div>

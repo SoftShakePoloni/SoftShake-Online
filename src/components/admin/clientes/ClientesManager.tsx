@@ -8,6 +8,7 @@ import { ClienteSidePanel } from "./ClienteSidePanel";
 import { EmptyState } from "./EmptyState";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { ArrowLeft } from "lucide-react";
 
 interface ClientesManagerProps {
   clientesIniciais: Cliente[];
@@ -70,17 +71,24 @@ export function ClientesManager({ clientesIniciais }: ClientesManagerProps) {
   };
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#F8F9FC]">
+    <div className="admin-workspace flex min-w-0 overflow-hidden bg-[#F8F9FC]">
       {/* Lista de Clientes - Esquerda */}
+      <div className={`${selectedCliente ? "hidden lg:block" : "block"} w-full shrink-0 lg:w-[300px] xl:w-[320px]`}>
       <ClienteList
         clientes={clientes}
         selectedId={selectedCliente?.id}
         onSelect={handleSelect}
       />
+      </div>
 
       {/* Painel de Detalhes - Centro com Animação */}
+      <div className={`${selectedCliente ? "flex" : "hidden lg:flex"} min-w-0 flex-1 flex-col overflow-y-auto 2xl:flex-row`}>
+      {selectedCliente && <button type="button" onClick={() => setSelectedCliente(null)}
+        className="flex shrink-0 items-center gap-2 border-b bg-white px-4 py-3 text-sm font-medium text-[#4C258C] lg:hidden">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />Voltar para clientes
+      </button>}
       <div
-        className={`flex-1 transition-opacity duration-200 ${
+        className={`min-w-0 flex-1 transition-opacity duration-200 ${
           isTransitioning ? "opacity-0" : "opacity-100"
         }`}
       >
@@ -94,7 +102,7 @@ export function ClientesManager({ clientesIniciais }: ClientesManagerProps) {
       {/* Painel Lateral - Direita com Animação */}
       {selectedCliente && (
         <div
-          className={`transition-all duration-200 ${
+          className={`shrink-0 transition-opacity duration-200 ${
             isTransitioning
               ? "opacity-0 translate-x-4"
               : "opacity-100 translate-x-0"
@@ -103,6 +111,7 @@ export function ClientesManager({ clientesIniciais }: ClientesManagerProps) {
           <ClienteSidePanel cliente={selectedCliente} />
         </div>
       )}
+      </div>
     </div>
   );
 }
