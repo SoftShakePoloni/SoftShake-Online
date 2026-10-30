@@ -29,6 +29,7 @@ import {
 } from "@/lib/admin/order-alert-sound";
 import { cn } from "@/lib/utils";
 import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, setPrintDevice } from "@/lib/admin/automatic-print";
+import { DesktopPrinterSettings } from "./DesktopPrinterSettings";
 import { UsuariosSection } from "./UsuariosSection";
 
 /* ─── Nav ─────────────────────────────────────────────────────────────── */
@@ -574,7 +575,7 @@ export function SistemaConfigManager({
                     onCheckedChange={enabled => { try { setPrintDevice(enabled); } catch { toast.error("Não foi possível salvar a preferência deste dispositivo."); } }} />
                 </Row>
               </Panel>
-              {desktopApp ? <p className="mt-5 text-sm leading-relaxed text-[#6B7280]">Neste aplicativo, os dois cupons são enviados diretamente, sem confirmação. Escolha a impressora no menu Impressora e mantenha as duas opções acima ativadas. Não é necessário usar o atalho do navegador.</p> : <section className="mt-5 space-y-3 text-sm leading-relaxed text-[#6B7280]" aria-labelledby="silent-print-setup">
+              {desktopApp ? <DesktopPrinterSettings /> : <section className="mt-5 space-y-3 text-sm leading-relaxed text-[#6B7280]" aria-labelledby="silent-print-setup">
                 <h3 id="silent-print-setup" className="font-semibold text-[#111827]">Imprimir sem confirmação</h3>
                 <p>Configure uma vez no computador Windows conectado à impressora da loja:</p>
                 <ol className="list-decimal space-y-2 pl-5">

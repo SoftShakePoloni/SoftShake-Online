@@ -1,7 +1,7 @@
 {
   "name": "softshake-admin-desktop",
-  "productName": "SoftShake Admin",
-  "version": "1.0.0",
+  "productName": "Softshake",
+  "version": "1.1.0",
   "private": true,
   "description": "Painel administrativo SoftShake com impressão direta de cozinha e cliente",
   "author": "SoftShake",
@@ -17,12 +17,25 @@
   },
   "build": {
     "appId": "br.com.softshake.admin",
-    "productName": "SoftShake Admin",
+    "productName": "Softshake",
     "asar": true,
-    "directories": { "output": "dist" },
-    "files": ["main.cjs", "preload.cjs", "policy.cjs", "assets/icon.png", "assets/icon.ico", "package.json"],
-    "artifactName": "SoftShake-Admin-Setup-${version}.${ext}",
-    "win": { "target": "nsis", "icon": "assets/icon.ico", "signAndEditExecutable": true },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "policy.cjs",
+      "assets/icon.png",
+      "assets/icon.ico",
+      "package.json"
+    ],
+    "artifactName": "Softshake-Setup-${version}.${ext}",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "signAndEditExecutable": true
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -30,7 +43,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SoftShake Admin",
+      "shortcutName": "Softshake",
       "runAfterFinish": false,
       "deleteAppDataOnUninstall": false
     }
