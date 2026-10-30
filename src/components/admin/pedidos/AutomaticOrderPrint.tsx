@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { getAutomaticPrintOrders, prepareOrderForAutomaticPrint } from "@/actions/admin/automatic-print";
-import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, getSentOrders, markOrderSent, withPrintLock } from "@/lib/admin/automatic-print";
+import { AUTOMATIC_PRINT_TYPE, PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, getSentOrders, markOrderSent, withPrintLock } from "@/lib/admin/automatic-print";
 import type { Pedido } from "@/types/pedido";
 import { OrderPrint } from "./OrderPrint";
 
@@ -96,5 +96,5 @@ export function AutomaticOrderPrint() {
     return () => { clearTimeout(timer); clearTimeout(watchdog); window.removeEventListener("afterprint", afterPrint); if (!completed) finishPrint(); };
   }, [ticket, finishPrint, device]);
 
-  return ticket ? createPortal(<OrderPrint pedido={ticket} tipo="cozinha" />, document.body) : null;
+  return ticket ? createPortal(<OrderPrint pedido={ticket} tipo={AUTOMATIC_PRINT_TYPE} />, document.body) : null;
 }

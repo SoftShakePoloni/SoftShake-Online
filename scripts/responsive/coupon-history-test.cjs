@@ -34,6 +34,11 @@ const { validarCupom } = load('src/lib/cupons.ts', {
   assert.ok(!plain.includes('CODIGO_HISTORICO'));
   const kitchen = renderToStaticMarkup(React.createElement(OrderPrint, { pedido, tipo: 'cozinha' }));
   assert.ok(!kitchen.includes('CODIGO_HISTORICO'), 'Kitchen has no financial section');
+  const { AUTOMATIC_PRINT_TYPE } = load('src/lib/admin/automatic-print.ts');
+  const both = renderToStaticMarkup(React.createElement(OrderPrint, { pedido, tipo: AUTOMATIC_PRINT_TYPE }));
+  assert.equal((both.match(/class="print-ticket"/g) || []).length, 2, 'Automatic job must include kitchen and customer tickets');
+  assert.ok(both.indexOf('CUPOM COZINHA') < both.indexOf('CUPOM ENTREGA / CLIENTE'));
+  assert.ok(both.includes('CODIGO_HISTORICO') && both.includes('48,00'), 'Customer ticket must retain confirmed discount and total');
   // Historical rendering uses the saved order, without consulting the now inactive coupon.
   coupon = { ...coupon, ativo: false, valor: 99 };
   assert.equal(renderToStaticMarkup(React.createElement(OrderPrint, { pedido, tipo: 'entrega' })), html);

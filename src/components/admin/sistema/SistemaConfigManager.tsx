@@ -546,12 +546,12 @@ export function SistemaConfigManager({
             <div>
               <SectionTitle>Impressão</SectionTitle>
               <SectionHint>
-                Comportamento ao imprimir pedidos da cozinha.
+                Impressão dos cupons da cozinha e do cliente.
               </SectionHint>
               <Panel>
                 <Row
                   title="Aceitar e imprimir novos pedidos"
-                  description="Quando um pedido chegar, ele entra em preparo e a comanda da cozinha é enviada para impressão."
+                  description="Quando um pedido chegar, ele entra em preparo e imprime os dois cupons: cozinha e cliente."
                 >
                   <CompactSwitch
                     checked={prefs.imprimir_aceitar_automaticamente}
@@ -572,7 +572,17 @@ export function SistemaConfigManager({
                     onCheckedChange={enabled => { try { setPrintDevice(enabled); } catch { toast.error("Não foi possível salvar a preferência deste dispositivo."); } }} />
                 </Row>
               </Panel>
-              <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">O navegador abrirá a janela de impressão. Selecione sua impressora nela. A impressão sem confirmação exige configuração local do navegador ou integração com a impressora. Cancelar essa janela não cancela o pedido; você pode reimprimir pelo painel.</p>
+              <section className="mt-5 space-y-3 text-sm leading-relaxed text-[#6B7280]" aria-labelledby="silent-print-setup">
+                <h3 id="silent-print-setup" className="font-semibold text-[#111827]">Imprimir sem confirmação</h3>
+                <p>Configure uma vez no computador Windows conectado à impressora da loja:</p>
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>Defina a impressora da loja como padrão nas configurações de Impressoras do Windows. Escolha papel e orientação no driver da impressora.</li>
+                  <li>Baixe e execute o configurador abaixo. Ele cria o atalho “SoftShake - Impressão Automática” na área de trabalho, com um perfil separado do Chrome ou Brave.</li>
+                  <li>Abra o novo atalho, faça login e ative as duas opções acima nesse navegador. Mantenha o painel aberto pelo atalho.</li>
+                </ol>
+                <a href="/SoftShake-Impressao.cmd" download="SoftShake-Impressao.cmd" className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#D4C4F0] bg-white px-4 py-2 font-medium text-[#4C258C] hover:bg-[#F3EEFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C] focus-visible:ring-offset-2">Baixar configurador para Windows</a>
+                <p>O atalho envia os dois cupons para a impressora padrão sem pedir confirmação. Fora dele, o navegador continua exibindo a janela de impressão. Para encerrar, feche o painel; para desfazer, remova o atalho.</p>
+              </section>
             </div>
           )}
 

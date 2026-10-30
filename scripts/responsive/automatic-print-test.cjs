@@ -40,6 +40,7 @@ const mocks = {
   assert.ok(required.every(permission => permission === 'pedido:update_status'));
   const storage = new Map(); global.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
   const client = load('src/lib/admin/automatic-print.ts');
+  assert.equal(client.AUTOMATIC_PRINT_TYPE, 'completo');
   client.markOrderSent('order-test'); assert.ok(client.getSentOrders()['order-test']);
   storage.set('softshake-auto-print-sent', 'null'); assert.deepEqual(client.getSentOrders(), {});
   storage.set('softshake-auto-print-sent', 'not-json'); assert.deepEqual(client.getSentOrders(), {});
