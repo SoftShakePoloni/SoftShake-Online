@@ -192,7 +192,9 @@ export function SistemaConfigManager({
   const [sistema, setSistema] = useState<SistemaPrefs>(DEFAULT_SISTEMA);
   const [saving, setSaving] = useState(false);
   const [printHere, setPrintHere] = useState(false);
+  const [desktopApp, setDesktopApp] = useState(false);
   useEffect(() => {
+    setDesktopApp(Boolean((window as Window & { softshakeDesktop?: { version?: string } }).softshakeDesktop?.version));
     const sync = () => { try { setPrintHere(localStorage.getItem(PRINT_DEVICE_KEY) === "1"); } catch { setPrintHere(false); } };
     sync();
     window.addEventListener(PRINT_DEVICE_EVENT, sync);
@@ -572,7 +574,7 @@ export function SistemaConfigManager({
                     onCheckedChange={enabled => { try { setPrintDevice(enabled); } catch { toast.error("Não foi possível salvar a preferência deste dispositivo."); } }} />
                 </Row>
               </Panel>
-              <section className="mt-5 space-y-3 text-sm leading-relaxed text-[#6B7280]" aria-labelledby="silent-print-setup">
+              {desktopApp ? <p className="mt-5 text-sm leading-relaxed text-[#6B7280]">Neste aplicativo, os dois cupons são enviados diretamente, sem confirmação. Escolha a impressora no menu Impressora e mantenha as duas opções acima ativadas. Não é necessário usar o atalho do navegador.</p> : <section className="mt-5 space-y-3 text-sm leading-relaxed text-[#6B7280]" aria-labelledby="silent-print-setup">
                 <h3 id="silent-print-setup" className="font-semibold text-[#111827]">Imprimir sem confirmação</h3>
                 <p>Configure uma vez no computador Windows conectado à impressora da loja:</p>
                 <ol className="list-decimal space-y-2 pl-5">
@@ -582,7 +584,7 @@ export function SistemaConfigManager({
                 </ol>
                 <a href="/SoftShake-Impressao.cmd" download="SoftShake-Impressao.cmd" className="inline-flex min-h-11 items-center justify-center rounded-md border border-[#D4C4F0] bg-white px-4 py-2 font-medium text-[#4C258C] hover:bg-[#F3EEFA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C] focus-visible:ring-offset-2">Baixar configurador para Windows</a>
                 <p>O atalho envia os dois cupons para a impressora padrão sem pedir confirmação. Fora dele, o navegador continua exibindo a janela de impressão. Para encerrar, feche o painel; para desfazer, remova o atalho.</p>
-              </section>
+              </section>}
             </div>
           )}
 
