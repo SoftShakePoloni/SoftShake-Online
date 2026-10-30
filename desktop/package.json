@@ -1,0 +1,38 @@
+{
+  "name": "softshake-admin-desktop",
+  "productName": "SoftShake Admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Painel administrativo SoftShake com impressão direta de cozinha e cliente",
+  "author": "SoftShake",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test.cjs",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.2.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "br.com.softshake.admin",
+    "productName": "SoftShake Admin",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "files": ["main.cjs", "preload.cjs", "policy.cjs", "assets/icon.png", "assets/icon.ico", "package.json"],
+    "artifactName": "SoftShake-Admin-Setup-${version}.${ext}",
+    "win": { "target": "nsis", "icon": "assets/icon.ico", "signAndEditExecutable": true },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SoftShake Admin",
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

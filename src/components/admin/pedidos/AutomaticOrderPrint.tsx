@@ -76,7 +76,9 @@ export function AutomaticOrderPrint() {
       finishPrint();
     };
     const afterPrint = () => { if (sent) done(); };
+    const printError = () => { toast.error("A impressora não aceitou o envio.", { description: "Confira o menu Impressora do aplicativo e reimprima o pedido pelo painel." }); done(); };
     window.addEventListener("afterprint", afterPrint);
+    window.addEventListener("softshake:print-error", printError);
     const timer = setTimeout(() => {
       try {
         // Record dispatch, not physical printing: the browser cannot distinguish cancel.
@@ -93,7 +95,7 @@ export function AutomaticOrderPrint() {
     const watchdog = setTimeout(() => {
       if (!completed) { toast.warning("A impressão não foi confirmada pelo navegador.", { description: "Confira a impressora e reimprima manualmente se necessário." }); done(); }
     }, 5 * 60_000);
-    return () => { clearTimeout(timer); clearTimeout(watchdog); window.removeEventListener("afterprint", afterPrint); if (!completed) finishPrint(); };
+    return () => { clearTimeout(timer); clearTimeout(watchdog); window.removeEventListener("afterprint", afterPrint); window.removeEventListener("softshake:print-error", printError); if (!completed) finishPrint(); };
   }, [ticket, finishPrint, device]);
 
   return ticket ? createPortal(<OrderPrint pedido={ticket} tipo={AUTOMATIC_PRINT_TYPE} />, document.body) : null;
