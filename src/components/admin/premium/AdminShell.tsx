@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+const AutomaticOrderPrint = dynamic(() => import("@/components/admin/pedidos/AutomaticOrderPrint").then(module => module.AutomaticOrderPrint), { ssr: false });
 import { PremiumSidebar } from "./PremiumSidebar";
 import { PremiumTopbar } from "./PremiumTopbar";
 import { cn } from "@/lib/utils";
@@ -17,6 +19,7 @@ interface AdminShellProps {
   roleLabel: string;
   acessos: AdminPageAccess[];
   canManageStore: boolean;
+  canAutoPrint?: boolean;
   children: React.ReactNode;
 }
 
@@ -26,6 +29,7 @@ export function AdminShell({
   roleLabel,
   acessos,
   canManageStore,
+  canAutoPrint = false,
   children,
 }: AdminShellProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -66,6 +70,7 @@ export function AdminShell({
 
   return (
     <div className="admin-shell min-h-dvh bg-[#F7F8FC]">
+      {canAutoPrint && <AutomaticOrderPrint />}
       <a href="#admin-content" className="admin-skip-link">Ir para o conteúdo</a>
       <div className="flex">
         <div className="hidden xl:block">

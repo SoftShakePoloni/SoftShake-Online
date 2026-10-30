@@ -4,6 +4,7 @@ import { useState, useRef, ChangeEvent } from "react";
 import { Upload, X, Image as ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { imageProxyUrl } from "@/lib/image/proxy-url";
 
 interface ProdutoImageUploadProps {
   value?: string | null;
@@ -33,8 +34,7 @@ export function ProdutoImageUpload({
 
   // Se tiver valor inicial, buscar preview da API
   const getImageUrl = (path: string | null) => {
-    if (!path) return null;
-    return `/api/imagem?path=${encodeURIComponent(path)}`;
+    return imageProxyUrl(path);
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
@@ -81,29 +81,27 @@ export function ProdutoImageUpload({
         credentials: "include",
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data.erro || "Erro ao fazer upload");
+        throw new Error(typeof data?.erro === "string" ? data.erro : "Não foi possível enviar a imagem. Tente novamente.");
       }
 
-      const uploadData = data.dados as UploadResponse;
+      const uploadData = data as Partial<UploadResponse> | null;
+      if (!uploadData || typeof uploadData.path !== "string" || !uploadData.path.trim()) {
+        throw new Error("Não foi possível confirmar o envio da imagem. Tente novamente.");
+      }
 
       // Atualiza o formulário com o path da imagem
       onChange(uploadData.path);
 
-      console.log("Upload concluído:", {
-        filename: uploadData.filename,
-        compression: `${uploadData.compressionRatio}%`,
-        dimensions: `${uploadData.width}x${uploadData.height}`,
-      });
     } catch (err) {
       console.error("Erro no upload:", err);
       setError(err instanceof Error ? err.message : "Erro ao fazer upload");
       setPreview(null);
-      onChange(null);
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -217,7 +215,7 @@ export function ProdutoImageUpload({
       )}
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+        <p role="alert" className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
           {error}
         </p>
       )}

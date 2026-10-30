@@ -41,7 +41,7 @@ const { validarCupom } = load('src/lib/cupons.ts', {
   const db = { from(table) {
     const query = {
       select() { return this; }, order() { return this; }, limit() { return this; }, eq() { return this; }, lte() { return this; }, gte() { return this; },
-      maybeSingle: async () => ({ data: { esta_aberto: true, aceitando_pedidos: true, taxa_entrega: 3 } }),
+      maybeSingle: async () => ({ data: { esta_aberto: true, aceitando_pedidos: true, taxa_entrega: 3, aceitar_pedidos_automaticamente: false, imprimir_aceitar_automaticamente: true } }),
       then(resolve) { return Promise.resolve({ data: [] }).then(resolve); },
       insert(value) { inserted = value; return this; },
       // Emulates the existing database trigger's confirmed result, not a live DB test.
@@ -70,6 +70,7 @@ const { validarCupom } = load('src/lib/cupons.ts', {
   coupon = { ...coupon, ativo: true, tipo: 'percentual', valor: 10 };
   const response = await POST({ json: async () => body }, { ip: 'test' });
   assert.equal(response.status, 201);
+  assert.equal(inserted.status, "preparando", "Print automation must prepare new orders even when legacy auto-accept is false");
   assert.equal(inserted.total, 53, 'Do not subtract client discount before database trigger');
   assert.equal(inserted.desconto_cupom, undefined);
   assert.equal(response.data.pedido.total, 48, 'Return confirmed result, not forged client total');
