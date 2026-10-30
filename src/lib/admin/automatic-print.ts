@@ -1,5 +1,6 @@
 export const PRINT_DEVICE_KEY = "softshake-auto-print-device";
 export const PRINT_DEVICE_EVENT = "softshake-auto-print-device-change";
+export const AUTOMATIC_PRINT_TYPE = "completo" as const;
 const PRINTED_KEY = "softshake-auto-print-sent";
 
 export function setPrintDevice(enabled: boolean) {
