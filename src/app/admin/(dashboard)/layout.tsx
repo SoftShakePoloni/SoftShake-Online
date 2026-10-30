@@ -31,6 +31,7 @@ export default async function AdminLayout({
         roleLabel={roleName}
         acessos={acessos}
         canManageStore={canManageStore}
+        canAutoPrint={hasPermission(role, "pedido:update_status", session.permissoes)}
       >
         {children}
       </AdminShell>

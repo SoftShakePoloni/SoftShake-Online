@@ -28,6 +28,7 @@ import {
   unlockPedidosAudio,
 } from "@/lib/admin/order-alert-sound";
 import { cn } from "@/lib/utils";
+import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, setPrintDevice } from "@/lib/admin/automatic-print";
 import { UsuariosSection } from "./UsuariosSection";
 
 /* ─── Nav ─────────────────────────────────────────────────────────────── */
@@ -190,6 +191,14 @@ export function SistemaConfigManager({
   const [prefs, setPrefs] = useState(preferenciasIniciais);
   const [sistema, setSistema] = useState<SistemaPrefs>(DEFAULT_SISTEMA);
   const [saving, setSaving] = useState(false);
+  const [printHere, setPrintHere] = useState(false);
+  useEffect(() => {
+    const sync = () => { try { setPrintHere(localStorage.getItem(PRINT_DEVICE_KEY) === "1"); } catch { setPrintHere(false); } };
+    sync();
+    window.addEventListener(PRINT_DEVICE_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => { window.removeEventListener(PRINT_DEVICE_EVENT, sync); window.removeEventListener("storage", sync); };
+  }, []);
 
   useEffect(() => {
     setSistema(loadSistema());
@@ -218,9 +227,12 @@ export function SistemaConfigManager({
           som_alerta_tipo: updated.som_alerta_tipo,
           som_alerta_volume: updated.som_alerta_volume,
         });
+        window.dispatchEvent(new Event(PRINT_DEVICE_EVENT));
         toast.success("Alterações salvas.");
-      } catch {
-        toast.error("Não foi possível salvar.");
+        return updated;
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível salvar.");
+        return null;
       } finally {
         setSaving(false);
       }
@@ -383,15 +395,7 @@ export function SistemaConfigManager({
                       checked={autoAccept}
                       disabled={saving}
                       onCheckedChange={(v) => {
-                        setPrefs((prev) => ({
-                          ...prev,
-                          imprimir_aceitar_automaticamente: v,
-                          aceitar_pedidos_automaticamente: v,
-                        }));
-                        void persistOps({
-                          imprimir_aceitar_automaticamente: v,
-                          aceitar_pedidos_automaticamente: v,
-                        });
+                        void persistOps({ aceitar_pedidos_automaticamente: v, ...(!v ? { imprimir_aceitar_automaticamente: false } : {}) });
                       }}
                       aria-label="Aceitar pedidos automaticamente"
                     />
@@ -546,43 +550,29 @@ export function SistemaConfigManager({
               </SectionHint>
               <Panel>
                 <Row
-                  title="Impressão automática"
-                  description="Aceita o pedido e envia para impressão automaticamente."
+                  title="Aceitar e imprimir novos pedidos"
+                  description="Quando um pedido chegar, ele entra em preparo e a comanda da cozinha é enviada para impressão."
                 >
                   <CompactSwitch
-                    checked={autoAccept}
+                    checked={prefs.imprimir_aceitar_automaticamente}
                     disabled={saving}
-                    onCheckedChange={(v) => {
-                      setPrefs((prev) => ({
-                        ...prev,
-                        imprimir_aceitar_automaticamente: v,
-                        aceitar_pedidos_automaticamente: v,
-                      }));
-                      void persistOps({
-                        imprimir_aceitar_automaticamente: v,
-                        aceitar_pedidos_automaticamente: v,
-                      });
+                    onCheckedChange={(enabled) => {
+                      void (async () => {
+                        const updated = await persistOps({ imprimir_aceitar_automaticamente: enabled, ...(enabled ? { aceitar_pedidos_automaticamente: true } : {}) });
+                        if (updated) {
+                          try { setPrintDevice(enabled); } catch { toast.error("Não foi possível ativar a impressão neste navegador."); }
+                        }
+                      })();
                     }}
-                    aria-label="Impressão automática"
+                    aria-label="Aceitar e imprimir novos pedidos"
                   />
                 </Row>
-                <Row
-                  title="Impressora padrão"
-                  description="Seleção de impressora ainda não configurada."
-                  last
-                >
-                  <Select disabled>
-                    <SelectTrigger className="h-9 w-[180px] rounded-md border-[#E5E7EB] text-sm text-[#9CA3AF]">
-                      <SelectValue placeholder="Não configurada" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" className="text-sm">
-                        Não configurada
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                <Row title="Imprimir neste dispositivo" description="Ative no computador conectado à impressora e mantenha o painel aberto. Use apenas um computador para evitar cópias em impressoras diferentes." last>
+                  <CompactSwitch checked={printHere} disabled={saving || !prefs.imprimir_aceitar_automaticamente} aria-label="Imprimir neste dispositivo"
+                    onCheckedChange={enabled => { try { setPrintDevice(enabled); } catch { toast.error("Não foi possível salvar a preferência deste dispositivo."); } }} />
                 </Row>
               </Panel>
+              <p className="mt-3 text-sm leading-relaxed text-[#6B7280]">O navegador abrirá a janela de impressão. Selecione sua impressora nela. A impressão sem confirmação exige configuração local do navegador ou integração com a impressora. Cancelar essa janela não cancela o pedido; você pode reimprimir pelo painel.</p>
             </div>
           )}
 

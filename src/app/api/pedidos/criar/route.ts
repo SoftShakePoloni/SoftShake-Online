@@ -106,6 +106,7 @@ export const POST = withApiGuard(
       type ConfigRow = {
         esta_aberto?: boolean | null;
         aceitar_pedidos_automaticamente?: boolean | null;
+        imprimir_aceitar_automaticamente?: boolean | null;
         aceitando_pedidos?: boolean | null;
         taxa_entrega?: number | null;
       };
@@ -115,7 +116,7 @@ export const POST = withApiGuard(
         const full = await supabase
           .from("configuracoes_loja")
           .select(
-            "esta_aberto, aceitar_pedidos_automaticamente, aceitando_pedidos, taxa_entrega"
+            "esta_aberto, aceitar_pedidos_automaticamente, imprimir_aceitar_automaticamente, aceitando_pedidos, taxa_entrega"
           )
           .order("id", { ascending: true })
           .limit(1)
@@ -235,7 +236,7 @@ export const POST = withApiGuard(
         adicionais: item.adicionais || item.selectionsResolved || [],
       }));
 
-      const autoAceite = Boolean(configLoja?.aceitar_pedidos_automaticamente);
+      const autoAceite = Boolean(configLoja?.aceitar_pedidos_automaticamente || configLoja?.imprimir_aceitar_automaticamente);
       const initialStatus: "pendente" | "preparando" = autoAceite
         ? "preparando"
         : "pendente";

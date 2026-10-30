@@ -6,7 +6,7 @@
  * Campos ausentes no banco são ignorados com fallback seguro.
  */
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireAdmin, requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 import {
   DEFAULT_PREFERENCIAS_ESTABELECIMENTO,
@@ -88,9 +88,7 @@ function sanitizeUpdate(
       updates.imprimir_aceitar_automaticamente
     );
     // Mantém sincronizado com a flag legada usada no fluxo de pedidos
-    payload.aceitar_pedidos_automaticamente = Boolean(
-      updates.imprimir_aceitar_automaticamente
-    );
+    if (updates.imprimir_aceitar_automaticamente) payload.aceitar_pedidos_automaticamente = true;
   }
   if (updates.aceitar_pedidos_automaticamente !== undefined) {
     payload.aceitar_pedidos_automaticamente = Boolean(
@@ -131,7 +129,7 @@ function sanitizeUpdate(
 export async function updatePreferenciasEstabelecimento(
   updates: PreferenciasEstabelecimentoUpdate
 ): Promise<PreferenciasEstabelecimento> {
-  await requireAdmin();
+  await requirePermission("config:write");
   const supabase = createServiceRoleClient();
   const row = await buscarLinha();
 
@@ -157,6 +155,10 @@ export async function updatePreferenciasEstabelecimento(
     return normalizePreferenciasEstabelecimento(
       data as unknown as Record<string, unknown>
     );
+  }
+
+  if (updates.imprimir_aceitar_automaticamente !== undefined) {
+    throw new Error("Não foi possível salvar a impressão automática. Confira se a migração 0010 está aplicada no banco.");
   }
 
   // Fallback: só campos legados (aceitar automático / numeração se existir)

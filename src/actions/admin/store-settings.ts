@@ -85,6 +85,7 @@ export async function setAceitarPedidosAutomaticamente(
     .from("configuracoes_loja")
     .update({
       aceitar_pedidos_automaticamente: ativo,
+      ...(!ativo ? { imprimir_aceitar_automaticamente: false } : {}),
     } as never)
     .eq("id", row.id)
     .select("id, aceitar_pedidos_automaticamente")
