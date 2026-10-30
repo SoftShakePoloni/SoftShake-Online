@@ -17,6 +17,7 @@ test('native print selects a real configured printer and rejects virtual or miss
 });
 test('the real IPC handler validates the sender and requests silent native printing', async () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
+  const handlers = {};
   let readyCallback, handler, options, receiptReady = true, devices = [{ name: 'HP Test', isDefault: true }];
   const frame = { url: 'https://softshake.com.br/admin/pedidos' };
   const contents = { mainFrame: frame, on() {}, setWindowOpenHandler() {}, session: { setPermissionRequestHandler() {} },
@@ -24,9 +25,9 @@ test('the real IPC handler validates the sender and requests silent native print
     print(value, callback) { options = value; callback(true); },
   };
   const electron = {
-    app: { setName() {}, setAppUserModelId() {}, requestSingleInstanceLock: () => true, on() {}, whenReady: () => ({ then(callback) { readyCallback = callback; } }), getPath: () => require('node:os').tmpdir() },
-    BrowserWindow: class { constructor() { this.webContents = contents; } once() {} loadURL() { return Promise.resolve(); } },
-    Menu: {}, ipcMain: { handle(_channel, callback) { handler = callback; } },
+    app: { setName() {}, setPath() {}, setAppUserModelId() {}, requestSingleInstanceLock: () => true, on() {}, whenReady: () => ({ then(callback) { readyCallback = callback; } }), getPath: () => require('node:os').tmpdir() },
+    BrowserWindow: class { constructor() { this.webContents = contents; } setMenuBarVisibility() {} once() {} loadURL() { return Promise.resolve(); } },
+    Menu: { setApplicationMenu() {} }, ipcMain: { handle(channel, callback) { handlers[channel] = callback; if (channel === 'softshake:print') handler = callback; } },
     dialog: { showMessageBox: async () => ({ response: 0 }) }, shell: {},
   };
   const native = createRequire(path.join(__dirname, 'main.cjs'));
@@ -36,6 +37,14 @@ test('the real IPC handler validates the sender and requests silent native print
   await assert.rejects(() => handler({ sender: contents, senderFrame: { url: frame.url } }), /Origem/);
   const result = await handler({ sender: contents, senderFrame: frame });
   assert.equal(result.accepted, true); assert.equal(options.silent, true); assert.equal(options.deviceName, 'HP Test');
+  for (const channel of ['softshake:printers', 'softshake:select-printer', 'softshake:windows-printers']) {
+    await assert.rejects(() => handlers[channel]({ sender: {}, senderFrame: frame }), /Origem/);
+    await assert.rejects(() => handlers[channel]({ sender: contents, senderFrame: { url: frame.url } }), /Origem/);
+  }
+  const listed = await handlers['softshake:printers']({ sender: contents, senderFrame: frame });
+  assert.equal(listed.printers[0].name, 'HP Test');
+  await assert.rejects(() => handlers['softshake:select-printer']({ sender: contents, senderFrame: frame }, 'Missing'), /indisponível/);
+  await assert.rejects(() => handlers['softshake:select-printer']({ sender: contents, senderFrame: frame }, {}), /indisponível/);
   receiptReady = false;
   await assert.rejects(() => handler({ sender: contents, senderFrame: frame }), /comanda/);
   receiptReady = true; devices = [{ name: 'Microsoft Print to PDF', isDefault: true }];
