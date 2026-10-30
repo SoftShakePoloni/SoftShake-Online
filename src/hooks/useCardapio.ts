@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { PublicDataContext } from "@/context/PublicDataContext";
 import type { Category, Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
 
@@ -36,13 +44,18 @@ function requestMenu() {
   if (!menuRequest) {
     menuRequest = fetch("/api/cardapio", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Não foi possível carregar o cardápio.");
-        const { categorias } = (await response.json()) as { categorias: Category[] };
+        if (!response.ok)
+          throw new Error("Não foi possível carregar o cardápio.");
+        const { categorias } = (await response.json()) as {
+          categorias: Category[];
+        };
         menuCache = categorias;
         menuCacheAt = Date.now();
         return categorias;
       })
-      .finally(() => { menuRequest = null; });
+      .finally(() => {
+        menuRequest = null;
+      });
   }
   return menuRequest;
 }
@@ -55,13 +68,16 @@ function requestPromoCount() {
   if (!promoCountRequest) {
     promoCountRequest = fetch("/api/promocoes/contagem", { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Não foi possível contar as promoções.");
+        if (!response.ok)
+          throw new Error("Não foi possível contar as promoções.");
         const data = (await response.json()) as { count: number };
         promoCountCache = data.count;
         promoCountCacheAt = Date.now();
         return data.count;
       })
-      .finally(() => { promoCountRequest = null; });
+      .finally(() => {
+        promoCountRequest = null;
+      });
   }
   return promoCountRequest;
 }
@@ -95,7 +111,7 @@ function ensureMenuLoaded() {
   if (bootstrapped) return;
   bootstrapped = true;
 
-  void loadMenu();
+  if (store.isLoading) void loadMenu();
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") void loadMenu();
   });
@@ -125,10 +141,6 @@ const SERVER_SNAPSHOT: MenuStore = {
   live: false,
 };
 
-function getServerSnapshot() {
-  return SERVER_SNAPSHOT;
-}
-
 /** Conta produtos com promoção ativa e disponíveis */
 export function countPromocoesAtivas(categories: Category[]): number {
   let n = 0;
@@ -142,7 +154,7 @@ export function countPromocoesAtivas(categories: Category[]): number {
 
 export function flattenPromoProducts(categories: Category[]): Product[] {
   return categories.flatMap((c) =>
-    c.products.filter((p) => hasProductPromo(p) && p.disponivel !== false)
+    c.products.filter((p) => hasProductPromo(p) && p.disponivel !== false),
   );
 }
 
@@ -150,14 +162,48 @@ export function flattenPromoProducts(categories: Category[]): Product[] {
  * Cardápio público carregado pelo backend e compartilhado entre as telas.
  */
 export function useMenu() {
+  const initial = useContext(PublicDataContext);
+  const initialSnapshot = useMemo(
+    () =>
+      initial?.categories
+        ? {
+            ...SERVER_SNAPSHOT,
+            categories: initial.categories,
+            isLoading: false,
+          }
+        : SERVER_SNAPSHOT,
+    [initial],
+  );
+  const primeInitialMenu = useCallback(() => {
+    if (initial?.categories && initial.generatedAt > menuCacheAt) {
+      menuCache = initial.categories;
+      menuCacheAt = initial.generatedAt;
+      store = {
+        ...store,
+        categories: initial.categories,
+        isLoading: false,
+        error: null,
+      };
+      emit();
+    }
+  }, [initial]);
+  const subscribeWithInitial = useCallback(
+    (listener: () => void) => {
+      primeInitialMenu();
+      return subscribe(listener);
+    },
+    [primeInitialMenu],
+  );
+
   useEffect(() => {
+    primeInitialMenu();
     ensureMenuLoaded();
-  }, []);
+  }, [primeInitialMenu]);
 
   const snap = useSyncExternalStore(
-    subscribe,
+    subscribeWithInitial,
     getSnapshot,
-    getServerSnapshot
+    () => initialSnapshot,
   );
 
   const refresh = useCallback(() => loadMenu(), []);

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { imageProxyUrl } from "@/lib/image/proxy-url";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   firstAllowedAdminPath,
@@ -63,12 +64,10 @@ function logAdminLoginError(stage: string, error: unknown) {
 }
 
 /** Imagem da loja (coluna esquerda) */
-const HERO_IMAGE =
-  "https://juzlblaxwybssbyddnwj.supabase.co/storage/v1/object/sign/SoftShake%20Images/Sorveteria/SoftShake_local.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lNmM0NGQwYS0xYmQ0LTRlZmUtYmEzMy02MWIxYmMxYmU2NTYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJTb2Z0U2hha2UgSW1hZ2VzL1NvcnZldGVyaWEvU29mdFNoYWtlX2xvY2FsLnBuZyIsInNjb3BlIjoiZG93bmxvYWQiLCJpYXQiOjE3ODM3OTEyMjEsImV4cCI6MjA5OTE1MTIyMX0.fvSwYnrCDKc06hbeuzHa7qOB87ncNJ3bXsDYMdvDLZk";
+const HERO_IMAGE = imageProxyUrl("Sorveteria/SoftShake_local.png")!;
 
 /** Logo tipográfica SoftShake */
-const LOGO_TEXT_URL =
-  "https://juzlblaxwybssbyddnwj.supabase.co/storage/v1/object/sign/SoftShake%20Images/Sorveteria/softshake_text.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9lNmM0NGQwYS0xYmQ0LTRlZmUtYmEzMy02MWIxYmMxYmU2NTYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJTb2Z0U2hha2UgSW1hZ2VzL1NvcnZldGVyaWEvc29mdHNoYWtlX3RleHQucG5nIiwic2NvcGUiOiJkb3dubG9hZCIsImlhdCI6MTc4Mzc5MTI4NywiZXhwIjoyMDk5MTUxMjg3fQ.YgN8TKxPsJG9N65nD8LGTGjrveREnMS-RgXmF_WNkw4";
+const LOGO_TEXT_URL = imageProxyUrl("Sorveteria/softshake_text.png")!;
 
 const REMEMBER_KEY = "softshake-admin-email";
 

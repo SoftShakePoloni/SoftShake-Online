@@ -34,7 +34,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/formatters";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 

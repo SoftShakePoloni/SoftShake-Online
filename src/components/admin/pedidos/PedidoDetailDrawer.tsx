@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import {
   Phone,
   MapPin,
@@ -363,6 +363,7 @@ export function PedidoDetailDrawer({
                       {item.produto.image ? (
                         <div className="relative w-10 h-10 rounded overflow-hidden bg-[#F3F4F6] shrink-0">
                           <Image
+                            sizes="40px"
                             src={item.produto.image}
                             alt={item.produto.name}
                             fill

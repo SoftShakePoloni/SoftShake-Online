@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { useModalHistory } from "@/hooks/useModalHistory";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Gift, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { Product } from "@/data/tipos";
@@ -28,6 +29,7 @@ export function PromoProductCard({
   variant?: Variant;
 }) {
   const [open, setOpen] = useState(false);
+  useModalHistory(open, setOpen);
   const [bump, setBump] = useState(false);
   const { adicionarItem } = useCarrinho();
   const { loja, isLoading } = useLoja();
@@ -95,12 +97,11 @@ export function PromoProductCard({
           className="offer-photo"
         >
           {product.image && failedImage !== product.image ? (
-            <Image
+            <Image preset="offer"
               src={product.image}
               alt=""
               width={1200}
               height={1200}
-              sizes="(max-width:767px) calc(100vw - 32px), (max-width:1023px) 45vw, 340px"
               quality={90}
               className="h-auto w-full object-contain"
               onError={() => setFailedImage(product.image ?? null)}

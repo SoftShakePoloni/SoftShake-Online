@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
+import { useModalHistory } from "@/hooks/useModalHistory";
+import { StorageImage as Image } from "@/components/ui/storage-image";
+import dynamic from "next/dynamic";
 import { BadgePercent, Gift } from "lucide-react";
 import type { Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { FreteGratisBadge } from "@/components/ui/FreteGratisBadge";
-import { ProductDetailDialog } from "./ModalProduto";
+const ProductDetailDialog=dynamic(()=>import("./ModalProduto").then(module=>module.ProductDetailDialog));
 import { PrecoProduto } from "./PrecoProduto";
 import { cn } from "@/lib/utils";
 import { useLoja } from "@/hooks/useLoja";
@@ -15,6 +17,7 @@ import { toast } from "sonner";
 
 export function ProductCard({ product }: { product: Product }) {
   const [open, setOpen] = useState(false);
+  useModalHistory(open, setOpen);
   const { loja, isLoading } = useLoja();
   const isDisponivel = product.disponivel !== false;
   const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
@@ -35,9 +38,14 @@ export function ProductCard({ product }: { product: Product }) {
     <>
       <article
         onClick={handleOpen}
+        role="button"
+        tabIndex={podePedir ? 0 : -1}
+        aria-label={`Escolher ${product.name}`}
+        aria-disabled={!podePedir}
+        onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();handleOpen()}}}
         className={cn(
           "group relative flex h-full gap-3 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:shadow-md",
-          "border-border bg-card",
+          "border-border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
           podePedir ? "cursor-pointer" : "cursor-not-allowed opacity-75",
         )}
       >
@@ -98,12 +106,13 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="shrink-0 relative z-[5]">
           {product.image ? (
             <div className="relative">
-              <Image
+              <Image preset="productCard"
                 src={product.image}
                 alt={product.name}
                 width={320}
                 height={192}
                 quality={90}
+                sizes="(max-width: 639px) 160px, 187px"
                 className="h-24 w-24 rounded-lg object-cover sm:h-28 sm:w-28"
               />
             </div>
@@ -114,7 +123,7 @@ export function ProductCard({ product }: { product: Product }) {
           )}
         </div>
       </article>
-      {isDisponivel && (
+      {isDisponivel && open && (
         <ProductDetailDialog
           product={product}
           open={open}

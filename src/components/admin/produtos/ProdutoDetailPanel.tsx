@@ -36,7 +36,7 @@ import {
   ImageIcon,
   Loader2,
 } from "lucide-react";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { createClient } from "@/lib/supabase/client";
 import { updateProduto, deleteProduto } from "@/actions/admin/produtos";
 import { toast } from "sonner";
@@ -357,6 +357,7 @@ export function ProdutoDetailPanel({
                   <Image
                     src={produto.imagem_url}
                     alt={produto.nome}
+                    sizes="(max-width: 639px) calc(100vw - 48px), 492px"
                     fill
                     className="object-cover"
                   />

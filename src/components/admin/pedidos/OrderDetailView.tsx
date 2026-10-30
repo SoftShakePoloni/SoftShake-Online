@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import {
   Phone,
   MapPin,

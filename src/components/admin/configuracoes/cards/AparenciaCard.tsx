@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ImageIcon, Upload, X, Loader2 } from "lucide-react";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 
 interface AparenciaCardProps {
   config: ConfiguracaoLoja;
@@ -139,6 +139,7 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
             {config.logo_url ? (
               <div className="relative aspect-square max-w-[200px] mx-auto">
                 <Image
+                  sizes="200px"
                   src={config.logo_url}
                   alt="Logo"
                   fill
@@ -227,6 +228,7 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
             {config.banner_url ? (
               <div className="relative aspect-[3/1]">
                 <Image
+                  sizes="(max-width: 767px) calc(100vw - 80px), 600px"
                   src={config.banner_url}
                   alt="Banner"
                   fill

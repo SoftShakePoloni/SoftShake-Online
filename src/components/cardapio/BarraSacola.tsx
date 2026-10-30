@@ -2,10 +2,11 @@
 
 import { ShoppingBag, Store } from "lucide-react";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useCarrinho } from "@/context/CarrinhoContext";
 import { formatBRL } from "@/data/tipos";
-import { ModalSacola } from "./ModalSacola";
+const ModalSacola=dynamic(()=>import("./ModalSacola").then(module=>module.ModalSacola),{ssr:false});
 import { useLoja } from "@/hooks/useLoja";
 import { toast } from "sonner";
 

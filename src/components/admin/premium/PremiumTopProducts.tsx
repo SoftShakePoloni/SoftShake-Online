@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { TrendingUp, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 

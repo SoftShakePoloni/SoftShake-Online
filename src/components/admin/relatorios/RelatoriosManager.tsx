@@ -31,10 +31,7 @@ import {
   TabelaProdutos,
 } from "./RelatorioTables";
 import { createClient } from "@/lib/supabase/client";
-import {
-  downloadPdfBlob,
-  generateRelatorioPdf,
-} from "@/lib/relatorios/generateRelatorioPdf";
+import {downloadPdfBlob} from "@/lib/relatorios/download";
 import {
   reportDate,
   reportDateKey,
@@ -195,6 +192,7 @@ export function RelatoriosManager() {
     try {
       // Export the exact loaded snapshot and its filters, including during realtime updates.
       if (kind === "pdf") {
+        const {generateRelatorioPdf}=await import("@/lib/relatorios/generateRelatorioPdf");
         const result = await generateRelatorioPdf({
           data,
           emitidoPor: adminName,

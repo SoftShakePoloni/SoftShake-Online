@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { StorageImage as Image } from "@/components/ui/storage-image";
 import { usePathname } from "next/navigation";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, X, ArrowLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   formatBRL,
@@ -30,6 +30,8 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const { adicionarItem } = useCarrinho();
   const { loja, isLoading } = useLoja();
   const pathname = usePathname();
+  const previousPathname=useRef(pathname);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
   const [loadedOptionGroups, setLoadedOptionGroups] = useState<OptionGroup[] | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
@@ -58,7 +60,8 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
 
   // Fecha ao trocar de aba na bottom nav
   useEffect(() => {
-    if (open) onOpenChange(false);
+    if (previousPathname.current !== pathname && open) onOpenChange(false);
+    previousPathname.current=pathname;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
   const [selections, setSelections] = useState<Record<string, string[]>>({});
@@ -66,6 +69,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const [notes, setNotes] = useState("");
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(() => {
     setSelections({});
@@ -93,7 +97,8 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
     if (nextSection && scrollContainerRef.current) {
       // Pequeno delay para garantir que a UI atualizou
       setTimeout(() => {
-        nextSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const container = scrollContainerRef.current;
+        if (container) container.scrollTo({ top: nextSection.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
       }, 100);
     }
   };
@@ -194,22 +199,23 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent overlayClassName="z-[80] max-md:bottom-0" className="z-[90] flex h-dvh max-h-dvh w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92dvh] md:max-h-[92dvh] md:rounded-2xl">
+      <DialogContent hideClose onOpenAutoFocus={event => { event.preventDefault(); returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; headingRef.current?.focus({ preventScroll: true }); }} onCloseAutoFocus={event => { if (returnFocusRef.current?.isConnected) { event.preventDefault(); returnFocusRef.current.focus({ preventScroll: true }); } }} overlayClassName="z-[80] max-md:bottom-0 motion-reduce:animate-none motion-reduce:duration-0" className="z-[90] motion-reduce:animate-none motion-reduce:duration-0 flex h-dvh max-h-dvh w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92dvh] md:max-h-[92dvh] md:rounded-2xl">
         <DialogTitle className="sr-only">{product.name}</DialogTitle>
         <DialogDescription className="sr-only">{product.description}</DialogDescription>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" ref={scrollContainerRef}>
           {/* Image */}
           <div className="relative aspect-square w-full bg-muted">
+            <button type="button" onClick={() => onOpenChange(false)} aria-label="Fechar produto" className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex h-11 w-11 items-center justify-center rounded-full bg-card text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"><X aria-hidden="true" className="h-5 w-5" /></button>
             {product.image ? (
-              <Image src={product.image} alt={product.name} fill className="object-cover" />
+              <Image preset="productDetail" src={product.image} alt={product.name} fill sizes="(max-width: 448px) 100vw, 448px" quality={90} className="object-cover" />
             ) : null}
           </div>
 
           {/* Header info */}
           <div className="space-y-2 bg-card px-5 py-5">
             <div className="flex items-start justify-between gap-3">
-              <h2 className="text-xl font-bold text-foreground">{product.name}</h2>
+              <h2 ref={headingRef} tabIndex={-1} className="text-xl font-bold text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary">{product.name}</h2>
               {product.tag && <TagBadge tag={product.tag} />}
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
@@ -297,7 +303,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                       </span>
                       {g.required && (
                         <span className="rounded bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">
-                          OBRIGATÓRIO
+                          Obrigatório
                         </span>
                       )}
                     </div>
@@ -361,6 +367,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                           <button
                             type="button"
                             disabled={disabled}
+                            aria-pressed={isSelected}
                             onClick={() =>
                               !isUnavailable && toggle(g, item.id)
                             }
@@ -368,7 +375,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                               "relative z-[5] flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition",
                               isUnavailable
                                 ? "cursor-not-allowed"
-                                : "hover:bg-muted/30",
+                                : "hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
                               isSelected && !isUnavailable
                                 ? ""
                                 : "",
@@ -448,6 +455,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
           </div>
         </div>
 
+        <button type="button" onClick={() => onOpenChange(false)} className="sr-only focus:not-sr-only focus:shrink-0 focus:bg-card focus:px-5 focus:py-3 focus:text-primary"><ArrowLeft aria-hidden="true" className="inline h-4 w-4" /> Voltar ao cardápio</button>
         {/* Footer */}
         <div className="shrink-0 flex items-center gap-3 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center gap-3 rounded-full border border-border px-2 py-1.5">
@@ -455,7 +463,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
               type="button"
               aria-label="Diminuir"
               onClick={() => setQty((q) => Math.max(1, q - 1))}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              className="flex h-11 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
             >
               <Minus className="h-4 w-4" />
             </button>
@@ -464,7 +472,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
               type="button"
               aria-label="Aumentar"
               onClick={() => setQty((q) => q + 1)}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-foreground hover:bg-muted"
+              className="flex h-11 w-9 items-center justify-center rounded-full text-foreground hover:bg-muted"
             >
               <Plus className="h-4 w-4" />
             </button>

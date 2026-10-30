@@ -308,6 +308,7 @@ function Ticket({
               <span>Taxa de entrega</span>
               <span>R$ {formatMoney(pedido.taxa_entrega)}</span>
             </div>
+            {pedido.cupom_codigo && <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginBottom: 6 }}><span>Cupom {pedido.cupom_codigo}</span><span>− R$ {formatMoney(Number(pedido.desconto_cupom || 0))}</span></div>}
             <div
               style={{
                 display: "flex",

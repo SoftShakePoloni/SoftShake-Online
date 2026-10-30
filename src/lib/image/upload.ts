@@ -35,7 +35,7 @@ export async function uploadImageToStorage(
       .from(BUCKET_NAME)
       .upload(storagePath, buffer, {
         contentType: "image/webp",
-        cacheControl: "3600",
+        cacheControl: "31536000",
         upsert: false, // Não sobrescrever arquivos existentes
       });
 

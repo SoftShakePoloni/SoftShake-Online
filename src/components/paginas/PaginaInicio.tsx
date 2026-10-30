@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StoreHero } from "@/components/cardapio/HeroLoja";
 import { CategoryBar } from "@/components/cardapio/BarraCategorias";
 import { FeaturedCarousel } from "@/components/cardapio/CarrosselDestaques";
@@ -43,6 +43,23 @@ export default function PaginaInicio() {
     null
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef(searchQuery);
+  searchRef.current = searchQuery;
+  useEffect(() => {
+    const restore = () => {
+      setSelectedCategoryId(new URL(location.href).searchParams.get("categoria"));
+      setSearchQuery(history.state?.softshakeMenu?.search ?? "");
+      const y = history.state?.softshakeMenu?.scrollY;
+      if (typeof y === "number") requestAnimationFrame(() => window.scrollTo({ top: y, behavior: "instant" }));
+    };
+    restore();
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+
+  useEffect(() => {
+    history.replaceState({ ...history.state, softshakeMenu: { ...history.state?.softshakeMenu, search: searchQuery } }, "", location.href);
+  }, [searchQuery]);
 
   const orderedCategories = useMemo(() => {
     const products = categories.flatMap(category => category.products);
@@ -75,10 +92,18 @@ export default function PaginaInicio() {
   const isFiltering = Boolean(selectedCategoryId || searchQuery.trim());
 
   const handleSelectCategory = useCallback((categoryId: string | null) => {
+    const url = new URL(location.href);
+    const current = url.searchParams.get("categoria");
+    if (current !== categoryId) {
+      history.replaceState({ ...history.state, softshakeMenu: { search: searchRef.current, scrollY: window.scrollY } }, "", location.href);
+      if (categoryId) url.searchParams.set("categoria", categoryId);
+      else url.searchParams.delete("categoria");
+      history.pushState({ ...history.state, softshakeMenu: { search: searchRef.current, scrollY: 0 } }, "", url);
+    }
     setSelectedCategoryId(categoryId);
 
     if (!categoryId) {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
       return;
     }
 
@@ -93,6 +118,7 @@ export default function PaginaInicio() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 lg:px-6">
       <main className="space-y-8">
+        <h1 className="sr-only">SoftShake — Cardápio</h1>
         <StoreHero />
         <CategoryBar
           categories={orderedCategories}
