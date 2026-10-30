@@ -72,8 +72,10 @@ export const POST = withApiGuard(
           result: "fail",
           meta: { reason: "not_found" },
         });
-        // Timing aproximado: não revelar se existe ou não
-        return apiError(MSG_CREDENCIAIS, 401, { codigo: "AUTH_FAILED" });
+        // Mensagem específica para usuário não encontrado
+        return apiError("Conta não encontrada. Por favor, cadastre-se primeiro.", 404, {
+          codigo: "USER_NOT_FOUND"
+        });
       }
 
       const token = await gerarToken({

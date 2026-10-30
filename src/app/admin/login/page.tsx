@@ -213,7 +213,7 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen w-full bg-white">
+    <div className="relative min-h-dvh w-full bg-white">
       {/* Overlay de carregamento / sucesso */}
       <AnimatePresence>
         {(phase === "loading" || phase === "success") && (
@@ -340,10 +340,10 @@ export default function AdminLoginPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.35 }}
-        className="grid min-h-screen w-full lg:grid-cols-[55%_45%]"
+        className="grid min-h-dvh w-full lg:grid-cols-[55%_45%]"
       >
         {/* ── Coluna esquerda: imagem ── */}
-        <div className="relative hidden min-h-screen overflow-hidden lg:block">
+        <div className="relative hidden min-h-dvh overflow-hidden lg:block">
           <Image
             src={HERO_IMAGE}
             alt="SoftShake — açaí e sobremesas artesanais"
@@ -368,7 +368,7 @@ export default function AdminLoginPage() {
         </div>
 
         {/* ── Coluna direita: formulário ── */}
-        <div className="flex min-h-screen flex-col items-center justify-center px-5 py-10 sm:px-8">
+        <div className="flex min-h-dvh flex-col items-center justify-center px-5 py-10 sm:px-8">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -427,7 +427,7 @@ export default function AdminLoginPage() {
                     disabled={busy}
                     placeholder="Digite seu e-mail"
                     className={cn(
-                      "h-12 w-full rounded-xl border bg-white pl-11 pr-4 text-sm text-[#111827]",
+                      "h-12 w-full rounded-xl border bg-white pl-11 pr-4 text-base sm:text-sm text-[#111827]",
                       "placeholder:text-[#9CA3AF] outline-none transition-all duration-150",
                       "focus:border-[#4C258C] focus:ring-2 focus:ring-[#4C258C]/15",
                       "disabled:opacity-60",
@@ -460,7 +460,7 @@ export default function AdminLoginPage() {
                     disabled={busy}
                     placeholder="Digite sua senha"
                     className={cn(
-                      "h-12 w-full rounded-xl border bg-white pl-11 pr-12 text-sm text-[#111827]",
+                      "h-12 w-full rounded-xl border bg-white pl-11 pr-12 text-base sm:text-sm text-[#111827]",
                       "placeholder:text-[#9CA3AF] outline-none transition-all duration-150",
                       "focus:border-[#4C258C] focus:ring-2 focus:ring-[#4C258C]/15",
                       "disabled:opacity-60",
@@ -472,10 +472,10 @@ export default function AdminLoginPage() {
                   />
                   <button
                     type="button"
-                    tabIndex={-1}
+
                     disabled={busy}
                     onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#9CA3AF] transition-colors duration-150 hover:bg-[#F3F4F6] hover:text-[#4C258C]"
+                    className="absolute right-1 top-1/2 flex h-11 w-11 items-center justify-center focus-visible:outline-2 focus-visible:outline-[#4C258C] -translate-y-1/2 rounded-lg p-1.5 text-[#9CA3AF] transition-colors duration-150 hover:bg-[#F3F4F6] hover:text-[#4C258C]"
                     aria-label={
                       showPassword ? "Ocultar senha" : "Mostrar senha"
                     }
@@ -495,7 +495,7 @@ export default function AdminLoginPage() {
               </div>
 
               {/* Opções */}
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <label className="flex cursor-pointer items-center gap-2 select-none">
                   <Checkbox
                     checked={Boolean(remember)}

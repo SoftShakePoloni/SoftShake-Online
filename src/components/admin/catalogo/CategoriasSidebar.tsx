@@ -162,7 +162,7 @@ function CategoriaItemInner({
       {dragHandleProps ? (
         <button
           type="button"
-          className="p-1 pl-1.5 text-[#D1D5DB] opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none"
+          className="p-1 pl-1.5 text-[#D1D5DB] opacity-100 cursor-grab active:cursor-grabbing touch-none"
           aria-label="Arrastar categoria"
           {...dragHandleProps}
         >
@@ -199,7 +199,7 @@ function CategoriaItemInner({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="p-1 mr-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-white text-[#6B7280]"
+            className="p-1 mr-1 rounded-md opacity-100 hover:bg-white text-[#6B7280]"
             aria-label="Menu da categoria"
           >
             <MoreVertical className="w-3.5 h-3.5" />
@@ -326,11 +326,11 @@ export function CategoriasSidebar({
   };
 
   return (
-    <aside className="flex h-full w-full shrink-0 flex-col overflow-hidden rounded-xl border border-[#E7E3EA] bg-white shadow-sm">
+    <aside className="catalog-categories-panel flex w-full flex-col">
       <div className="flex items-center justify-between border-b border-[#EEEAF1] px-4 py-3">
         <div>
           <h2 className="text-[13px] font-semibold text-[#25212A]">Categorias</h2>
-          <p className="mt-0.5 text-[11px] text-[#89838F]">Organize seu cardápio</p>
+
         </div>
         <Button
           type="button"
@@ -347,7 +347,7 @@ export function CategoriasSidebar({
         </Button>
       </div>
 
-      <div className="flex-1 space-y-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
         <button
           type="button"
           onClick={() => onSelect(null)}

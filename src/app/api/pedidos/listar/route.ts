@@ -3,7 +3,6 @@ import { RATE_LIMITS } from "@/lib/security/rate-limit";
 import {
   apiOk,
   apiServerError,
-  apiUnauthorized,
 } from "@/lib/security/api-response";
 import { obterSessao } from "@/lib/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
@@ -22,7 +21,8 @@ export const GET = withApiGuard(
   async () => {
     try {
       const sessao = await obterSessao();
-      if (!sessao) return apiUnauthorized();
+      // A lista vazia é o estado esperado para visitantes sem sessão.
+      if (!sessao) return apiOk({ pedidos: [] });
 
       const supabase = createServerClient();
 
@@ -30,7 +30,7 @@ export const GET = withApiGuard(
         await Promise.all([
           supabase
             .from("pedidos")
-            .select("*")
+            .select("id, cliente_nome, cliente_telefone, tipo_entrega, endereco_completo, meio_pagamento, troco_para, subtotal, taxa_entrega, total, itens, status, created_at, updated_at")
             .eq("cliente_id", sessao.id)
             .order("created_at", { ascending: false })
             .limit(100),

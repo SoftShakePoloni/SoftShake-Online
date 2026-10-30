@@ -1,10 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Image from "next/image";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+
 import {
   GripVertical,
   Pencil,
@@ -96,23 +96,16 @@ function ProdutoRowInner({
   const imgUrl = useImagemAssinada(produto.imagem_url);
   const disponivel = isProdutoDisponivel(produto);
   const promo = hasPrecoPromocional(produto);
-  const updated =
-    produto.updated_at || produto.created_at
-      ? format(
-          new Date(produto.updated_at || produto.created_at!),
-          "dd/MM/yy",
-          { locale: ptBR }
-        )
-      : "—";
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   return (
     <tr
       ref={setNodeRef as unknown as React.Ref<HTMLTableRowElement>}
       style={style}
       className={cn(
-        "group border-b border-[#F1EEF3] transition-colors hover:bg-[#FCFBFD]",
+        "catalog-product-row group border-b border-[#F1EEF3] transition-colors hover:bg-[#FCFBFD]",
         isDragging && "relative z-10 bg-white opacity-90 shadow-sm",
-        !disponivel && "opacity-70"
+        !disponivel && "opacity-70",
       )}
     >
       {/* Drag */}
@@ -120,7 +113,7 @@ function ProdutoRowInner({
         {dragHandleProps ? (
           <button
             type="button"
-            className="touch-none cursor-grab p-1 text-[#AAA4B0] opacity-0 transition-opacity group-hover:opacity-100 active:cursor-grabbing"
+            className="touch-none cursor-grab p-1 text-[#AAA4B0] opacity-100 transition-opacity active:cursor-grabbing"
             aria-label="Arrastar produto"
             {...dragHandleProps}
           >
@@ -130,16 +123,17 @@ function ProdutoRowInner({
       </td>
 
       {/* Produto */}
-      <td className="py-3 pr-4">
+      <td className="catalog-product-cell py-3 pr-4">
         <button
           type="button"
           onClick={onEdit}
           className="flex w-full min-w-0 items-center gap-3 text-left"
         >
           <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#EFECF1] bg-[#F8F7F9]">
-            {imgUrl ? (
+            {imgUrl && imgUrl !== failedUrl ? (
               <Image
                 src={imgUrl}
+                onError={() => setFailedUrl(imgUrl)}
                 alt=""
                 fill
                 className="object-cover"
@@ -152,7 +146,7 @@ function ProdutoRowInner({
             )}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold leading-tight text-[#29252E]">
+            <p className="catalog-product-name text-[13px] font-semibold leading-tight text-[#29252E]">
               {produto.nome}
             </p>
             {produto.codigo ? (
@@ -169,14 +163,14 @@ function ProdutoRowInner({
       </td>
 
       {/* Categoria — ocultar em tablet pequeno */}
-      <td className="hidden py-3 pr-4 md:table-cell">
+      <td className="catalog-product-category py-3 pr-4">
         <span className="text-[12px] text-[#716B77]">
           {produto.categoria?.nome || "Sem categoria"}
         </span>
       </td>
 
       {/* Preço */}
-      <td className="whitespace-nowrap py-3 pr-4">
+      <td className="catalog-product-price whitespace-nowrap py-3 pr-4">
         {promo ? (
           <div>
             <p className="text-[13px] font-semibold tabular-nums text-[#29252E]">
@@ -193,45 +187,21 @@ function ProdutoRowInner({
         )}
       </td>
 
-      {/* Status */}
-      <td className="py-3 pr-4">
-        <div className="flex flex-wrap items-center gap-1">
-          <span
-            className={cn(
-              "inline-flex items-center rounded-md border px-2 py-1 text-[10px] font-medium",
-              disponivel
-                ? "border-[#DDEDE4] bg-[#F1F8F3] text-[#3F7351]"
-                : "border-[#E8E5EA] bg-[#F6F5F7] text-[#77717D]"
-            )}
-          >
-            {disponivel ? "Disponível" : "Indisponível"}
-          </span>
-          {promo && (
-            <span className="inline-flex items-center rounded-md border border-[#E5DDF0] bg-[#F6F2FA] px-2 py-1 text-[10px] font-medium text-[#65468B]">
-              Promoção
-            </span>
-          )}
-        </div>
-      </td>
-
-      {/* Disponível switch — ocultar em mobile */}
-      <td className="hidden py-3 pr-4 sm:table-cell">
-        <Switch
-          checked={disponivel}
-          disabled={toggling}
-          onCheckedChange={() => onToggleDisponivel()}
-          className="h-5 w-9 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-[#D1D5DB] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
-          aria-label={disponivel ? "Desativar" : "Ativar"}
-        />
-      </td>
-
-      {/* Atualização — desktop */}
-      <td className="hidden py-3 pr-4 lg:table-cell">
-        <span className="text-[11px] tabular-nums text-[#96909B]">{updated}</span>
+      <td className="catalog-product-availability">
+        <label className="catalog-availability-control">
+          <Switch
+            checked={disponivel}
+            disabled={toggling}
+            onCheckedChange={() => onToggleDisponivel()}
+            className="h-5 w-9 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-[#D1D5DB] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+            aria-label={disponivel ? "Desativar" : "Ativar"}
+          />
+          <span>{disponivel ? "Disponível" : "Indisponível"}</span>
+        </label>
       </td>
 
       {/* Ações */}
-      <td className="py-3 pr-4 text-right">
+      <td className="catalog-product-actions py-3 pr-4 text-right">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button

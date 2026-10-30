@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 /** Atalhos alinhados às tags já usadas na SoftShake (tabela `tags`). */
 const PRESETS: { nome: string; cor_fundo: string; cor_texto: string }[] = [
   { nome: "Mais Pedido", cor_fundo: "#EF4444", cor_texto: "#FFFFFF" },
+  { nome: "10% Cashback", cor_fundo: "#DCFCE7", cor_texto: "#15803D" },
   { nome: "Premium", cor_fundo: "#F59E0B", cor_texto: "#000000" },
   { nome: "Novidade", cor_fundo: "#7F00FF", cor_texto: "#000000" },
   { nome: "Promoção", cor_fundo: "#FFEDD5", cor_texto: "#C2410C" },
@@ -92,7 +93,7 @@ export function ProdutoTagsPanel({
       setTags((prev) => {
         if (prev.some((t) => t.id === tag.id)) return prev;
         return [...prev, tag].sort((a, b) =>
-          a.nome.localeCompare(b.nome, "pt-BR")
+          a.nome.localeCompare(b.nome, "pt-BR"),
         );
       });
       onChange(String(tag.id));
@@ -114,7 +115,7 @@ export function ProdutoTagsPanel({
       setTags((prev) => {
         if (prev.some((t) => t.id === tag.id)) return prev;
         return [...prev, tag].sort((a, b) =>
-          a.nome.localeCompare(b.nome, "pt-BR")
+          a.nome.localeCompare(b.nome, "pt-BR"),
         );
       });
       onChange(String(tag.id));
@@ -130,9 +131,7 @@ export function ProdutoTagsPanel({
   const handleDelete = async (tag: TagRow) => {
     if (readOnly) return;
     if (
-      !confirm(
-        `Excluir a tag “${tag.nome}”? Produtos com ela ficarão sem tag.`
-      )
+      !confirm(`Excluir a tag “${tag.nome}”? Produtos com ela ficarão sem tag.`)
     ) {
       return;
     }
@@ -183,7 +182,7 @@ export function ProdutoTagsPanel({
             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
             selectedTagId == null
               ? "border-[#4C258C] bg-[#F3EEFA] text-[#4C258C] ring-2 ring-[#4C258C]/20"
-              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#D4C4F0]"
+              : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#D4C4F0]",
           )}
         >
           Sem tag
@@ -201,7 +200,7 @@ export function ProdutoTagsPanel({
                   "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide border transition-all",
                   selected
                     ? "ring-2 ring-[#4C258C]/35 border-transparent scale-[1.02]"
-                    : "border-transparent hover:opacity-90"
+                    : "border-transparent hover:opacity-90",
                 )}
                 style={{
                   backgroundColor: tag.cor_fundo,
@@ -216,7 +215,7 @@ export function ProdutoTagsPanel({
                   type="button"
                   title="Excluir tag"
                   onClick={() => void handleDelete(tag)}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-[#E5E7EB] text-red-500 items-center justify-center hidden group-hover/tag:flex shadow-sm"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white border border-[#E5E7EB] text-red-500 flex items-center justify-center shadow-sm"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -305,7 +304,7 @@ export function ProdutoTagsPanel({
                             "w-8 h-8 rounded-full border-2 transition-transform",
                             active
                               ? "border-[#4C258C] scale-110"
-                              : "border-white shadow-sm"
+                              : "border-white shadow-sm",
                           )}
                           style={{ backgroundColor: c.cor_fundo }}
                           title={c.cor_fundo}

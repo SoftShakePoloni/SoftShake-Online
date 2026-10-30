@@ -6,11 +6,8 @@ import { Home, Tag, ShoppingBag, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import { usePromocoesCount } from "@/hooks/useCardapio";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
-
-type Pedido = {
-  status: string;
-};
 
 const items: {
   to: string;
@@ -32,18 +29,24 @@ export function BottomNav() {
   const pathname = usePathname();
   const [pedidosAtivos, setPedidosAtivos] = useState(0);
   const { count: promosCount } = usePromocoesCount();
+  const { cliente, loading } = useAuth();
 
   useEffect(() => {
+    if (loading) return;
+    if (!cliente) {
+      setPedidosAtivos(0);
+      return;
+    }
+
     const carregarPedidosAtivos = async () => {
+      if (document.visibilityState !== "visible") return;
       try {
-        const resposta = await fetch("/api/pedidos/listar");
+        const resposta = await fetch("/api/pedidos/ativos", {
+          cache: "no-store",
+        });
         if (resposta.ok) {
           const dados = await resposta.json();
-          const ativos =
-            dados.pedidos?.filter(
-              (p: Pedido) => !["entregue", "cancelado"].includes(p.status)
-            ).length || 0;
-          setPedidosAtivos(ativos);
+          setPedidosAtivos(Number(dados.count) || 0);
         }
       } catch {
         // ignore
@@ -51,14 +54,14 @@ export function BottomNav() {
     };
 
     void carregarPedidosAtivos();
-    const interval = setInterval(carregarPedidosAtivos, 30000);
+    const interval = setInterval(carregarPedidosAtivos, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [cliente, loading]);
 
   return (
     <nav
       className="fixed bottom-0 inset-x-0 z-[70] border-t border-border bg-card/95 backdrop-blur-md md:hidden"
-      // Acima dos dialogs (z-50) para a navegação do celular sempre funcionar
+      aria-label="Navegação principal"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <ul className="grid grid-cols-4">
@@ -72,16 +75,18 @@ export function BottomNav() {
             <li key={item.to}>
               <Link
                 href={item.to}
+                prefetch={false}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-2.5 text-xs font-medium relative transition-colors",
-                  active ? "text-primary" : "text-muted-foreground"
+                  "min-h-[60px] flex flex-col items-center justify-center gap-1 py-2.5 text-xs font-medium relative transition-colors",
+                  active ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 <div className="relative">
                   <Icon
                     className={cn(
                       "h-5 w-5 transition-transform",
-                      isPromos && promosCount > 0 && !active && "text-primary"
+                      isPromos && promosCount > 0 && !active && "text-primary",
                     )}
                   />
                   {isPedidos && pedidosAtivos > 0 && (
@@ -93,16 +98,12 @@ export function BottomNav() {
                     <span
                       className={cn(
                         "absolute -top-1.5 -right-2 min-w-[1rem] h-4 px-0.5 rounded-full text-[10px] font-bold flex items-center justify-center text-white shadow-sm",
-                        "bg-gradient-to-br from-[#4C258C] to-[#7C3AED]",
-                        !active && "animate-pulse"
+                        "bg-[#4C258C]",
                       )}
                       aria-label={`${promosCount} promoções ativas`}
                     >
                       {promosCount > 9 ? "9+" : promosCount}
                     </span>
-                  )}
-                  {isPromos && promosCount > 0 && !active && (
-                    <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
                   )}
                 </div>
                 <span
@@ -110,7 +111,7 @@ export function BottomNav() {
                     isPromos &&
                       promosCount > 0 &&
                       !active &&
-                      "text-primary font-semibold"
+                      "text-primary font-semibold",
                   )}
                 >
                   {item.label}

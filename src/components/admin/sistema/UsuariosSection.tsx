@@ -288,7 +288,7 @@ export function UsuariosSection() {
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
+      <div className="grid gap-4 2xl:grid-cols-[280px_minmax(0,1fr)]">
         {/* Lista de perfis */}
         <Panel className="h-fit max-h-[min(70vh,640px)] overflow-y-auto">
           <div className="border-b border-[#E5E7EB] px-4 py-2.5">
@@ -355,7 +355,7 @@ export function UsuariosSection() {
         {selected && (
           <div className="space-y-4">
             <Panel>
-              <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:flex-wrap xl:items-center xl:justify-between">
                 <div className="min-w-0">
                   <p className="text-[17px] font-semibold text-[#111827]">
                     {selected.nome || selected.email || "Usuário"}

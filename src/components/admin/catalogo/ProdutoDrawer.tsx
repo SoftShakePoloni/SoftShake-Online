@@ -228,9 +228,9 @@ export function ProdutoDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-[520px] p-0 flex flex-col gap-0 border-l border-[#E5E7EB]"
+        className="admin-product-sheet h-dvh w-full sm:max-w-[520px] p-0 flex flex-col gap-0 border-l border-[#E5E7EB]"
       >
-        <SheetHeader className="px-4 py-3 border-b border-[#E5E7EB] space-y-0.5">
+        <SheetHeader className="shrink-0 pl-4 pr-16 py-3 border-b border-[#E5E7EB] space-y-0.5">
           <SheetTitle className="text-[15px] font-semibold text-[#111827]">
             {readOnly
               ? "Visualizar produto"
@@ -288,6 +288,7 @@ export function ProdutoDrawer({
               className="p-6 space-y-5"
             >
               <TabsContent value="info" className="mt-0 space-y-4">
+                {produto?.updated_at && <p className="text-xs text-[#89838F]">Última atualização: {new Intl.DateTimeFormat("pt-BR", {dateStyle:"short",timeStyle:"short"}).format(new Date(produto.updated_at))}</p>}
                 <Field label="Nome" error={form.formState.errors.nome?.message}>
                   <Input
                     {...form.register("nome")}

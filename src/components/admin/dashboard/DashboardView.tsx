@@ -1,27 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import {
-  RefreshCw,
-  Plus,
-  Package,
-  Users,
-  BarChart3,
-  UtensilsCrossed,
-  Settings,
-  ExternalLink,
-} from "lucide-react";
+import { ArrowUpRight, RefreshCw } from "lucide-react";
 import {
   LineChart,
   Line,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -36,8 +22,13 @@ import {
 } from "@/actions/admin/dashboard";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/formatters";
-import { STATUS_META, shortOrderId } from "@/components/admin/pedidos/order-status";
+import {
+  STATUS_META,
+  shortOrderId,
+} from "@/components/admin/pedidos/order-status";
 import type { PedidoStatus } from "@/types/pedido";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import "./dashboard.css";
 
 const PERIODS: { id: DashboardPeriod; label: string }[] = [
   { id: "hoje", label: "Hoje" },
@@ -45,605 +36,452 @@ const PERIODS: { id: DashboardPeriod; label: string }[] = [
   { id: "7d", label: "7 dias" },
   { id: "30d", label: "30 dias" },
 ];
-
-const QUICK_ACTIONS = [
-  { href: "/admin/pedidos", label: "Pedidos", icon: Package },
-  { href: "/admin/produtos", label: "Novo produto", icon: Plus },
-  { href: "/admin/clientes", label: "Clientes", icon: Users },
-  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
-  { href: "/admin/produtos", label: "Cardápio", icon: UtensilsCrossed },
-  { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
-] as const;
-
-const PIE_COLORS = ["#111827", "#6B7280", "#9CA3AF", "#D1D5DB", "#4C258C"];
-
-function money(n: number) {
-  return formatCurrency(n);
-}
-
-function ChangeBadge({ value }: { value: number }) {
-  if (value === 0) {
-    return <span className="text-[12px] text-[#9CA3AF]">0%</span>;
-  }
-  const up = value > 0;
-  return (
-    <span
-      className={cn(
-        "text-[12px] font-medium tabular-nums",
-        up ? "text-emerald-600" : "text-red-600"
-      )}
-    >
-      {up ? "+" : ""}
-      {value}%
-    </span>
-  );
-}
-
-function Panel({
-  title,
-  children,
-  action,
-  className,
-}: {
-  title: string;
-  children: React.ReactNode;
-  action?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section
-      className={cn(
-        "rounded-md border border-[#E5E7EB] bg-white p-4",
-        className
-      )}
-    >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-[13px] font-semibold text-[#111827]">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
+const money = formatCurrency;
+const time = (date: string) =>
+  new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(date));
 function statusLabel(status: string) {
-  const meta = STATUS_META[status as PedidoStatus];
-  return meta?.label || status;
+  return STATUS_META[status as PedidoStatus]?.label || status;
 }
-
 function statusClass(status: string) {
-  const meta = STATUS_META[status as PedidoStatus];
-  return meta?.badge || "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+  return (
+    STATUS_META[status as PedidoStatus]?.badge ||
+    "bg-gray-50 text-gray-600 border-gray-200"
+  );
 }
 
-interface DashboardViewProps {
-  initialData: DashboardData;
-}
-
-export function DashboardView({ initialData }: DashboardViewProps) {
+export function DashboardView({ initialData }: { initialData: DashboardData }) {
   const [data, setData] = useState(initialData);
   const [period, setPeriod] = useState<DashboardPeriod>(initialData.period);
   const [isPending, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
-
+  const [error, setError] = useState(false);
   const load = useCallback(async (p: DashboardPeriod) => {
     setLoading(true);
+    setError(false);
     try {
-      const next = await getDashboardData(p);
-      setData(next);
+      setData(await getDashboardData(p));
     } catch (e) {
       console.error(e);
+      setError(true);
     } finally {
       setLoading(false);
     }
   }, []);
-
   const handlePeriod = (p: DashboardPeriod) => {
     setPeriod(p);
     startTransition(() => {
       void load(p);
     });
   };
-
-  const handleRefresh = () => {
-    void load(period);
-  };
-
-  // Realtime: refetch leve ao mudar pedidos
   useEffect(() => {
     const supabase = createClient();
     let timer: ReturnType<typeof setTimeout> | null = null;
-
     const schedule = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void load(period);
       }, 600);
     };
-
     const channel = supabase
-      .channel("dashboard-pedidos")
+      .channel(
+        `dashboard-pedidos-${crypto.getRandomValues(new Uint32Array(4)).join("-")}`,
+      )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pedidos" },
-        schedule
+        schedule,
       )
       .subscribe();
-
     return () => {
       if (timer) clearTimeout(timer);
       void supabase.removeChannel(channel);
     };
   }, [period, load]);
-
-  const dateLabel = useMemo(
-    () =>
-      format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR }),
-    []
-  );
-
   const busy = loading || isPending;
-
+  const recent = data.recentOrders.slice(0, 6);
+  const hasSales = data.salesByDay.some((d) => d.receita > 0);
   return (
-    <div className="min-h-full bg-[#F9FAFB]">
-      <div className="mx-auto max-w-[1400px] px-4 sm:px-5 py-4 space-y-4">
-        {/* Cabeçalho da página */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-[13px] text-[#6B7280] capitalize">{dateLabel}</p>
-            <p className="text-[13px] text-[#6B7280] mt-0.5">
-              {data.storeName}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-md border border-[#E5E7EB] bg-white p-0.5">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => handlePeriod(p.id)}
-                  className={cn(
-                    "h-8 px-2.5 rounded text-[12px] font-medium transition-colors",
-                    period === p.id
-                      ? "bg-[#111827] text-white"
-                      : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6]"
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+    <div className="dashboard-view">
+      <header className="dashboard-heading">
+        <div>
+          <h1>Visão geral</h1>
+          <p>Acompanhe a operação e as vendas de {data.storeName}.</p>
+        </div>
+        <div
+          className="dashboard-period"
+          role="group"
+          aria-label="Período do dashboard"
+        >
+          {PERIODS.map((p) => (
             <button
+              key={p.id}
               type="button"
-              onClick={handleRefresh}
-              disabled={busy}
-              className="h-8 px-2.5 rounded-md border border-[#E5E7EB] bg-white text-[12px] font-medium text-[#111827] hover:bg-[#F9FAFB] disabled:opacity-50 inline-flex items-center gap-1.5"
+              aria-pressed={period === p.id}
+              onClick={() => handlePeriod(p.id)}
             >
-              <RefreshCw
-                className={cn("w-3.5 h-3.5", busy && "animate-spin")}
-              />
-              Atualizar
+              {p.label}
             </button>
+          ))}
+        </div>
+      </header>
+      <div className="sr-only" role="status">
+        {busy ? "Atualizando indicadores…" : "Indicadores atualizados"}
+      </div>
+      {error && (
+        <div role="alert" className="dashboard-error">
+          <span>
+            Não foi possível atualizar os dados. A última consulta continua
+            visível.
+          </span>
+          <button type="button" onClick={() => void load(period)}>
+            <RefreshCw aria-hidden="true" size={14} />
+            Tentar novamente
+          </button>
+        </div>
+      )}
+      <section
+        aria-label="Indicadores do período"
+        aria-busy={busy}
+        className="dashboard-metrics"
+      >
+        <Kpi
+          label="Pedidos do período"
+          value={String(data.kpis.pedidos)}
+          loading={busy}
+        />
+        <Kpi
+          label="Faturamento"
+          value={money(data.kpis.faturamento)}
+          loading={busy}
+        />
+        <Kpi
+          label="Ticket médio"
+          value={money(data.kpis.ticketMedio)}
+          loading={busy}
+        />
+        <Kpi
+          label="Pedidos em aberto"
+          value={String(data.kpis.emAberto)}
+          loading={busy}
+          attention={data.kpis.emAberto > 0}
+        />
+      </section>
+      <section
+        className="dashboard-panel dashboard-orders"
+        aria-labelledby="recent-orders-title"
+      >
+        <div className="dashboard-section-heading">
+          <div>
+            <h2 id="recent-orders-title">Pedidos recentes</h2>
+            <p>Os últimos pedidos recebidos pela loja.</p>
+          </div>
+          <Link href="/admin/pedidos" className="dashboard-text-link">
+            Ver todos <ArrowUpRight size={15} aria-hidden="true" />
+          </Link>
+        </div>
+        {recent.length ? (
+          <div className="dashboard-table-scroll">
+            <table className="dashboard-orders-table">
+              <thead>
+                <tr>
+                  <th scope="col">Pedido</th>
+                  <th scope="col">Cliente</th>
+                  <th scope="col">Valor</th>
+                  <th scope="col">Horário</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((o) => (
+                  <tr key={o.id}>
+                    <td>
+                      <Link
+                        className="dashboard-order-link"
+                        href={`/admin/pedidos?pedido=${encodeURIComponent(o.id)}`}
+                        aria-label={`Abrir pedido ${shortOrderId(o.id)} de ${o.cliente}`}
+                      >
+                        <span>#{shortOrderId(o.id)}</span>
+                      </Link>
+                    </td>
+                    <td className="dashboard-customer">{o.cliente}</td>
+                    <td className="dashboard-amount">{money(o.valor)}</td>
+                    <td className="dashboard-order-time">
+                      {time(o.createdAt)}
+                    </td>
+                    <td>
+                      <span
+                        className={cn(
+                          "dashboard-status",
+                          statusClass(o.status),
+                        )}
+                      >
+                        {statusLabel(o.status)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="dashboard-empty">
+            <p>Nenhum pedido por aqui ainda.</p>
+            <span>Os novos pedidos aparecerão nesta lista.</span>
+          </div>
+        )}
+      </section>
+      <section
+        aria-labelledby="performance-title"
+        className="dashboard-performance"
+      >
+        <div className="dashboard-section-heading">
+          <div>
+            <h2 id="performance-title">Desempenho de vendas</h2>
+            <p>Uma leitura do período selecionado.</p>
           </div>
         </div>
-
-        {/* Ações rápidas */}
-        <div className="flex flex-wrap gap-1.5">
-          {QUICK_ACTIONS.map((a) => {
-            const Icon = a.icon;
-            return (
-              <Link
-                key={a.label}
-                href={a.href}
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-medium text-[#374151] hover:bg-[#F9FAFB] hover:text-[#111827]"
-              >
-                <Icon className="w-3.5 h-3.5 text-[#6B7280]" />
-                {a.label}
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-          <Kpi
-            label="Pedidos"
-            value={String(data.kpis.pedidos)}
-            change={data.kpis.pedidosChange}
-            loading={busy}
-          />
-          <Kpi
-            label="Faturamento"
-            value={money(data.kpis.faturamento)}
-            change={data.kpis.faturamentoChange}
-            loading={busy}
-          />
-          <Kpi
-            label="Ticket médio"
-            value={money(data.kpis.ticketMedio)}
-            change={data.kpis.ticketMedioChange}
-            loading={busy}
-          />
-          <Kpi
-            label="Pedidos em aberto"
-            value={String(data.kpis.emAberto)}
-            highlight={data.kpis.emAberto > 0}
-            loading={busy}
-          />
-        </div>
-
-        {/* Pedidos recentes + Top produtos */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-          <Panel
-            title="Pedidos recentes"
-            className="lg:col-span-3"
-            action={
-              <Link
-                href="/admin/pedidos"
-                className="text-[12px] font-medium text-blue-600 hover:underline inline-flex items-center gap-1"
-              >
-                Ver todos
-                <ExternalLink className="w-3 h-3" />
-              </Link>
-            }
+        <div className="dashboard-analytics-grid">
+          <section
+            className="dashboard-panel dashboard-sales"
+            aria-label="Evolução das vendas"
           >
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full text-left text-[13px]">
-                <thead>
-                  <tr className="border-b border-[#E5E7EB] text-[11px] uppercase tracking-wide text-[#9CA3AF]">
-                    <th className="pb-2 pr-2 font-medium">Pedido</th>
-                    <th className="pb-2 pr-2 font-medium">Cliente</th>
-                    <th className="pb-2 pr-2 font-medium">Valor</th>
-                    <th className="pb-2 pr-2 font-medium">Status</th>
-                    <th className="pb-2 pr-2 font-medium">Horário</th>
-                    <th className="pb-2 font-medium text-right"> </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F3F4F6]">
-                  {data.recentOrders.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="py-8 text-center text-[#9CA3AF]"
-                      >
-                        Nenhum pedido ainda
-                      </td>
-                    </tr>
-                  ) : (
-                    data.recentOrders.map((o) => (
-                      <tr key={o.id} className="hover:bg-[#FAFAFA]">
-                        <td className="py-2 pr-2 font-semibold text-[#111827] tabular-nums">
-                          #{shortOrderId(o.id)}
-                        </td>
-                        <td className="py-2 pr-2 text-[#374151] truncate max-w-[120px]">
-                          {o.cliente}
-                        </td>
-                        <td className="py-2 pr-2 font-medium tabular-nums text-[#111827]">
-                          {money(o.valor)}
-                        </td>
-                        <td className="py-2 pr-2">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium border",
-                              statusClass(o.status)
-                            )}
-                          >
-                            {statusLabel(o.status)}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-2 text-[#6B7280] tabular-nums whitespace-nowrap">
-                          {format(new Date(o.createdAt), "HH:mm", {
-                            locale: ptBR,
-                          })}
-                        </td>
-                        <td className="py-2 text-right">
-                          <Link
-                            href="/admin/pedidos"
-                            className="text-[12px] font-medium text-blue-600 hover:underline"
-                          >
-                            Ver
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-
-          <Panel title="Produtos mais vendidos" className="lg:col-span-2">
-            {data.topProducts.length === 0 ? (
-              <p className="text-[13px] text-[#9CA3AF] py-6 text-center">
-                Sem vendas no período
-              </p>
-            ) : (
-              <ol className="divide-y divide-[#F3F4F6]">
-                {data.topProducts.map((p, i) => (
-                  <li
-                    key={`${p.nome}-${i}`}
-                    className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
+            <Tabs defaultValue="receita">
+              <div className="dashboard-chart-heading">
+                <h3>Evolução no período</h3>
+                <TabsList
+                  aria-label="Métrica do gráfico"
+                  className="dashboard-tabs"
+                >
+                  <TabsTrigger value="receita">Receita</TabsTrigger>
+                  <TabsTrigger value="volume">Pedidos</TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="receita">
+                {hasSales ? (
+                  <div
+                    className="dashboard-chart"
+                    role="img"
+                    aria-label={`Receita total no período: ${money(data.kpis.faturamento)}`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-[12px] font-semibold text-[#9CA3AF] w-4 tabular-nums">
-                        {i + 1}.
-                      </span>
-                      <span className="text-[13px] font-medium text-[#111827] truncate">
-                        {p.nome}
-                      </span>
-                    </div>
-                    <span className="text-[12px] text-[#6B7280] tabular-nums shrink-0">
-                      {p.quantidade} vendas
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </Panel>
-        </div>
-
-        {/* Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <Panel
-            title={
-              period === "hoje" || period === "ontem"
-                ? "Vendas por horário"
-                : "Vendas por dia"
-            }
-            className="lg:col-span-2"
-          >
-            <div className="h-[220px] w-full">
-              {data.salesByDay.every((d) => d.receita === 0) ? (
-                <EmptyChart />
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={data.salesByDay}
-                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#F3F4F6"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={48}
-                      tickFormatter={(v) =>
-                        v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v)
-                      }
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 6,
-                        border: "1px solid #E5E7EB",
-                        fontSize: 12,
-                      }}
-                      formatter={(value: number) => [money(value), "Receita"]}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="receita"
-                      stroke="#111827"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 3 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="Forma de pagamento">
-            <div className="h-[220px] w-full">
-              {data.payments.length === 0 ? (
-                <EmptyChart />
-              ) : (
-                <div className="flex h-full flex-col">
-                  <div className="flex-1 min-h-0">
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={data.payments}
-                          dataKey="value"
-                          nameKey="name"
-                          innerRadius={48}
-                          outerRadius={72}
-                          paddingAngle={2}
-                          stroke="none"
-                        >
-                          {data.payments.map((_, i) => (
-                            <Cell
-                              key={i}
-                              fill={PIE_COLORS[i % PIE_COLORS.length]}
-                            />
-                          ))}
-                        </Pie>
+                      <LineChart
+                        data={data.salesByDay}
+                        margin={{ top: 12, right: 14, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid
+                          stroke="#EEEAF2"
+                          vertical={false}
+                          strokeDasharray="3 4"
+                        />
+                        <XAxis
+                          dataKey="label"
+                          axisLine={false}
+                          tickLine={false}
+                          minTickGap={28}
+                          tick={{ fontSize: 11, fill: "#85808D" }}
+                        />
+                        <YAxis
+                          width={44}
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: "#85808D" }}
+                          tickFormatter={(v) =>
+                            new Intl.NumberFormat("pt-BR", {
+                              notation: "compact",
+                            }).format(v)
+                          }
+                        />
                         <Tooltip
                           contentStyle={{
-                            borderRadius: 6,
-                            border: "1px solid #E5E7EB",
+                            borderRadius: 8,
+                            border: "1px solid #E7E3EB",
                             fontSize: 12,
                           }}
-                          formatter={(value: number, name: string) => [
-                            money(value),
-                            name,
-                          ]}
+                          formatter={(v: number) => [money(v), "Receita"]}
                         />
-                      </PieChart>
+                        <Line
+                          isAnimationActive={false}
+                          type="monotone"
+                          dataKey="receita"
+                          stroke="#4C258C"
+                          strokeWidth={2.5}
+                          dot={false}
+                          activeDot={{ r: 4 }}
+                        />
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <ul className="mt-1 space-y-1">
-                    {data.payments.slice(0, 4).map((p, i) => (
-                      <li
-                        key={p.name}
-                        className="flex items-center justify-between text-[12px]"
-                      >
-                        <span className="flex items-center gap-1.5 text-[#6B7280] truncate">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{
-                              background: PIE_COLORS[i % PIE_COLORS.length],
-                            }}
-                          />
-                          {p.name}
-                        </span>
-                        <span className="font-medium text-[#111827] tabular-nums">
-                          {p.percentage}%
+                ) : (
+                  <Empty message="Nenhuma venda neste período." />
+                )}
+              </TabsContent>
+              <TabsContent value="volume">
+                {data.hourly.some((h) => h.pedidos > 0) ? (
+                  <div
+                    className="dashboard-chart"
+                    role="img"
+                    aria-label="Quantidade de pedidos por horário"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={data.hourly}>
+                        <CartesianGrid stroke="#EEEAF2" vertical={false} />
+                        <XAxis
+                          dataKey="hora"
+                          axisLine={false}
+                          tickLine={false}
+                          minTickGap={25}
+                          tick={{ fontSize: 11, fill: "#85808D" }}
+                        />
+                        <YAxis
+                          width={30}
+                          allowDecimals={false}
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: "#85808D" }}
+                        />
+                        <Tooltip />
+                        <Bar
+                          isAnimationActive={false}
+                          dataKey="pedidos"
+                          name="Pedidos"
+                          fill="#8C70B4"
+                          radius={[3, 3, 0, 0]}
+                          maxBarSize={22}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <Empty message="Nenhum pedido por horário neste período." />
+                )}
+              </TabsContent>
+            </Tabs>
+          </section>
+          <section
+            className="dashboard-panel dashboard-breakdown"
+            aria-label="Detalhes do desempenho"
+          >
+            <Tabs defaultValue="produtos">
+              <TabsList
+                aria-label="Detalhamento das vendas"
+                className="dashboard-tabs dashboard-detail-tabs"
+              >
+                <TabsTrigger value="produtos">Produtos</TabsTrigger>
+                <TabsTrigger value="pagamentos">Pagamentos</TabsTrigger>
+                <TabsTrigger value="atividade">Atividade</TabsTrigger>
+              </TabsList>
+              <TabsContent value="produtos">
+                <h3 className="dashboard-list-title">Mais vendidos</h3>
+                {data.topProducts.length ? (
+                  <ol className="dashboard-ranking">
+                    {data.topProducts.slice(0, 5).map((p, i) => (
+                      <li key={`${p.nome}-${i}`}>
+                        <span className="dashboard-rank">{i + 1}</span>
+                        <span className="dashboard-product-name">{p.nome}</span>
+                        <span className="dashboard-product-count">
+                          {p.quantidade}
+                          <small>vendidos</small>
                         </span>
                       </li>
                     ))}
+                  </ol>
+                ) : (
+                  <Empty message="Os produtos mais vendidos aparecerão aqui." />
+                )}
+              </TabsContent>
+              <TabsContent value="pagamentos">
+                <h3 className="dashboard-list-title">Formas de pagamento</h3>
+                {data.payments.length ? (
+                  <ul className="dashboard-payments">
+                    {data.payments.map((p) => (
+                      <li key={p.name}>
+                        <div>
+                          <span>{p.name}</span>
+                          <strong>{p.percentage}%</strong>
+                        </div>
+                        <div
+                          className="dashboard-payment-track"
+                          aria-hidden="true"
+                        >
+                          <span
+                            style={{
+                              width: `${Math.max(0, Math.min(100, p.percentage))}%`,
+                            }}
+                          />
+                        </div>
+                        <small>{money(p.value)}</small>
+                      </li>
+                    ))}
                   </ul>
-                </div>
-              )}
-            </div>
-          </Panel>
+                ) : (
+                  <Empty message="Sem pagamentos registrados no período." />
+                )}
+              </TabsContent>
+              <TabsContent value="atividade">
+                <h3 className="dashboard-list-title">Últimas atividades</h3>
+                {recent.length ? (
+                  <ul className="dashboard-activity">
+                    {recent.slice(0, 4).map((o) => (
+                      <li key={o.id}>
+                        <span>
+                          #{shortOrderId(o.id)}{" "}
+                          <small>{statusLabel(o.status)}</small>
+                        </span>
+                        <time dateTime={o.createdAt}>{time(o.createdAt)}</time>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Empty message="Nenhuma atividade recente." />
+                )}
+              </TabsContent>
+            </Tabs>
+          </section>
         </div>
-
-        {/* Pedidos por horário + atividades */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-          <Panel title="Pedidos por horário" className="lg:col-span-3">
-            <div className="h-[200px] w-full">
-              {data.hourly.every((h) => h.pedidos === 0) ? (
-                <EmptyChart />
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={data.hourly}
-                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#F3F4F6"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="hora"
-                      tick={{ fill: "#9CA3AF", fontSize: 10 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      width={28}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 6,
-                        border: "1px solid #E5E7EB",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar
-                      dataKey="pedidos"
-                      fill="#6B7280"
-                      radius={[2, 2, 0, 0]}
-                      maxBarSize={18}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="Últimas atividades" className="lg:col-span-2">
-            <ActivityList orders={data.recentOrders} />
-          </Panel>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }
-
 function Kpi({
   label,
   value,
-  change,
-  highlight,
   loading,
+  attention = false,
 }: {
   label: string;
   value: string;
-  change?: number;
-  highlight?: boolean;
-  loading?: boolean;
+  loading: boolean;
+  attention?: boolean;
 }) {
   return (
-    <div className="rounded-md border border-[#E5E7EB] bg-white px-3.5 py-3">
-      <p className="text-[12px] text-[#6B7280]">{label}</p>
+    <div
+      className={cn(
+        "dashboard-metric",
+        attention && "dashboard-metric-attention",
+      )}
+    >
+      <p>{label}</p>
       {loading ? (
-        <div className="mt-2 h-8 w-24 rounded bg-[#F3F4F6] animate-pulse" />
+        <div className="dashboard-metric-loading" />
       ) : (
-        <div className="mt-1 flex items-end justify-between gap-2">
-          <p
-            className={cn(
-              "text-[28px] font-bold leading-none tabular-nums tracking-tight",
-              highlight ? "text-orange-600" : "text-[#111827]"
-            )}
-          >
-            {value}
-          </p>
-          {typeof change === "number" && <ChangeBadge value={change} />}
-        </div>
+        <strong>{value}</strong>
+      )}
+      {attention && (
+        <Link href="/admin/pedidos" className="dashboard-metric-action">
+          Acompanhar pedidos <ArrowUpRight size={13} aria-hidden="true" />
+        </Link>
       )}
     </div>
   );
 }
-
-function EmptyChart() {
+function Empty({ message }: { message: string }) {
   return (
-    <div className="flex h-full items-center justify-center text-[13px] text-[#9CA3AF]">
-      Sem dados no período
+    <div className="dashboard-empty">
+      <p>{message}</p>
+      <span>Experimente outro período para consultar o histórico.</span>
     </div>
-  );
-}
-
-function ActivityList({
-  orders,
-}: {
-  orders: DashboardData["recentOrders"];
-}) {
-  if (orders.length === 0) {
-    return (
-      <p className="text-[13px] text-[#9CA3AF] py-6 text-center">
-        Nenhuma atividade recente
-      </p>
-    );
-  }
-
-  return (
-    <ul className="divide-y divide-[#F3F4F6]">
-      {orders.slice(0, 8).map((o) => {
-        const label = statusLabel(o.status);
-        return (
-          <li key={o.id} className="py-2 first:pt-0 last:pb-0">
-            <p className="text-[13px] text-[#111827]">
-              Pedido #{shortOrderId(o.id)} — {label}
-            </p>
-            <p className="text-[12px] text-[#6B7280] mt-0.5">
-              {o.cliente}
-              <span className="mx-1 text-[#D1D5DB]">·</span>
-              {format(new Date(o.createdAt), "HH:mm", { locale: ptBR })}
-              <span className="mx-1 text-[#D1D5DB]">·</span>
-              {money(o.valor)}
-            </p>
-          </li>
-        );
-      })}
-    </ul>
   );
 }

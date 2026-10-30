@@ -26,6 +26,7 @@ export function resolveSelectionsFromProduct(
   produto: Product,
   selections: Record<string, string[]> | undefined | null
 ): ComplementoResolvido[] {
+  if (produto.comboOptionsMode === "fixo") return produto.comboFixedChoices ?? [];
   if (!selections || !produto?.optionGroups) return [];
 
   const result: ComplementoResolvido[] = [];

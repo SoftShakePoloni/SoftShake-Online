@@ -1,24 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import {
-  Download,
-  FileSpreadsheet,
-  FileText,
-  Loader2,
-  RefreshCw,
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Download, Loader2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getRelatorios } from "@/actions/admin/relatorios";
 import type {
   RelatorioData,
@@ -43,6 +35,14 @@ import {
   downloadPdfBlob,
   generateRelatorioPdf,
 } from "@/lib/relatorios/generateRelatorioPdf";
+import {
+  reportDate,
+  reportDateKey,
+  reportFilterLabels,
+  reportMoney,
+  reportValueLabel,
+} from "@/lib/relatorios/presentation";
+import "./relatorios.css";
 
 const PRESETS: { id: RelatorioPeriodoPreset; label: string }[] = [
   { id: "hoje", label: "Hoje" },
@@ -52,465 +52,487 @@ const PRESETS: { id: RelatorioPeriodoPreset; label: string }[] = [
   { id: "mes", label: "Este mês" },
   { id: "custom", label: "Personalizado" },
 ];
-
+const DEFAULT_FILTERS: RelatorioFiltros = {
+  preset: "30d",
+  status: "todos",
+  meio_pagamento: "todos",
+  tipo_entrega: "todos",
+};
+const csvCell = (value: unknown) =>
+  `"${String(value ?? "").replace(/"/g, '""')}"`;
+function exportCSV(data: RelatorioData) {
+  const rows: unknown[][] = [
+    ["Relatório SoftShake"],
+    ["Período", data.range.label],
+    [],
+    ["KPI", "Valor"],
+    ...data.kpis.map((k) => [k.label, k.value]),
+    [],
+    ["Produtos", "Quantidade", "Faturamento", "Participação%"],
+    ...data.produtos.map((p) => [
+      p.nome,
+      p.quantidade,
+      p.faturamento.toFixed(2),
+      p.participacao,
+    ]),
+    [],
+    ["Clientes", "Pedidos", "Total", "Ticket", "Última compra"],
+    ...data.clientes.map((c) => [
+      c.nome,
+      c.pedidos,
+      c.totalGasto.toFixed(2),
+      c.ticketMedio.toFixed(2),
+      c.ultimaCompra,
+    ]),
+  ];
+  downloadPdfBlob(
+    new Blob(
+      ["\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n")],
+      { type: "text/csv;charset=utf-8;" },
+    ),
+    `SoftShake_Relatorio_${reportDateKey(data.range.from)}_a_${reportDateKey(data.range.to)}.csv`,
+  );
+}
 function Skeleton() {
   return (
-    <div className="space-y-3 animate-pulse">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-[76px] rounded-md bg-white border border-[#E5E7EB]"
-          />
+    <div
+      className="report-skeleton"
+      role="status"
+      aria-label="Carregando relatórios"
+    >
+      <div className="report-kpis">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} />
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <div className="lg:col-span-2 h-64 rounded-md bg-white border border-[#E5E7EB]" />
-        <div className="h-64 rounded-md bg-white border border-[#E5E7EB]" />
-      </div>
+      <div className="report-skeleton-chart" />
     </div>
   );
 }
 
-function downloadBlob(content: string, filename: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function exportCSV(data: RelatorioData) {
-  const lines = [
-    "Relatório SoftShake",
-    `Período,${data.range.label}`,
-    "",
-    "KPI,Valor",
-    ...data.kpis.map((k) => `${k.label},${k.value}`),
-    "",
-    "Produtos,Quantidade,Faturamento,Participação%",
-    ...data.produtos.map(
-      (p) =>
-        `"${p.nome}",${p.quantidade},${p.faturamento.toFixed(2)},${p.participacao}`
-    ),
-    "",
-    "Clientes,Pedidos,Total,Ticket,Última compra",
-    ...data.clientes.map(
-      (c) =>
-        `"${c.nome}",${c.pedidos},${c.totalGasto.toFixed(2)},${c.ticketMedio.toFixed(2)},${c.ultimaCompra}`
-    ),
-  ];
-  downloadBlob(
-    "\uFEFF" + lines.join("\n"),
-    `relatorio-softshake-${Date.now()}.csv`,
-    "text/csv;charset=utf-8;"
-  );
-}
-
 export function RelatoriosManager() {
-  const [filtros, setFiltros] = useState<RelatorioFiltros>({
-    preset: "30d",
-    status: "todos",
-    meio_pagamento: "todos",
-    tipo_entrega: "todos",
-  });
+  const [filters, setFilters] = useState<RelatorioFiltros>(DEFAULT_FILTERS);
+  const [dates, setDates] = useState({ from: "", to: "" });
   const [data, setData] = useState<RelatorioData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
   const [adminName, setAdminName] = useState("Administrador");
-
-  const load = useCallback((f: RelatorioFiltros) => {
+  const sequence = useRef(0),
+    exportLock = useRef(false);
+  const [loadedFilters, setLoadedFilters] =
+    useState<RelatorioFiltros>(DEFAULT_FILTERS);
+  const load = useCallback((next: RelatorioFiltros) => {
+    const request = ++sequence.current;
     setError(null);
     startTransition(async () => {
       try {
-        const result = await getRelatorios(f);
+        const result = await getRelatorios(next);
+        if (request !== sequence.current) return;
         setData(result);
-      } catch (e: unknown) {
-        console.error(e);
-        setError(
-          e instanceof Error ? e.message : "Erro ao carregar relatórios"
-        );
-        toast.error("Erro ao carregar relatórios");
+        setLoadedFilters(next);
+      } catch (e) {
+        if (request === sequence.current)
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Não foi possível carregar o relatório.",
+          );
       }
     });
   }, []);
-
   useEffect(() => {
-    load(filtros);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
+    load(DEFAULT_FILTERS);
     try {
-      const raw =
+      const name =
         localStorage.getItem("softshake-admin-name") ||
         document
           .querySelector("[data-admin-name]")
           ?.getAttribute("data-admin-name");
-      if (raw) setAdminName(raw);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Realtime
+      if (name) setAdminName(name);
+    } catch {}
+  }, [load]);
   useEffect(() => {
-    const supabase = createClient();
-    let t: ReturnType<typeof setTimeout> | null = null;
-    const channel = supabase
-      .channel("relatorios-pedidos")
+    const client = createClient();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const channel = client
+      .channel(
+        `relatorios-pedidos-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pedidos" },
         () => {
-          if (t) clearTimeout(t);
-          t = setTimeout(() => load(filtros), 800);
-        }
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => load(filters), 800);
+        },
       )
       .subscribe();
     return () => {
-      if (t) clearTimeout(t);
-      void supabase.removeChannel(channel);
+      if (timer) clearTimeout(timer);
+      void client.removeChannel(channel);
     };
-  }, [filtros, load]);
-
-  const applyPreset = (preset: RelatorioPeriodoPreset) => {
-    const next = { ...filtros, preset };
-    setFiltros(next);
+  }, [filters, load]);
+  const apply = (next: RelatorioFiltros) => {
+    setFilters(next);
     load(next);
   };
-
-  const handleExportPdf = async () => {
-    setExportingPdf(true);
+  const active = reportFilterLabels(filters);
+  const dataMatches = JSON.stringify(filters) === JSON.stringify(loadedFilters);
+  const exportDisabled =
+    !data ||
+    isPending ||
+    exporting ||
+    !dataMatches ||
+    customOpen ||
+    Boolean(error);
+  const exportReport = async (kind: "pdf" | "excel" | "csv") => {
+    if (exportLock.current || exportDisabled || !data) return;
+    exportLock.current = true;
+    setExporting(true);
     try {
-      const result = await getRelatorios(filtros);
-      setData(result);
-      const { blob, filename } = await generateRelatorioPdf({
-        data: result,
-        emitidoPor: adminName,
-      });
-      downloadPdfBlob(blob, filename);
-      toast.success("PDF exportado");
-    } catch (e: unknown) {
-      console.error(e);
-      toast.error(e instanceof Error ? e.message : "Erro ao gerar PDF");
+      // Export the exact loaded snapshot and its filters, including during realtime updates.
+      if (kind === "pdf") {
+        const result = await generateRelatorioPdf({
+          data,
+          emitidoPor: adminName,
+          filtros: loadedFilters,
+        });
+        downloadPdfBlob(result.blob, result.filename);
+      } else exportCSV(data); // Excel keeps the existing CSV-compatible export.
+      toast.success(
+        kind === "pdf"
+          ? "PDF exportado"
+          : kind === "excel"
+            ? "Arquivo compatível com Excel exportado"
+            : "CSV exportado",
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof Error
+          ? e.message
+          : "Não foi possível exportar o relatório.",
+      );
     } finally {
-      setExportingPdf(false);
+      exportLock.current = false;
+      setExporting(false);
     }
   };
-
-  const btnOutline =
-    "inline-flex h-8 items-center gap-1.5 rounded-md border border-[#E5E7EB] bg-white px-2.5 text-[12px] font-medium text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50";
-
+  const customSelected = customOpen || filters.preset === "custom";
   return (
-    <div className="min-h-full bg-[#F9FAFB]">
-      <div className="mx-auto max-w-[1400px] px-4 sm:px-5 py-4 space-y-4">
-        {/* Cabeçalho */}
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            {data && (
-              <p className="text-[13px] text-[#6B7280]">
-                Período:{" "}
-                <span className="font-medium text-[#111827]">
-                  {data.range.label}
-                </span>
-                <span className="text-[#D1D5DB]"> · </span>
-                {data.totalPedidosPeriodo} pedidos
-                {isPending && (
-                  <span className="ml-2 inline-flex items-center gap-1 text-[#9CA3AF]">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Atualizando
-                  </span>
+    <div className="report-page">
+      <header className="report-header">
+        <div>
+          <h1>Relatórios</h1>
+          <p>Acompanhe o desempenho do seu negócio.</p>
+        </div>
+        <div className="report-header-actions">
+          <label className="sr-only" htmlFor="report-period">
+            Período
+          </label>
+          <select
+            id="report-period"
+            name="periodo"
+            value={customOpen ? "custom" : filters.preset}
+            onChange={(e) => {
+              const preset = e.target.value as RelatorioPeriodoPreset;
+              if (preset === "custom") {
+                setDates({
+                  from:
+                    filters.from?.slice(0, 10) ||
+                    (data ? reportDateKey(data.range.from) : "") ||
+                    "",
+                  to:
+                    filters.to?.slice(0, 10) ||
+                    (data ? reportDateKey(data.range.to) : "") ||
+                    "",
+                });
+                setCustomOpen(true);
+              } else {
+                setCustomOpen(false);
+                apply({ ...filters, preset, from: undefined, to: undefined });
+              }
+            }}
+          >
+            {PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={exportDisabled}>
+                {exporting ? (
+                  <Loader2
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin"
+                  />
+                ) : (
+                  <Download aria-hidden="true" className="h-4 w-4" />
                 )}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-md border border-[#E5E7EB] bg-white p-0.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => applyPreset(p.id)}
-                  className={cn(
-                    "h-8 px-2.5 rounded text-[12px] font-medium transition-colors",
-                    filtros.preset === p.id
-                      ? "bg-[#DC2626] text-white"
-                      : "text-[#6B7280] hover:text-[#111827] hover:bg-[#F3F4F6]"
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              className={btnOutline}
-              disabled={exportingPdf || isPending}
-              onClick={() => void handleExportPdf()}
-            >
-              {exportingPdf ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <FileText className="w-3.5 h-3.5" />
-              )}
-              PDF
-            </button>
-            <button
-              type="button"
-              className={btnOutline}
-              disabled={!data}
-              onClick={() => {
-                if (!data) return;
-                exportCSV(data);
-                toast.success("Excel/CSV exportado");
-              }}
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
-              Excel
-            </button>
-            <button
-              type="button"
-              className={btnOutline}
-              disabled={!data}
-              onClick={() => {
-                if (!data) return;
-                exportCSV(data);
-                toast.success("CSV exportado");
-              }}
-            >
-              <Download className="w-3.5 h-3.5" />
-              CSV
-            </button>
-            <button
-              type="button"
-              className={btnOutline}
-              disabled={isPending}
-              onClick={() => load(filtros)}
-            >
-              <RefreshCw
-                className={cn("w-3.5 h-3.5", isPending && "animate-spin")}
-              />
-              Atualizar
-            </button>
-          </div>
+                {exporting ? "Gerando…" : "Exportar"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => void exportReport("pdf")}>
+                Exportar PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void exportReport("excel")}>
+                Exportar Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void exportReport("csv")}>
+                Exportar CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-
-        {/* Período personalizado */}
-        {filtros.preset === "custom" && (
-          <div className="flex flex-wrap items-end gap-2 rounded-md border border-[#E5E7EB] bg-white p-3">
-            <div>
-              <Label className="text-[11px] text-[#6B7280]">De</Label>
-              <Input
-                type="date"
-                className="h-8 mt-1 w-[140px] rounded-md text-[13px]"
-                value={filtros.from?.slice(0, 10) || ""}
-                onChange={(e) =>
-                  setFiltros((f) => ({ ...f, from: e.target.value }))
-                }
-              />
-            </div>
-            <div>
-              <Label className="text-[11px] text-[#6B7280]">Até</Label>
-              <Input
-                type="date"
-                className="h-8 mt-1 w-[140px] rounded-md text-[13px]"
-                value={filtros.to?.slice(0, 10) || ""}
-                onChange={(e) =>
-                  setFiltros((f) => ({ ...f, to: e.target.value }))
-                }
-              />
-            </div>
-            <button
-              type="button"
-              className="h-8 px-3 rounded-md bg-[#DC2626] text-white text-[12px] font-medium hover:bg-[#B91C1C]"
-              onClick={() => load(filtros)}
-            >
-              Aplicar
-            </button>
-          </div>
-        )}
-
-        {/* Filtros compactos */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Select
-            value={filtros.status || "todos"}
-            onValueChange={(v) => {
-              const next = { ...filtros, status: v };
-              setFiltros(next);
-              load(next);
-            }}
-          >
-            <SelectTrigger className="h-8 w-[120px] rounded-md border-[#E5E7EB] text-[12px] bg-white">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos" className="text-[12px]">
-                Status
-              </SelectItem>
-              <SelectItem value="pendente" className="text-[12px]">
-                Novo
-              </SelectItem>
-              <SelectItem value="preparando" className="text-[12px]">
-                Em preparo
-              </SelectItem>
-              <SelectItem value="saiu_entrega" className="text-[12px]">
-                Entrega
-              </SelectItem>
-              <SelectItem value="entregue" className="text-[12px]">
-                Finalizado
-              </SelectItem>
-              <SelectItem value="cancelado" className="text-[12px]">
-                Cancelado
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filtros.meio_pagamento || "todos"}
-            onValueChange={(v) => {
-              const next = { ...filtros, meio_pagamento: v };
-              setFiltros(next);
-              load(next);
-            }}
-          >
-            <SelectTrigger className="h-8 w-[130px] rounded-md border-[#E5E7EB] text-[12px] bg-white">
-              <SelectValue placeholder="Pagamento" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos" className="text-[12px]">
-                Pagamento
-              </SelectItem>
-              <SelectItem value="pix" className="text-[12px]">
-                PIX
-              </SelectItem>
-              <SelectItem value="dinheiro" className="text-[12px]">
-                Dinheiro
-              </SelectItem>
-              <SelectItem value="cartao" className="text-[12px]">
-                Cartão
-              </SelectItem>
-              {(data?.meiosPagamento || []).map((m) => (
-                <SelectItem key={m} value={m} className="text-[12px]">
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filtros.tipo_entrega || "todos"}
-            onValueChange={(v) => {
-              const next = { ...filtros, tipo_entrega: v };
-              setFiltros(next);
-              load(next);
-            }}
-          >
-            <SelectTrigger className="h-8 w-[120px] rounded-md border-[#E5E7EB] text-[12px] bg-white">
-              <SelectValue placeholder="Canal" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos" className="text-[12px]">
-                Canal
-              </SelectItem>
-              <SelectItem value="entrega" className="text-[12px]">
-                Entrega
-              </SelectItem>
-              <SelectItem value="retirada" className="text-[12px]">
-                Retirada
-              </SelectItem>
-            </SelectContent>
-          </Select>
+      </header>
+      {customSelected && (
+        <form
+          className="report-custom"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!dates.from || !dates.to || dates.from > dates.to) return;
+            setCustomOpen(false);
+            apply({
+              ...filters,
+              preset: "custom",
+              from: dates.from,
+              to: dates.to,
+            });
+          }}
+        >
+          <label>
+            De
+            <input
+              name="report-from"
+              type="date"
+              required
+              value={dates.from}
+              max={dates.to || undefined}
+              onChange={(e) =>
+                setDates((current) => ({ ...current, from: e.target.value }))
+              }
+            />
+          </label>
+          <label>
+            Até
+            <input
+              name="report-to"
+              type="date"
+              required
+              value={dates.to}
+              min={dates.from || undefined}
+              onChange={(e) =>
+                setDates((current) => ({ ...current, to: e.target.value }))
+              }
+            />
+          </label>
+          <Button type="submit" disabled={isPending}>
+            Aplicar período
+          </Button>
+        </form>
+      )}
+      <div className="report-toolbar">
+        <div className="report-period-summary" aria-live="polite">
+          {data ? (
+            <>
+              <strong>{data.range.label}</strong>
+              <span>
+                {reportDate(data.range.from)} a {reportDate(data.range.to)}
+              </span>
+            </>
+          ) : (
+            <span>Preparando relatório…</span>
+          )}
+          {isPending && <span role="status">Atualizando…</span>}
         </div>
-
-        {error && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-700">
-            {error}
-          </div>
-        )}
-
-        {isPending && !data ? (
-          <Skeleton />
-        ) : data ? (
-          <div className={cn("space-y-3", isPending && "opacity-70")}>
-            {/* KPIs */}
-            <RelatorioKpiCards kpis={data.kpis} />
-
-            {/* Vendas + Pagamento */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              <ChartFaturamento data={data.faturamentoDiario} />
-              <ChartPizza data={data.pagamentos} />
-            </div>
-
-            {/* Horário + Status + Canal */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <ChartHoras data={data.porHora} />
-              <ChartPedidosBar data={data.status} />
-              <ChartCategorias data={data.entregaVsRetirada} />
-            </div>
-
-            {/* Produtos + Clientes + Comparativo */}
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-              <div className="lg:col-span-3">
-                <TabelaProdutos data={data.produtos} />
-              </div>
-              <div className="lg:col-span-2 space-y-3">
-                <TabelaClientes data={data.clientes} />
-                <ComparativosCards data={data.comparativos} />
-              </div>
-            </div>
-
-            {/* Últimos pedidos do relatório */}
-            {data.pedidosLista?.length > 0 && (
-              <section className="rounded-md border border-[#E5E7EB] bg-white p-4">
-                <h3 className="text-[13px] font-semibold text-[#111827] mb-3">
-                  Pedidos do período
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[13px]">
-                    <thead>
-                      <tr className="border-b border-[#E5E7EB] text-[11px] uppercase tracking-wide text-[#9CA3AF]">
-                        <th className="pb-2 pr-2 font-medium">Pedido</th>
-                        <th className="pb-2 pr-2 font-medium">Cliente</th>
-                        <th className="pb-2 pr-2 font-medium">Status</th>
-                        <th className="pb-2 pr-2 font-medium">Pagamento</th>
-                        <th className="pb-2 font-medium text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#F3F4F6]">
-                      {data.pedidosLista.slice(0, 10).map((p) => (
-                        <tr key={p.id} className="hover:bg-[#FAFAFA]">
-                          <td className="py-2 pr-2 font-medium tabular-nums text-[#111827]">
-                            #{String(p.id).slice(0, 6)}
-                          </td>
-                          <td className="py-2 pr-2 text-[#374151] truncate max-w-[140px]">
-                            {p.cliente}
-                          </td>
-                          <td className="py-2 pr-2 text-[#6B7280]">{p.status}</td>
-                          <td className="py-2 pr-2 text-[#6B7280] capitalize">
-                            {p.pagamento}
-                          </td>
-                          <td className="py-2 text-right font-semibold tabular-nums">
-                            {p.total.toLocaleString("pt-BR", {
-                              style: "currency",
-                              currency: "BRL",
-                            })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-          </div>
-        ) : null}
+        <Button
+          variant="outline"
+          className="report-filter-toggle"
+          aria-expanded={filtersOpen}
+          aria-controls="report-filters"
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          <SlidersHorizontal aria-hidden="true" className="h-4 w-4" />
+          Filtros{active.length > 0 ? ` (${active.length})` : ""}
+        </Button>
       </div>
+      <div
+        id="report-filters"
+        className={`report-filters ${filtersOpen ? "is-open" : ""}`}
+      >
+        <label>
+          Status
+          <select
+            aria-label="Status"
+            name="status"
+            value={filters.status}
+            onChange={(e) => apply({ ...filters, status: e.target.value })}
+          >
+            {[
+              ["todos", "Todos os status"],
+              ["pendente", "Novo"],
+              ["preparando", "Em preparo"],
+              ["saiu_entrega", "Saiu para entrega"],
+              ["entregue", "Finalizado"],
+              ["cancelado", "Cancelado"],
+            ].map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Pagamento
+          <select
+            aria-label="Pagamento"
+            name="pagamento"
+            value={filters.meio_pagamento}
+            onChange={(e) =>
+              apply({ ...filters, meio_pagamento: e.target.value })
+            }
+          >
+            <option value="todos">Todos os pagamentos</option>
+            {[
+              ...new Set([
+                "pix",
+                "dinheiro",
+                "cartao",
+                ...(data?.meiosPagamento ?? []),
+              ]),
+            ].map((value) => (
+              <option key={value} value={value}>
+                {reportValueLabel(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Canal
+          <select
+            aria-label="Canal"
+            name="canal"
+            value={filters.tipo_entrega}
+            onChange={(e) =>
+              apply({ ...filters, tipo_entrega: e.target.value })
+            }
+          >
+            <option value="todos">Todos os canais</option>
+            <option value="entrega">Entrega</option>
+            <option value="retirada">Retirada</option>
+          </select>
+        </label>
+        {active.length > 0 && (
+          <Button
+            variant="ghost"
+            onClick={() =>
+              apply({
+                ...filters,
+                status: "todos",
+                meio_pagamento: "todos",
+                tipo_entrega: "todos",
+              })
+            }
+          >
+            Limpar filtros
+          </Button>
+        )}
+      </div>
+      {active.length > 0 && (
+        <p className="report-active-filters">{active.join(" · ")}</p>
+      )}
+      {error && (
+        <div role="alert" className="report-error">
+          <p>{error}</p>
+          <Button variant="outline" onClick={() => load(filters)}>
+            Tentar novamente
+          </Button>
+        </div>
+      )}
+      {!data ? (
+        error ? (
+          <p className="report-empty">
+            Os dados do relatório não estão disponíveis.
+          </p>
+        ) : (
+          <Skeleton />
+        )
+      ) : (
+        <div className="report-content" aria-busy={isPending}>
+          <RelatorioKpiCards kpis={data.kpis} previousRange={data.prevRange} />
+          <Tabs defaultValue="geral" className="report-tabs">
+            <TabsList aria-label="Análises do relatório">
+              <TabsTrigger value="geral">Visão geral</TabsTrigger>
+              <TabsTrigger value="operacional">Operacional</TabsTrigger>
+              <TabsTrigger value="comercial">Comercial</TabsTrigger>
+            </TabsList>
+            <TabsContent value="geral">
+              <div className="report-overview">
+                <ChartFaturamento data={data.faturamentoDiario} />
+                <ChartPizza data={data.pagamentos} />
+              </div>
+              <TabelaProdutos data={data.produtos} initialLimit={6} />
+              <details className="report-comparisons">
+                <summary>Comparações de calendário</summary>
+                <p>
+                  Faturamento dos períodos indicados abaixo, independentemente
+                  do período selecionado.
+                </p>
+                <ComparativosCards data={data.comparativos} />
+              </details>
+            </TabsContent>
+            <TabsContent value="operacional">
+              <div className="report-operations">
+                <ChartHoras data={data.porHora} />
+                <ChartPedidosBar data={data.status} />
+                <ChartCategorias data={data.entregaVsRetirada} />
+              </div>
+              {data.pedidosLista.length > 0 && (
+                <section className="report-panel">
+                  <h2>Pedidos do período</h2>
+                  <div className="report-table-wrap">
+                    <table className="report-table report-orders">
+                      <thead>
+                        <tr>
+                          <th>Pedido / cliente</th>
+                          <th>Status</th>
+                          <th>Pagamento</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.pedidosLista.slice(0, 10).map((order) => (
+                          <tr key={order.id}>
+                            <td>
+                              <strong>#{order.id.slice(0, 8)}</strong>
+                              <span>{order.cliente}</span>
+                            </td>
+                            <td>{reportValueLabel(order.status)}</td>
+                            <td>{reportValueLabel(order.pagamento)}</td>
+                            <td>{reportMoney(order.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+            </TabsContent>
+            <TabsContent value="comercial">
+              <TabelaProdutos data={data.produtos} />
+              <div className="report-commercial">
+                <TabelaClientes data={data.clientes} />
+                <ChartPizza data={data.pagamentos} />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
     </div>
   );
 }

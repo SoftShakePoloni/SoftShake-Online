@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { X, MapPin, Phone, Clock, Instagram, ShoppingBag } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { useLoja } from "@/hooks/useLoja";
+import { useLoja, type ConfiguracoesLoja } from "@/hooks/useLoja";
 
 type Props = {
   open: boolean;
@@ -13,14 +13,32 @@ type Props = {
 };
 
 export function ModalInfoLoja({ open, onOpenChange }: Props) {
-  const { loja } = useLoja();
+  const { loja: resumo } = useLoja();
+  const [detalhes, setDetalhes] = useState<Partial<ConfiguracoesLoja> | null>(null);
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (!open || detalhes) return;
+    let active = true;
+    void fetch("/api/loja/detalhes", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        const data = (await response.json()) as { detalhes: Partial<ConfiguracoesLoja> | null };
+        return data.detalhes;
+      })
+      .then((data) => {
+        if (active && data) setDetalhes(data);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [open, detalhes]);
 
   useEffect(() => {
     if (open) onOpenChange(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  const loja = resumo ? { ...resumo, ...detalhes } : null;
   if (!loja) return null;
 
   const localizacao = [loja.endereco, loja.cidade, loja.estado].filter(Boolean).join(", ");

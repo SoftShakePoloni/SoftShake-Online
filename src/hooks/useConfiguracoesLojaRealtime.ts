@@ -101,9 +101,13 @@ export function useConfiguracoesLojaRealtime(
   // Realtime
   useEffect(() => {
     let channel: RealtimeChannel | null = null;
+    // Desktop and mobile sidebars can coexist. Supabase reuses channels by
+    // topic, so each effect must own its subscription (including Strict Mode
+    // remounts) and remove only that subscription during cleanup.
+    const channelName = `admin-configuracoes-loja-${crypto.getRandomValues(new Uint32Array(4)).join("-")}`;
 
     channel = supabase
-      .channel("admin-configuracoes-loja")
+      .channel(channelName)
       .on(
         "postgres_changes",
         {

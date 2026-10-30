@@ -31,7 +31,9 @@ const registrarSchema = z.object({
     .string()
     .min(5)
     .max(500)
-    .transform((e) => sanitizeText(e, 500)),
+    .transform((e) => sanitizeText(e, 500))
+    .nullable()
+    .optional(),
 });
 
 export const POST = withApiGuard(
@@ -69,31 +71,33 @@ export const POST = withApiGuard(
         return apiError(
           "Não foi possível concluir o cadastro com estes dados.",
           409,
-          { codigo: "REGISTER_CONFLICT" }
+          { codigo: "REGISTER_CONFLICT" },
         );
       }
 
-      const enderecoEstruturado: Endereco = {
-        id: randomUUID(),
-        apelido: "Principal",
-        logradouro: endereco.split(",")[0]?.trim() || "",
-        numero: endereco.split(",")[1]?.split("-")[0]?.trim() || "",
-        complemento: endereco.split("-")[1]?.split("-")[0]?.trim() || "",
-        bairro:
-          endereco
-            .split("-")
-            [endereco.split("-").length - 2]?.split(",")[0]
-            ?.trim() || "",
-        cidade:
-          endereco
-            .split(",")
-            [endereco.split(",").length - 1]?.split("/")[0]
-            ?.trim() || "",
-        estado: endereco.split("/")[1]?.split("-")[0]?.trim() || "",
-        cep: endereco.match(/CEP:\s*(\d+)/)?.[1] || "",
-        principal: true,
-        created_at: new Date().toISOString(),
-      };
+      const enderecoEstruturado: Endereco | null = endereco
+        ? {
+            id: randomUUID(),
+            apelido: "Principal",
+            logradouro: endereco.split(",")[0]?.trim() || "",
+            numero: endereco.split(",")[1]?.split("-")[0]?.trim() || "",
+            complemento: endereco.split("-")[1]?.split("-")[0]?.trim() || "",
+            bairro:
+              endereco
+                .split("-")
+                [endereco.split("-").length - 2]?.split(",")[0]
+                ?.trim() || "",
+            cidade:
+              endereco
+                .split(",")
+                [endereco.split(",").length - 1]?.split("/")[0]
+                ?.trim() || "",
+            estado: endereco.split("/")[1]?.split("-")[0]?.trim() || "",
+            cep: endereco.match(/CEP:\s*(\d+)/)?.[1] || "",
+            principal: true,
+            created_at: new Date().toISOString(),
+          }
+        : null;
 
       const clienteId = randomUUID();
       const { data: novoCliente, error } = await supabase
@@ -102,8 +106,10 @@ export const POST = withApiGuard(
           id: clienteId,
           nome,
           telefone: telefoneNormalizado,
-          endereco,
-          enderecos_adicionais: JSON.stringify([enderecoEstruturado]),
+          endereco: endereco ?? null,
+          enderecos_adicionais: JSON.stringify(
+            enderecoEstruturado ? [enderecoEstruturado] : [],
+          ),
         })
         .select("id, nome, telefone")
         .single();
@@ -129,10 +135,10 @@ export const POST = withApiGuard(
             telefone: novoCliente.telefone,
           },
         },
-        201
+        201,
       );
     } catch (erro) {
       return apiServerError(erro);
     }
-  }
+  },
 );

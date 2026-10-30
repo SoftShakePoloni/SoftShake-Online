@@ -1,23 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { fetchMenu } from "@/data/cardapio";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { Category, Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
-import { supabase } from "@/integrations/supabase/client";
-
-const MENU_TABLES = [
-  "produtos",
-  "categorias",
-  "tags",
-  "grupos_opcoes",
-  "opcoes",
-  "produto_grupos",
-  "promocoes_frete_gratis",
-] as const;
-
-const DEBOUNCE_MS = 350;
 
 type MenuStore = {
   categories: Category[];
@@ -34,10 +19,52 @@ let store: MenuStore = {
 };
 
 const listeners = new Set<() => void>();
-let channel: RealtimeChannel | null = null;
 let bootstrapped = false;
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let loadSeq = 0;
+let menuRequest: Promise<Category[]> | null = null;
+let promoCountRequest: Promise<number> | null = null;
+let menuCache: Category[] | null = null;
+let menuCacheAt = 0;
+let promoCountCache: number | null = null;
+let promoCountCacheAt = 0;
+
+function requestMenu() {
+  // Cache aumentado para 5 minutos (era 30 segundos)
+  if (menuCache && Date.now() - menuCacheAt < 5 * 60_000) {
+    return Promise.resolve(menuCache);
+  }
+  if (!menuRequest) {
+    menuRequest = fetch("/api/cardapio", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Não foi possível carregar o cardápio.");
+        const { categorias } = (await response.json()) as { categorias: Category[] };
+        menuCache = categorias;
+        menuCacheAt = Date.now();
+        return categorias;
+      })
+      .finally(() => { menuRequest = null; });
+  }
+  return menuRequest;
+}
+
+function requestPromoCount() {
+  // Cache aumentado para 5 minutos (era 30 segundos)
+  if (promoCountCache !== null && Date.now() - promoCountCacheAt < 5 * 60_000) {
+    return Promise.resolve(promoCountCache);
+  }
+  if (!promoCountRequest) {
+    promoCountRequest = fetch("/api/promocoes/contagem", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Não foi possível contar as promoções.");
+        const data = (await response.json()) as { count: number };
+        promoCountCache = data.count;
+        promoCountCacheAt = Date.now();
+        return data.count;
+      })
+      .finally(() => { promoCountRequest = null; });
+  }
+  return promoCountRequest;
+}
 
 function emit() {
   listeners.forEach((l) => l());
@@ -51,7 +78,7 @@ function setStore(partial: Partial<MenuStore>) {
 async function loadMenu() {
   const seq = ++loadSeq;
   try {
-    const menu = await fetchMenu();
+    const menu = await requestMenu();
     if (seq !== loadSeq) return;
     setStore({ categories: menu, error: null, isLoading: false });
   } catch (err: unknown) {
@@ -64,44 +91,22 @@ async function loadMenu() {
   }
 }
 
-function scheduleReload() {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    void loadMenu();
-  }, DEBOUNCE_MS);
-}
-
-function ensureMenuRealtime() {
+function ensureMenuLoaded() {
   if (bootstrapped) return;
   bootstrapped = true;
 
   void loadMenu();
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) scheduleReload();
+    if (document.visibilityState === "visible") void loadMenu();
   });
-
-  let ch = supabase.channel("cardapio-cliente-menu-shared");
-  for (const table of MENU_TABLES) {
-    ch = ch.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table },
-      () => scheduleReload()
-    );
-  }
-  channel = ch.subscribe((status) => {
-    if (status === "SUBSCRIBED") setStore({ live: true });
-    else if (
-      status === "CHANNEL_ERROR" ||
-      status === "TIMED_OUT" ||
-      status === "CLOSED"
-    ) {
-      setStore({ live: false });
-    }
-  });
+  // Polling reduzido de 60 segundos para 5 minutos
+  window.setInterval(() => {
+    if (document.visibilityState === "visible") void loadMenu();
+  }, 5 * 60_000);
 }
 
 function subscribe(listener: () => void) {
-  ensureMenuRealtime();
+  ensureMenuLoaded();
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -142,12 +147,11 @@ export function flattenPromoProducts(categories: Category[]): Product[] {
 }
 
 /**
- * Cardápio do cliente com Realtime (store compartilhado).
- * Várias telas / nav usam o mesmo canal e os mesmos dados.
+ * Cardápio público carregado pelo backend e compartilhado entre as telas.
  */
 export function useMenu() {
   useEffect(() => {
-    ensureMenuRealtime();
+    ensureMenuLoaded();
   }, []);
 
   const snap = useSyncExternalStore(
@@ -169,9 +173,31 @@ export function useMenu() {
 
 /** Quantidade de promoções ativas (para badge na navegação) */
 export function usePromocoesCount() {
-  const { categories, isLoading } = useMenu();
-  return {
-    count: countPromocoesAtivas(categories),
-    isLoading,
-  };
+  const [count, setCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const loadCount = async () => {
+      try {
+        const promoCount = await requestPromoCount();
+        if (active) setCount(promoCount);
+      } catch {
+        // A navegação continua funcional mesmo se o badge não puder atualizar.
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+    void loadCount();
+    // Polling reduzido de 60 segundos para 5 minutos
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadCount();
+    }, 5 * 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  return { count, isLoading };
 }

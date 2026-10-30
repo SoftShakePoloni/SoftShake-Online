@@ -337,9 +337,9 @@ export type Database = {
         ]
       }
       combos: {
-        Row: { id: number; nome: string; descricao: string | null; preco: number; imagem_url: string | null; ativa: boolean; created_at: string }
-        Insert: { id?: number; nome: string; descricao?: string | null; preco: number; imagem_url?: string | null; ativa?: boolean; created_at?: string }
-        Update: { id?: number; nome?: string; descricao?: string | null; preco?: number; imagem_url?: string | null; ativa?: boolean; created_at?: string }
+        Row: { opcoes_config: Json | null; id: number; nome: string; descricao: string | null; preco: number; imagem_url: string | null; ativa: boolean; created_at: string }
+        Insert: { opcoes_config?: Json | null; id?: number; nome: string; descricao?: string | null; preco: number; imagem_url?: string | null; ativa?: boolean; created_at?: string }
+        Update: { opcoes_config?: Json | null; id?: number; nome?: string; descricao?: string | null; preco?: number; imagem_url?: string | null; ativa?: boolean; created_at?: string }
         Relationships: []
       }
       cupons: {

@@ -1,18 +1,17 @@
 import type { Category, Product } from "@/data/tipos";
-import {
-  getProductUnitPrice,
-  hasProductPromo,
-  productDiscountPercent,
-} from "@/data/tipos";
+import { hasProductPromo, productDiscountPercent } from "@/data/tipos";
 
 export type PromoBadgeKind =
   | "percent"
+  | "promocao"
+  | "cashback"
   | "mais_vendido"
   | "novidade"
   | "premium"
   | "combo"
   | "relampago"
-  | "leve2";
+  | "leve2"
+  | "frete";
 
 export type PromoBadge = {
   kind: PromoBadgeKind;
@@ -20,38 +19,42 @@ export type PromoBadge = {
 };
 
 export function isPromoProduct(p: Product): boolean {
-  return hasProductPromo(p) && p.disponivel !== false;
-}
-
-export function productNeedsOptions(p: Product): boolean {
-  return (p.optionGroups ?? []).some(
-    (g) => g.id !== "obs" && (g.items?.length ?? 0) > 0
+  return (
+    (hasProductPromo(p) || p.freteGratis === true) && p.disponivel !== false
   );
 }
 
-export function productSavings(p: Product): number {
-  return Math.max(0, Number(p.price) - getProductUnitPrice(p));
+export function productNeedsOptions(p: Product): boolean {
+  if (p.comboOptionsMode === "cliente") return true;
+  return (p.optionGroups ?? []).some(
+    (g) => g.id !== "obs" && (g.items?.length ?? 0) > 0,
+  );
 }
 
 export function getPromoBadges(p: Product): PromoBadge[] {
   const badges: PromoBadge[] = [];
   const pct = productDiscountPercent(p);
-  if (pct > 0) {
-    badges.push({ kind: "percent", label: `${pct}% OFF` });
-  }
-
   const tag = p.tag?.nome?.toLowerCase() ?? "";
   const name = p.name.toLowerCase();
 
-  if (tag.includes("mais pedido") || tag.includes("mais vendido")) {
+  if (tag.includes("cashback")) {
+    badges.push({ kind: "cashback", label: p.tag?.nome ?? "Cashback" });
+  } else if (tag.includes("mais pedido") || tag.includes("mais vendido")) {
     badges.push({ kind: "mais_vendido", label: "Mais vendido" });
   } else if (tag.includes("novidade") || tag.includes("novo")) {
-    badges.push({ kind: "novidade", label: "Novo" });
+    badges.push({ kind: "novidade", label: "Novidade" });
   } else if (tag.includes("premium")) {
     badges.push({ kind: "premium", label: "Premium" });
+  } else if (tag.includes("promo")) {
+    badges.push({ kind: "promocao", label: "Promoção" });
   }
 
-  if (p.comboId != null || name.includes("combo") || name.includes("leve 2") || name.includes("2x")) {
+  if (
+    p.comboId != null ||
+    name.includes("combo") ||
+    name.includes("leve 2") ||
+    name.includes("2x")
+  ) {
     if (name.includes("leve 2") || name.includes("2x")) {
       badges.push({ kind: "leve2", label: "Leve 2" });
     } else {
@@ -59,9 +62,12 @@ export function getPromoBadges(p: Product): PromoBadge[] {
     }
   }
 
-  // Oferta relâmpago: descontos altos (≥ 25%)
-  if (pct >= 25 && !badges.some((b) => b.kind === "relampago")) {
-    badges.push({ kind: "relampago", label: "Relâmpago" });
+  if (pct > 0 && !badges.some((badge) => badge.kind === "promocao")) {
+    badges.push({ kind: "promocao", label: "Promoção" });
+  }
+
+  if (p.freteGratis) {
+    badges.push({ kind: "frete", label: "Frete grátis" });
   }
 
   // no máximo 2 badges no card

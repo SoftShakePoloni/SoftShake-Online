@@ -3,10 +3,7 @@ import { isDeliveryType, isPickupType, isMesaType } from "./order-status";
 
 /** Colunas do quadro Kanban de operação */
 export type KanbanColumnId =
-  | "em_aberto"
-  | "em_producao"
-  | "saiu_entrega"
-  | "finalizados";
+  "em_aberto" | "em_producao" | "saiu_entrega" | "finalizados";
 
 export type KanbanColumnDef = {
   id: KanbanColumnId;
@@ -20,25 +17,25 @@ export type KanbanColumnDef = {
 export const KANBAN_COLUMNS: KanbanColumnDef[] = [
   {
     id: "em_aberto",
-    label: "Em Aberto",
+    label: "Novos",
     accent: "bg-[#4C258C]",
     dropStatus: "pendente",
   },
   {
     id: "em_producao",
-    label: "Em Produção",
+    label: "Em preparo",
     accent: "bg-blue-500",
     dropStatus: "preparando",
   },
   {
     id: "saiu_entrega",
-    label: "Saiu p/ Entrega",
+    label: "Saiu pra entrega",
     accent: "bg-orange-500",
     dropStatus: "saiu_entrega",
   },
   {
     id: "finalizados",
-    label: "Finalizados",
+    label: "Concluídos",
     accent: "bg-emerald-500",
     dropStatus: "entregue",
   },
@@ -68,7 +65,7 @@ export function getPedidoColumnId(pedido: Pedido): KanbanColumnId {
 /** Status efetivo ao soltar em uma coluna (considera tipo de entrega) */
 export function resolveDropStatus(
   columnId: KanbanColumnId,
-  pedido: Pedido
+  pedido: Pedido,
 ): PedidoStatus {
   const col = KANBAN_COLUMNS.find((c) => c.id === columnId);
   if (!col) return pedido.status;
@@ -87,7 +84,7 @@ export function resolveDropStatus(
 }
 
 export function groupPedidosByColumn(
-  pedidos: Pedido[]
+  pedidos: Pedido[],
 ): Record<KanbanColumnId, Pedido[]> {
   const map: Record<KanbanColumnId, Pedido[]> = {
     em_aberto: [],
@@ -104,14 +101,14 @@ export function groupPedidosByColumn(
   for (const id of Object.keys(map) as KanbanColumnId[]) {
     map[id].sort(
       (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
     // Finalizados: mais recentes primeiro
     if (id === "finalizados") {
       map[id].sort(
         (a, b) =>
           new Date(b.updated_at || b.created_at).getTime() -
-          new Date(a.updated_at || a.created_at).getTime()
+          new Date(a.updated_at || a.created_at).getTime(),
       );
     }
   }
@@ -136,7 +133,7 @@ export const DEFAULT_FILTERS: PedidosFilters = {
 export function filterPedidos(
   pedidos: Pedido[],
   search: string,
-  filters: PedidosFilters
+  filters: PedidosFilters,
 ): Pedido[] {
   const q = search.trim().toLowerCase();
   const qDigits = q.replace(/\D/g, "");
@@ -196,7 +193,10 @@ export function filterPedidos(
       .toLowerCase();
 
     if (hay.includes(q)) return true;
-    if (qDigits && (p.cliente_telefone || "").replace(/\D/g, "").includes(qDigits))
+    if (
+      qDigits &&
+      (p.cliente_telefone || "").replace(/\D/g, "").includes(qDigits)
+    )
       return true;
     if (qDigits && p.id.replace(/\D/g, "").includes(qDigits)) return true;
 
@@ -208,7 +208,12 @@ export function paymentBadgeLabel(meio: string | undefined): string {
   const m = (meio || "").toLowerCase();
   if (m.includes("pix")) return "PIX";
   if (m.includes("débito") || m.includes("debito")) return "Débito";
-  if (m.includes("crédito") || m.includes("credito") || m.includes("cartão") || m.includes("cartao"))
+  if (
+    m.includes("crédito") ||
+    m.includes("credito") ||
+    m.includes("cartão") ||
+    m.includes("cartao")
+  )
     return "Cartão";
   if (m.includes("dinheiro")) return "Dinheiro";
   if (!meio) return "—";

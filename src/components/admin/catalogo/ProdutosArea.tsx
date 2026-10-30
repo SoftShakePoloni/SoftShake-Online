@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Search } from "lucide-react";
 import { ProdutoRow } from "./ProdutoRow";
 import { CatalogEmpty } from "./CatalogEmpty";
 import type {
@@ -40,6 +41,7 @@ export function ProdutosArea({
   produtos,
   selectedCategoriaId,
   search,
+  onSearchChange,
   onReorder,
   onEdit,
   onDuplicate,
@@ -52,6 +54,7 @@ export function ProdutosArea({
   produtos: CatalogProduto[];
   selectedCategoriaId: string | null;
   search: string;
+  onSearchChange: (value: string) => void;
   onReorder: (orderedIds: string[]) => void;
   onEdit: (p: CatalogProduto) => void;
   onDuplicate: (p: CatalogProduto) => void;
@@ -87,9 +90,7 @@ export function ProdutosArea({
     } else if (selectedCategoriaId === "__none__") {
       list = list.filter((p) => p.categoria_id == null);
     } else {
-      list = list.filter(
-        (p) => String(p.categoria_id) === selectedCategoriaId
-      );
+      list = list.filter((p) => String(p.categoria_id) === selectedCategoriaId);
     }
 
     const q = search.trim().toLowerCase();
@@ -138,7 +139,7 @@ export function ProdutosArea({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const canReorder =
@@ -160,23 +161,18 @@ export function ProdutosArea({
   };
 
   const renderTable = (enableDnd: boolean) => (
-    <table className="w-full min-w-[720px] border-collapse text-left">
-      <thead className="sticky top-0 z-[1] border-b border-[#EEEAF1] bg-[#FBFAFC]">
-        <tr className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#89838F]">
-          <th className="w-10 py-3 pl-3 font-semibold" />
-          <th className="py-3 pr-4 font-semibold">Produto</th>
-          <th className="hidden py-3 pr-4 font-semibold md:table-cell">
-            Categoria
+    <table className="catalog-product-table">
+      <caption className="sr-only">{categoriaNome}</caption>
+      <thead>
+        <tr>
+          <th aria-label="Reordenação" />
+          <th scope="col">Produto</th>
+          <th scope="col">Categoria</th>
+          <th scope="col">Preço</th>
+          <th scope="col">Disponibilidade</th>
+          <th scope="col">
+            <span className="sr-only">Ações</span>
           </th>
-          <th className="py-3 pr-4 font-semibold">Preço</th>
-          <th className="py-3 pr-4 font-semibold">Status</th>
-          <th className="hidden py-3 pr-4 font-semibold sm:table-cell">
-            Ativo
-          </th>
-          <th className="hidden py-3 pr-4 font-semibold lg:table-cell">
-            Atualização
-          </th>
-          <th className="py-3 pr-4 text-right font-semibold">Ações</th>
         </tr>
       </thead>
       <tbody>
@@ -197,21 +193,19 @@ export function ProdutosArea({
   );
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#E7E3EA] bg-white shadow-sm">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#EEEAF1] bg-white px-4 py-3.5 sm:px-5">
-        <div className="min-w-0">
-          <p className="truncate text-[14px] font-semibold text-[#25212A]">
-            {categoriaNome}
-          </p>
-          <p className="mt-0.5 text-[12px] text-[#817B87]">
-            <span className="font-semibold tabular-nums text-[#514B59]">
-              {filtered.length}
-            </span>{" "}
-            {filtered.length === 1 ? "produto" : "produtos"}
-          </p>
+    <div className="catalog-products">
+      <div className="catalog-toolbar">
+        <div className="catalog-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Buscar produtos"
+            placeholder="Buscar produto, categoria ou código…"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="catalog-filters">
           <Select
             value={statusFilter}
             onValueChange={(v) => {
@@ -219,25 +213,19 @@ export function ProdutosArea({
               setVisible(PAGE_SIZE);
             }}
           >
-            <SelectTrigger className="h-9 w-[136px] rounded-lg border-[#E4E1E8] bg-white text-[12px] text-[#514B59] shadow-none">
-              <SelectValue placeholder="Disponibilidade" />
+            <SelectTrigger
+              aria-label="Disponibilidade"
+              className="h-10 w-[146px] text-xs shadow-none"
+            >
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos" className="text-[12px]">
-                Todos
-              </SelectItem>
-              <SelectItem value="ativo" className="text-[12px]">
-                Disponíveis
-              </SelectItem>
-              <SelectItem value="inativo" className="text-[12px]">
-                Indisponíveis
-              </SelectItem>
-              <SelectItem value="promocao" className="text-[12px]">
-                Promoção
-              </SelectItem>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="ativo">Disponíveis</SelectItem>
+              <SelectItem value="inativo">Indisponíveis</SelectItem>
+              <SelectItem value="promocao">Promoção</SelectItem>
             </SelectContent>
           </Select>
-
           <Select
             value={sort}
             onValueChange={(v) => {
@@ -245,41 +233,43 @@ export function ProdutosArea({
               setVisible(PAGE_SIZE);
             }}
           >
-            <SelectTrigger className="h-9 w-[144px] rounded-lg border-[#E4E1E8] bg-white text-[12px] text-[#514B59] shadow-none">
-              <SelectValue placeholder="Ordenar" />
+            <SelectTrigger
+              aria-label="Ordenar produtos"
+              className="h-10 w-[146px] text-xs shadow-none"
+            >
+              <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ordem" className="text-[12px]">
-                Ordem manual
-              </SelectItem>
-              <SelectItem value="nome" className="text-[12px]">
-                Nome
-              </SelectItem>
-              <SelectItem value="preco_asc" className="text-[12px]">
-                Menor preço
-              </SelectItem>
-              <SelectItem value="preco_desc" className="text-[12px]">
-                Maior preço
-              </SelectItem>
-              <SelectItem value="recentes" className="text-[12px]">
-                Mais recentes
-              </SelectItem>
+              <SelectItem value="ordem">Ordem manual</SelectItem>
+              <SelectItem value="nome">Nome</SelectItem>
+              <SelectItem value="preco_asc">Menor preço</SelectItem>
+              <SelectItem value="preco_desc">Maior preço</SelectItem>
+              <SelectItem value="recentes">Mais recentes</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
-
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="catalog-list-label">
+        <span>{categoriaNome}</span>
+        <span>
+          {filtered.length} {filtered.length === 1 ? "produto" : "produtos"}
+        </span>
+      </div>
+      <div className="catalog-product-scroll">
         {filtered.length === 0 ? (
-          <div className="p-6">
-            <CatalogEmpty
-              kind={search.trim() ? "busca" : "produtos"}
-              actionLabel={search.trim() ? undefined : "Novo produto"}
-              onAction={search.trim() ? undefined : onNovoProduto}
-            />
-          </div>
+          <CatalogEmpty
+            kind={
+              search.trim() || statusFilter !== "todos" ? "busca"
+                : produtos.length === 0 && selectedCategoriaId == null ? "catalogo" : "produtos"
+            }
+            actionLabel={
+              !search.trim() && statusFilter === "todos"
+                ? "Novo produto"
+                : undefined
+            }
+            onAction={onNovoProduto}
+          />
         ) : dndReady && canReorder ? (
-          /* DndContext FORA da <table> — ele injeta <div>s de acessibilidade */
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -295,13 +285,11 @@ export function ProdutosArea({
         ) : (
           renderTable(false)
         )}
-
         {visible < filtered.length && (
-          <div className="flex justify-center border-t border-[#EEEAF1] bg-white py-4">
+          <div className="catalog-load-more">
             <button
               type="button"
               onClick={() => setVisible((v) => v + PAGE_SIZE)}
-              className="rounded-lg px-3 py-2 text-[13px] font-medium text-[#4C258C] transition-colors hover:bg-[#F5F2F8]"
             >
               Carregar mais ({filtered.length - visible})
             </button>

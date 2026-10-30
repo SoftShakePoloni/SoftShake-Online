@@ -26,14 +26,14 @@ export function ClienteSidePanel({ cliente }: ClienteSidePanelProps) {
   const enderecoPrincipal = cliente.enderecos_adicionais?.find((e) => e.principal);
 
   return (
-    <div className="w-[280px] h-full bg-white border-l border-[#E5E7EB] flex flex-col">
+    <div className="w-full 2xl:w-[280px] 2xl:h-full bg-white border-l border-[#E5E7EB] flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-[#E5E7EB]">
         <h3 className="font-semibold text-[#111827] text-sm">Resumo Rápido</h3>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div className="flex-1 2xl:overflow-y-auto p-4 space-y-5">
         {/* Status */}
         {statusInfo && (
           <section>
