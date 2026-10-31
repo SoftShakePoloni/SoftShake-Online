@@ -14,6 +14,7 @@ const product={id:'1',name:'Açaí',price:20};
 const cart=load('src/components/cardapio/ModalSacola.tsx',(i,initial)=>i===0?'info':i===1?'Cliente de teste':i===2?'17900000000':initial,{
  '@/context/CarrinhoContext':{useCarrinho:()=>({itens:[{uid:'1',produto:product,qty:1,selections:{},total:20}],subtotal:20}),resumoOpcoes:()=>''},
  '@/context/AuthContext':{useAuth:()=>({cliente:{nome:'Cliente de teste',telefone:'17900000000'},session:{user:{id:'test'}},loading:false})},
+ '@/hooks/useCardapio':{useMenu:()=>({categories:[],isLoading:false})},
  '@/hooks/useLoja':{useLoja:()=>({loja:{esta_aberto:true,taxa_entrega:3}})},
  '@/data/tipos':{formatBRL:value=>String(value),getProductUnitPrice:p=>p.price},
 });

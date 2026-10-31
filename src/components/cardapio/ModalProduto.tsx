@@ -44,7 +44,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
 
     let cancelled = false;
     setOptionsLoading(true);
-    fetch(`/api/cardapio/produto/${product.id}/opcoes`)
+    fetch(`/api/cardapio/produto/${product.id}/opcoes`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Não foi possível carregar as opções do produto.");
         return response.json() as Promise<{ optionGroups: OptionGroup[] }>;

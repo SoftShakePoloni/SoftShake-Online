@@ -1,3 +1,4 @@
+import { catalogFetch } from "@/lib/catalog-fetch.server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
@@ -36,6 +37,7 @@ export function createServiceRoleClient() {
 
   return createClient<Database>(url, keyToUse, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: catalogFetch },
   });
 }
 

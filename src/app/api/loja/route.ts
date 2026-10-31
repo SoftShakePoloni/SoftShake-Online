@@ -17,7 +17,7 @@ export const GET = withApiGuard(
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      if (!data) return apiOk({ loja: null });
+      if (!data) return apiOk({ loja: null }, 200, { "Cache-Control": "no-store" });
 
       return apiOk({
         loja: {
@@ -25,7 +25,7 @@ export const GET = withApiGuard(
           logo_url: imageProxyUrl(data.logo_url),
           banner_url: imageProxyUrl(data.banner_url),
         },
-      });
+      }, 200, { "Cache-Control": "no-store" });
     } catch (error) {
       return apiServerError(error);
     }
