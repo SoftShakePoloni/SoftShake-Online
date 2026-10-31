@@ -48,7 +48,7 @@ ipcMain.handle('softshake:print', async event => {
   } finally { printing = false; }
 });
 
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, backgroundThrottling: false, partition: 'persist:softshake-admin' } });
   Menu.setApplicationMenu(null);
@@ -69,7 +69,12 @@ function createWindow() {
     mainWindow.show();
     void dialog.showMessageBox(mainWindow, { type: 'warning', title: 'Conexão com o SoftShake', message: 'Não foi possível abrir o painel. Confira a internet.', buttons: ['Tentar novamente', 'Fechar'] }).then(({ response }) => response === 0 ? mainWindow.loadURL(START_URL) : mainWindow.close());
   });
-  void mainWindow.loadURL(START_URL).catch(() => {});
+  // Refresh HTTP cache on launch only. Cookies, local storage and printer settings remain.
+  try { await mainWindow.webContents.session.clearCache(); }
+  catch { /* The explicit no-cache navigation still checks the current panel. */ }
+  if (!mainWindow.isDestroyed()) {
+    void mainWindow.loadURL(START_URL, { extraHeaders: 'Cache-Control: no-cache\nPragma: no-cache' }).catch(() => {});
+  }
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
