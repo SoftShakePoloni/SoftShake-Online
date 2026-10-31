@@ -1,13 +1,29 @@
-'use client';
+"use client";
 
-import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { MapPin, Plus, Trash2, Star } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { toast } from 'sonner';
-import type { Endereco } from '@/types/endereco';
+import { useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { ArrowLeft, Plus, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import type { Endereco } from "@/types/endereco";
 
 export default function PaginaEnderecos() {
   const { cliente, loading } = useAuth();
@@ -15,10 +31,12 @@ export default function PaginaEnderecos() {
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [removendo, setRemovendo] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<Endereco | null>(null);
+  const [updating, setUpdating] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !cliente) {
-      router.push('/entrar');
+      router.push("/entrar");
     }
   }, [loading, cliente, router]);
 
@@ -27,37 +45,46 @@ export default function PaginaEnderecos() {
       if (!cliente) return;
 
       try {
-        const resposta = await fetch('/api/auth/sessao');
-        
+        const resposta = await fetch("/api/auth/sessao");
+
         if (resposta.ok) {
           const dados = await resposta.json();
-          
+
           let enderecosCarregados: Endereco[] = [];
-          
+
           // SEMPRE adiciona o endereço legado (principal) se existir
           if (dados.cliente?.endereco) {
             enderecosCarregados.push({
-              id: 'endereco-legado',
-              apelido: 'Principal',
-              logradouro: dados.cliente.endereco.split(',')[0]?.trim() || '',
-              numero: dados.cliente.endereco.split(',')[1]?.split('-')[0]?.trim() || '',
-              complemento: '',
-              bairro: dados.cliente.endereco.split('-')[1]?.split(',')[0]?.trim() || '',
-              cidade: dados.cliente.endereco.split(',')[2]?.split('/')[0]?.trim() || '',
-              estado: dados.cliente.endereco.split('/')[1]?.split('-')[0]?.trim() || '',
-              cep: dados.cliente.endereco.match(/CEP:\s*(\d+)/)?.[1] || '',
+              id: "endereco-legado",
+              apelido: "Principal",
+              logradouro: dados.cliente.endereco.split(",")[0]?.trim() || "",
+              numero:
+                dados.cliente.endereco.split(",")[1]?.split("-")[0]?.trim() ||
+                "",
+              complemento: "",
+              bairro:
+                dados.cliente.endereco.split("-")[1]?.split(",")[0]?.trim() ||
+                "",
+              cidade:
+                dados.cliente.endereco.split(",")[2]?.split("/")[0]?.trim() ||
+                "",
+              estado:
+                dados.cliente.endereco.split("/")[1]?.split("-")[0]?.trim() ||
+                "",
+              cep: dados.cliente.endereco.match(/CEP:\s*(\d+)/)?.[1] || "",
               principal: true,
               created_at: new Date().toISOString(),
             });
           }
-          
+
           // Adiciona os endereços adicionais (se houver)
           if (dados.cliente?.enderecos_adicionais) {
             let enderecosAdicionais: Endereco[] = [];
-            
+
             if (Array.isArray(dados.cliente.enderecos_adicionais)) {
-              enderecosAdicionais = dados.cliente.enderecos_adicionais as Endereco[];
-            } else if (typeof dados.cliente.enderecos_adicionais === 'string') {
+              enderecosAdicionais = dados.cliente
+                .enderecos_adicionais as Endereco[];
+            } else if (typeof dados.cliente.enderecos_adicionais === "string") {
               try {
                 const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
                 if (Array.isArray(parsed)) {
@@ -67,22 +94,25 @@ export default function PaginaEnderecos() {
                 // Ignora erro
               }
             }
-            
+
             // Se existe endereço legado, todos os adicionais têm principal: false
             if (enderecosCarregados.length > 0) {
-              enderecosAdicionais = enderecosAdicionais.map(e => ({
+              enderecosAdicionais = enderecosAdicionais.map((e) => ({
                 ...e,
                 principal: false,
               }));
             }
-            
-            enderecosCarregados = [...enderecosCarregados, ...enderecosAdicionais];
+
+            enderecosCarregados = [
+              ...enderecosCarregados,
+              ...enderecosAdicionais,
+            ];
           }
-          
+
           setEnderecos(enderecosCarregados);
         }
       } catch {
-        toast.error('Erro ao carregar endereços');
+        toast.error("Erro ao carregar endereços");
       } finally {
         setCarregando(false);
       }
@@ -95,29 +125,36 @@ export default function PaginaEnderecos() {
 
   const handleRemover = async (enderecoId: string) => {
     // Não permite remover o endereço legado
-    if (enderecoId === 'endereco-legado') {
-      toast.error('O endereço principal não pode ser removido');
+    if (enderecoId === "endereco-legado") {
+      toast.error("O endereço principal não pode ser removido");
       return;
     }
-    
+
+    if (removendo) return;
     setRemovendo(enderecoId);
-    
+
     try {
-      const resposta = await fetch('/api/enderecos/remover', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+      const resposta = await fetch("/api/enderecos/remover", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enderecoId }),
       });
 
       if (!resposta.ok) {
-        toast.error('Erro ao remover endereço');
+        toast.error("Erro ao remover endereço");
         return;
       }
 
-      toast.success('Endereço removido!');
-      setEnderecos(enderecos.filter(e => e.id !== enderecoId));
+      toast.success("Endereço removido!");
+      setEnderecos((prev) => {
+        const next = prev.filter((e) => e.id !== enderecoId);
+        if (next.length && !next.some((e) => e.principal))
+          return next.map((e, i) => ({ ...e, principal: i === 0 }));
+        return next;
+      });
+      setConfirmRemove(null);
     } catch {
-      toast.error('Erro ao remover endereço');
+      toast.error("Erro ao remover endereço");
     } finally {
       setRemovendo(null);
     }
@@ -125,31 +162,37 @@ export default function PaginaEnderecos() {
 
   const handleDefinirPrincipal = async (enderecoId: string) => {
     // Não permite definir outro como principal se o legado existe
-    const temEnderecoLegado = enderecos.some(e => e.id === 'endereco-legado');
+    const temEnderecoLegado = enderecos.some((e) => e.id === "endereco-legado");
     if (temEnderecoLegado) {
-      toast.error('O endereço principal não pode ser alterado');
+      toast.error("O endereço principal não pode ser alterado");
       return;
     }
-    
+
+    if (updating) return;
+    setUpdating(enderecoId);
     try {
-      const resposta = await fetch('/api/enderecos/principal', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const resposta = await fetch("/api/enderecos/principal", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enderecoId }),
       });
 
       if (!resposta.ok) {
-        toast.error('Erro ao atualizar endereço');
+        toast.error("Erro ao atualizar endereço");
         return;
       }
 
-      toast.success('Endereço principal atualizado!');
-      setEnderecos(enderecos.map(e => ({
-        ...e,
-        principal: e.id === enderecoId,
-      })));
+      toast.success("Endereço principal atualizado!");
+      setEnderecos(
+        enderecos.map((e) => ({
+          ...e,
+          principal: e.id === enderecoId,
+        })),
+      );
     } catch {
-      toast.error('Erro ao atualizar endereço');
+      toast.error("Erro ao atualizar endereço");
+    } finally {
+      setUpdating(null);
     }
   };
 
@@ -166,93 +209,147 @@ export default function PaginaEnderecos() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 to-background">
-      <div className="max-w-2xl mx-auto px-4 py-8 pb-24">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">Meus Endereços</h1>
-            <p className="text-muted-foreground text-sm">Gerencie seus endereços de entrega</p>
-          </div>
-          <Link href="/perfil/enderecos/novo">
-            <Button size="lg" className="rounded-full">
-              <Plus className="w-5 h-5 mr-2" />
-              Novo
-            </Button>
-          </Link>
+    <main className="mx-auto min-h-[70vh] max-w-lg px-5 pb-28 pt-5 sm:pt-8">
+      <header className="mb-6 flex items-center gap-2">
+        <Link
+          href="/perfil"
+          aria-label="Voltar para o perfil"
+          className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-muted"
+        >
+          <ArrowLeft size={20} />
+        </Link>
+        <h1 className="min-w-0 flex-1 text-xl font-semibold tracking-tight">
+          Meus endereços
+        </h1>
+        <Link
+          href="/perfil/enderecos/novo"
+          className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-1 text-sm font-medium text-primary hover:bg-primary/5"
+        >
+          <Plus aria-hidden="true" size={16} />
+          Adicionar
+        </Link>
+      </header>
+      {!enderecos.length ? (
+        <div className="space-y-4 rounded-xl border border-dashed border-border px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            Você ainda não cadastrou um endereço.
+          </p>
+          <Button asChild className="min-h-11 rounded-lg">
+            <Link href="/perfil/enderecos/novo">Adicionar endereço</Link>
+          </Button>
         </div>
-
-        {enderecos.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-muted mb-4">
-              <MapPin className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Nenhum endereço cadastrado</h3>
-            <p className="text-muted-foreground mb-6">Adicione um endereço para facilitar suas entregas</p>
-            <Link href="/perfil/enderecos/novo">
-              <Button size="lg">
-                <Plus className="w-5 h-5 mr-2" />
-                Adicionar Endereço
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {enderecos.map((endereco) => (
-              <div
-                key={endereco.id}
-                className="relative p-6 bg-card rounded-2xl border-2 hover:border-primary/50 transition"
-              >
+      ) : (
+        <ul className="space-y-3">
+          {enderecos.map((endereco) => (
+            <li
+              key={endereco.id}
+              className="rounded-xl border border-border bg-card p-4"
+            >
+              <div className="mb-2 flex items-center gap-2">
+                <h2 className="min-w-0 flex-1 break-words text-sm font-semibold">
+                  {endereco.apelido}
+                </h2>
                 {endereco.principal && (
-                  <div className="absolute top-4 right-4">
-                    <div className="flex items-center gap-1 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-semibold">
-                      <Star className="w-3 h-3 fill-current" />
-                      Principal
-                    </div>
-                  </div>
+                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                    Principal
+                  </span>
                 )}
-
-                <div className="pr-20">
-                  <h3 className="font-semibold text-lg mb-2">{endereco.apelido}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {endereco.logradouro}, {endereco.numero}
-                    {endereco.complemento && ` - ${endereco.complemento}`}
-                    <br />
-                    {endereco.bairro} - {endereco.cidade}/{endereco.estado}
-                    <br />
-                    CEP: {endereco.cep}
-                  </p>
-                </div>
-
-                <div className="flex gap-2 mt-4">
-                  {!endereco.principal && endereco.id !== 'endereco-legado' && !enderecos.some(e => e.id === 'endereco-legado') && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDefinirPrincipal(endereco.id)}
-                      className="flex-1"
-                    >
-                      <Star className="w-4 h-4 mr-1" />
-                      Tornar Principal
-                    </Button>
-                  )}
-                  {endereco.id !== 'endereco-legado' && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleRemover(endereco.id)}
-                      disabled={removendo === endereco.id}
-                      className={!endereco.principal && !enderecos.some(e => e.id === 'endereco-legado') ? '' : 'flex-1'}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Remover
-                    </Button>
-                  )}
-                </div>
+                {endereco.id !== "endereco-legado" && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        disabled={!!removendo || !!updating}
+                        aria-label={`Ações do endereço ${endereco.apelido}`}
+                        className="-mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                      >
+                        <MoreHorizontal size={19} />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem asChild>
+                        <Link href={`/perfil/enderecos/${endereco.id}/editar`}>
+                          Editar endereço
+                        </Link>
+                      </DropdownMenuItem>
+                      {!endereco.principal &&
+                        !enderecos.some((e) => e.id === "endereco-legado") && (
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              void handleDefinirPrincipal(endereco.id)
+                            }
+                          >
+                            Definir como principal
+                          </DropdownMenuItem>
+                        )}
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onSelect={() => setConfirmRemove(endereco)}
+                      >
+                        Excluir endereço
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+              <p className="break-words text-sm text-foreground">
+                {endereco.logradouro}
+                {endereco.numero ? `, ${endereco.numero}` : ""}
+              </p>
+              {endereco.complemento && (
+                <p className="mt-1 break-words text-sm text-muted-foreground">
+                  {endereco.complemento}
+                </p>
+              )}
+              <p className="mt-1 break-words text-sm leading-relaxed text-muted-foreground">
+                {[
+                  endereco.bairro,
+                  [endereco.cidade, endereco.estado]
+                    .filter(Boolean)
+                    .join(" / "),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+              {endereco.cep && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  CEP {endereco.cep.replace(/^(\d{5})(\d{3})$/, "$1-$2")}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <AlertDialog
+        open={!!confirmRemove}
+        onOpenChange={(open) => {
+          if (!open && !removendo) setConfirmRemove(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir endereço?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O endereço {confirmRemove?.apelido} será removido da sua conta.
+              Seus pedidos anteriores permanecem inalterados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!removendo}>
+              Manter endereço
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!removendo}
+              onClick={(event) => {
+                event.preventDefault();
+                if (confirmRemove) void handleRemover(confirmRemove.id);
+              }}
+            >
+              {removendo ? "Excluindo…" : "Excluir endereço"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </main>
   );
 }

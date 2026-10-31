@@ -1,207 +1,304 @@
-'use client';
+"use client";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import type { Endereco } from "@/types/endereco";
+import { salvarEnderecoExistente } from "@/actions/cliente-enderecos";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
-
-export function FormularioEndereco() {
+export function FormularioEndereco({ endereco }: { endereco?: Endereco } = {}) {
   const router = useRouter();
   const [carregando, setCarregando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [formData, setFormData] = useState({
-    apelido: '',
-    logradouro: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    cidade: '',
-    estado: '',
-    cep: '',
-    principal: false,
+    apelido: endereco?.apelido || "",
+    logradouro: endereco?.logradouro || "",
+    numero: endereco?.numero || "",
+    complemento: endereco?.complemento || "",
+    bairro: endereco?.bairro || "",
+    cidade: endereco?.cidade || "",
+    estado: endereco?.estado || "",
+    cep: endereco?.cep || "",
+    principal: endereco?.principal || false,
   });
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [erro, setErro] = useState("");
+  const submitting = useRef(false);
+  const cepRequest = useRef(0);
+  const goBack = () => {
+    if (sessionStorage.getItem("reopenCart") === "true") {
+      window.location.href = "/";
+      return;
+    }
+    router.push("/perfil/enderecos");
+  };
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setCarregando(true);
-
+    setErro("");
     try {
-      const resposta = await fetch('/api/enderecos/adicionar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      if (!resposta.ok) {
-        const dados = await resposta.json();
-        toast.error(dados.erro || 'Erro ao adicionar endereço');
+      if (endereco) {
+        const result = await salvarEnderecoExistente(endereco.id, formData);
+        if (!result.sucesso) {
+          setErro(result.erro || "Não foi possível salvar o endereço.");
+          return;
+        }
+      } else {
+        const resposta = await fetch("/api/enderecos/adicionar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
+        });
+        if (!resposta.ok) {
+          const dados = await resposta.json();
+          setErro(dados.erro || "Erro ao adicionar endereço");
+          return;
+        }
+      }
+      toast.success(endereco ? "Endereço atualizado!" : "Endereço adicionado!");
+      if (sessionStorage.getItem("reopenCart") === "true") {
+        window.location.href = "/";
         return;
       }
-
-      toast.success('Endereço adicionado!');
-      if (sessionStorage.getItem('reopenCart') === 'true') {
-        window.location.href = '/';
-        return;
-      }
-      router.push('/perfil/enderecos');
+      router.push("/perfil/enderecos");
       router.refresh();
     } catch {
-      toast.error('Erro ao adicionar endereço');
+      setErro(
+        "Não foi possível salvar. Confira sua conexão e tente novamente.",
+      );
     } finally {
+      submitting.current = false;
       setCarregando(false);
     }
   };
-
-  const handleCepChange = async (cep: string) => {
-    const cepNumeros = cep.replace(/\D/g, '');
-    setFormData({ ...formData, cep: cepNumeros });
-
-    if (cepNumeros.length === 8) {
-      setBuscandoCep(true);
-      try {
-        const resposta = await fetch(`https://viacep.com.br/ws/${cepNumeros}/json/`);
-        const dados = await resposta.json();
-
-        if (!dados.erro) {
-          setFormData(prev => ({
-            ...prev,
-            logradouro: dados.logradouro || prev.logradouro,
-            bairro: dados.bairro || prev.bairro,
-            cidade: dados.localidade || prev.cidade,
-            estado: dados.uf || prev.estado,
-          }));
-          toast.success('CEP encontrado!');
-        } else {
-          toast.error('CEP não encontrado');
-        }
-      } catch {
-        toast.error('Erro ao buscar CEP');
-      } finally {
-        setBuscandoCep(false);
+  const handleCepChange = async (value: string) => {
+    const cep = value.replace(/\D/g, "").slice(0, 8);
+    const request = ++cepRequest.current;
+    setFormData((prev) => ({ ...prev, cep }));
+    setBuscandoCep(false);
+    if (cep.length !== 8) return;
+    setBuscandoCep(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await response.json();
+      if (request !== cepRequest.current) return;
+      if (data.erro) {
+        toast.error("CEP não encontrado");
+        return;
       }
+      setFormData((prev) => ({
+        ...prev,
+        logradouro: data.logradouro || prev.logradouro,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        estado: data.uf || prev.estado,
+      }));
+      toast.success("CEP encontrado!");
+    } catch {
+      if (request === cepRequest.current)
+        toast.error(
+          "Erro ao buscar CEP. Você pode preencher o endereço manualmente.",
+        );
+    } finally {
+      if (request === cepRequest.current) setBuscandoCep(false);
     }
   };
-
+  const fieldStyle = "h-11 rounded-lg border-input text-base shadow-none";
   return (
-    <div className="max-w-lg mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Novo Endereço</h1>
-        <p className="text-muted-foreground">Adicione um endereço de entrega</p>
-      </div>
-
+    <main className="mx-auto max-w-lg px-5 pb-28 pt-5 sm:pt-8">
+      <header className="mb-6 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={carregando}
+          aria-label="Voltar para meus endereços"
+          className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg hover:bg-muted"
+        >
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-xl font-semibold tracking-tight">
+          {endereco ? "Editar endereço" : "Adicionar endereço"}
+        </h1>
+      </header>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Input
-          placeholder="Apelido (Casa, Trabalho...)"
-          value={formData.apelido}
-          onChange={(e) => setFormData({ ...formData, apelido: e.target.value })}
-          required
-          className="h-14"
-          autoFocus
-        />
-
-        <Input
-          placeholder="CEP"
-          value={formData.cep}
-          onChange={(e) => handleCepChange(e.target.value)}
-          maxLength={8}
-          required
-          disabled={buscandoCep}
-          className="h-14"
-        />
-
-        <div className="grid grid-cols-3 gap-2">
-          <Input
-            placeholder="Rua"
-            value={formData.logradouro}
-            onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
-            required
-            className="h-14 col-span-2"
-          />
-          <Input
-            placeholder="Nº"
-            value={formData.numero}
-            onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-            required
-            className="h-14"
-          />
-        </div>
-
-        <Input
-          placeholder="Complemento (opcional)"
-          value={formData.complemento}
-          onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
-          className="h-14"
-        />
-
-        <Input
-          placeholder="Bairro"
-          value={formData.bairro}
-          onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
-          required
-          className="h-14"
-        />
-
-        <div className="grid grid-cols-4 gap-2">
-          <Input
-            placeholder="Cidade"
-            value={formData.cidade}
-            onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-            required
-            className="h-14 col-span-3"
-          />
-          <Input
-            placeholder="UF"
-            maxLength={2}
-            value={formData.estado}
-            onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
-            required
-            className="h-14"
-          />
-        </div>
-
-        <div className="flex items-center space-x-3 pt-2">
-          <Checkbox
-            id="principal"
-            checked={formData.principal}
-            onCheckedChange={(checked) =>
-              setFormData({ ...formData, principal: checked as boolean })
-            }
-          />
-          <Label htmlFor="principal" className="cursor-pointer text-sm">
-            Definir como endereço principal
-          </Label>
-        </div>
-
-        <div className="flex gap-2 pt-4">
-          <Button 
-            type="submit" 
-            disabled={carregando || buscandoCep} 
-            className="flex-1 h-14 text-lg font-semibold"
-          >
-            {carregando ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Salvando...
-              </>
-            ) : (
-              'Salvar'
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.back()}
-            disabled={carregando}
-            className="h-14"
-          >
-            Cancelar
-          </Button>
-        </div>
+        <fieldset disabled={carregando} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="address-name">Identificação</Label>
+            <Input
+              id="address-name"
+              placeholder="Casa, Trabalho…"
+              autoComplete="off"
+              value={formData.apelido}
+              onChange={(e) =>
+                setFormData({ ...formData, apelido: e.target.value })
+              }
+              required
+              minLength={2}
+              className={fieldStyle}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="address-cep">CEP</Label>
+            <div className="relative">
+              <Input
+                id="address-cep"
+                inputMode="numeric"
+                autoComplete="postal-code"
+                value={formData.cep.replace(/^(\d{5})(\d)/, "$1-$2")}
+                onChange={(e) => void handleCepChange(e.target.value)}
+                maxLength={9}
+                required
+                className={fieldStyle}
+              />
+              {buscandoCep && (
+                <Loader2
+                  aria-hidden="true"
+                  size={16}
+                  className="absolute right-3 top-3.5 animate-spin text-primary"
+                />
+              )}
+            </div>
+            <p role="status" className="text-xs text-muted-foreground">
+              {buscandoCep
+                ? "Buscando endereço…"
+                : "Preencha o CEP para localizar o endereço."}
+            </p>
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_90px] gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="address-street">Rua</Label>
+              <Input
+                id="address-street"
+                autoComplete="address-line1"
+                value={formData.logradouro}
+                onChange={(e) =>
+                  setFormData({ ...formData, logradouro: e.target.value })
+                }
+                required
+                minLength={3}
+                className={fieldStyle}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="address-number">Número</Label>
+              <Input
+                id="address-number"
+                value={formData.numero}
+                onChange={(e) =>
+                  setFormData({ ...formData, numero: e.target.value })
+                }
+                required
+                className={fieldStyle}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="address-extra">
+              Complemento{" "}
+              <span className="font-normal text-muted-foreground">
+                (opcional)
+              </span>
+            </Label>
+            <Input
+              id="address-extra"
+              autoComplete="address-line2"
+              value={formData.complemento}
+              onChange={(e) =>
+                setFormData({ ...formData, complemento: e.target.value })
+              }
+              className={fieldStyle}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="address-district">Bairro</Label>
+            <Input
+              id="address-district"
+              value={formData.bairro}
+              onChange={(e) =>
+                setFormData({ ...formData, bairro: e.target.value })
+              }
+              required
+              minLength={2}
+              className={fieldStyle}
+            />
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_72px] gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="address-city">Cidade</Label>
+              <Input
+                id="address-city"
+                autoComplete="address-level2"
+                value={formData.cidade}
+                onChange={(e) =>
+                  setFormData({ ...formData, cidade: e.target.value })
+                }
+                required
+                minLength={2}
+                className={fieldStyle}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="address-state">UF</Label>
+              <Input
+                id="address-state"
+                autoComplete="address-level1"
+                maxLength={2}
+                minLength={2}
+                value={formData.estado}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    estado: e.target.value.toUpperCase(),
+                  })
+                }
+                required
+                className={fieldStyle}
+              />
+            </div>
+          </div>
+          {!endereco && (
+            <div className="flex min-h-11 items-center gap-3">
+              <Checkbox
+                id="principal"
+                checked={formData.principal}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, principal: checked === true })
+                }
+              />
+              <Label
+                htmlFor="principal"
+                className="cursor-pointer text-sm font-normal"
+              >
+                Definir como endereço principal
+              </Label>
+            </div>
+          )}
+        </fieldset>
+        {erro && (
+          <p role="alert" className="text-sm text-destructive">
+            {erro}
+          </p>
+        )}
+        <Button
+          type="submit"
+          disabled={carregando || buscandoCep}
+          className="min-h-11 w-full rounded-lg"
+        >
+          {carregando && (
+            <Loader2
+              aria-hidden="true"
+              size={16}
+              className="mr-2 animate-spin"
+            />
+          )}
+          {carregando ? "Salvando…" : "Salvar endereço"}
+        </Button>
       </form>
-    </div>
+    </main>
   );
 }

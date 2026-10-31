@@ -1,19 +1,15 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   User,
   MapPin,
   ShoppingBag,
   LogOut,
   Pencil,
-  Settings2,
   ChevronRight,
   Loader2,
-  Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,10 +20,23 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { formatPhone } from "@/lib/utils/formatters";
 import type { Endereco } from "@/types/endereco";
+import { useModalHistory } from "@/hooks/useModalHistory";
 import { useClientePedidos } from "@/hooks/useClientePedidos";
+import "./profile.css";
 
 type ClienteFull = {
   id: string;
@@ -38,26 +47,16 @@ type ClienteFull = {
   created_at?: string;
   email?: string | null;
 };
-
 function initials(nome: string | null) {
-  if (!nome) return "CL";
-  return nome
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join("");
+  return (
+    nome
+      ?.split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("") || "CL"
+  );
 }
-
-type MenuItem = {
-  href?: string;
-  label: string;
-  description?: string;
-  icon: React.ElementType;
-  onClick?: () => void;
-  danger?: boolean;
-};
-
 export function MeuPerfilView({
   cliente,
   onRefresh,
@@ -73,16 +72,35 @@ export function MeuPerfilView({
   const [nome, setNome] = useState(cliente.nome || "");
   const [telefone, setTelefone] = useState(cliente.telefone || "");
   const [saving, setSaving] = useState(false);
-
+  const [error, setError] = useState("");
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const savingRef = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    setNome(cliente.nome || "");
-    setTelefone(cliente.telefone || "");
-  }, [cliente]);
-
-  const pedidosCount = pedidos.filter((p) => p.status !== "cancelado").length;
-
-  const handleSavePerfil = async () => {
+    if (!editOpen) {
+      setNome(cliente.nome || "");
+      setTelefone(cliente.telefone || "");
+    }
+  }, [cliente, editOpen]);
+  const dirty =
+    nome !== (cliente.nome || "") ||
+    telefone.replace(/\D/g, "") !== (cliente.telefone || "").replace(/\D/g, "");
+  const changeOpen = (open: boolean) => {
+    if (savingRef.current) return;
+    if (!open && dirty) {
+      setDiscardOpen(true);
+      return;
+    }
+    if (open) setError("");
+    setEditOpen(open);
+  };
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
+    setError("");
     try {
       const res = await fetch("/api/clientes/atualizar", {
         method: "PUT",
@@ -91,217 +109,252 @@ export function MeuPerfilView({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.erro || "Erro ao atualizar");
+        setError(
+          data.erro || "Não foi possível salvar seus dados. Tente novamente.",
+        );
         return;
       }
       toast.success("Dados atualizados");
       setEditOpen(false);
       await onRefresh();
     } catch {
-      toast.error("Erro ao salvar");
+      setError(
+        "Não foi possível salvar seus dados. Confira sua conexão e tente novamente.",
+      );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
-
-  const menuItems: MenuItem[] = [
+  useModalHistory(editOpen, (open) => {
+    if (!open && (dirty || savingRef.current)) {
+      history.forward();
+      if (!savingRef.current) setDiscardOpen(true);
+      return;
+    }
+    changeOpen(open);
+  });
+  const count = pedidos.filter((p) => p.status !== "cancelado").length;
+  const items = [
     {
       label: "Dados pessoais",
       description: "Nome e telefone",
       icon: User,
-      onClick: () => setEditOpen(true),
+      onClick: () => changeOpen(true),
     },
     {
-      href: "/perfil/enderecos",
-      label: "Endereços",
-      description: "Onde receber seus pedidos",
+      label: "Meus endereços",
+      description: "Seus locais de entrega",
       icon: MapPin,
+      href: "/perfil/enderecos",
     },
     {
-      href: "/pedidos",
       label: "Meus pedidos",
       description: loadingPedidos
         ? "Carregando…"
-        : pedidosCount === 0
-          ? "Nenhum pedido ainda"
-          : `${pedidosCount} pedido${pedidosCount === 1 ? "" : "s"}`,
+        : count
+          ? `${count} pedido${count === 1 ? "" : "s"}`
+          : "Acompanhe seus pedidos",
       icon: ShoppingBag,
-    },
-    {
-      href: "/perfil/preferencias",
-      label: "Preferências",
-      description: "Notificações e promoções",
-      icon: Settings2,
+      href: "/pedidos",
     },
   ];
-
   return (
-    <div className="min-h-[70vh] bg-gradient-to-b from-primary/[0.04] via-background to-background">
-      <div className="mx-auto max-w-lg px-4 py-8 pb-28 space-y-6">
-        {/* Header compacto */}
-        <motion.section
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center text-center"
+    <div className="customer-account mx-auto min-h-[70vh] max-w-lg px-5 pb-28 pt-7 sm:pt-10">
+      <h1 className="mb-6 text-xl font-semibold tracking-tight">Meu perfil</h1>
+      <header className="flex items-center gap-3 border-b border-border pb-6">
+        <div
+          aria-hidden="true"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary"
         >
-          <div className="relative mb-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet-500 text-2xl font-bold text-primary-foreground shadow-lg shadow-primary/20 ring-4 ring-background">
-              {initials(cliente.nome)}
-            </div>
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="absolute -bottom-0.5 -right-0.5 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
-              aria-label="Editar perfil"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
+          {initials(cliente.nome)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h2 className="break-words text-base font-semibold">
             {cliente.nome || "Cliente"}
-          </h1>
-          {cliente.telefone ? (
-            <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Phone className="h-3.5 w-3.5" />
-              {cliente.telefone}
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              className="mt-1 text-sm font-medium text-primary"
-            >
-              Adicionar telefone
-            </button>
-          )}
-        </motion.section>
-
-        {/* Menu */}
-        <motion.section
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {cliente.telefone
+              ? formatPhone(cliente.telefone)
+              : "Telefone não informado"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => changeOpen(true)}
+          aria-label="Editar dados pessoais"
+          title="Editar dados pessoais"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-primary hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <ul className="divide-y divide-border">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const content = (
-                <>
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="text-sm font-semibold text-foreground">
-                      {item.label}
-                    </p>
-                    {item.description && (
-                      <p className="truncate text-xs text-muted-foreground">
+          <Pencil size={17} />
+        </button>
+      </header>
+      <nav aria-label="Minha conta">
+        <ul className="divide-y divide-border">
+          {items.map((item) => (
+            <li key={item.label}>
+              {(() => {
+                const Icon = item.icon;
+                const content = (
+                  <>
+                    <Icon
+                      aria-hidden="true"
+                      size={19}
+                      className="shrink-0 text-muted-foreground"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">
+                        {item.label}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
                         {item.description}
-                      </p>
-                    )}
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </>
-              );
-
-              const className =
-                "flex w-full items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50 active:bg-muted/70";
-
-              if (item.href) {
-                return (
-                  <li key={item.label}>
-                    <Link href={item.href} className={className}>
-                      {content}
-                    </Link>
-                  </li>
+                      </span>
+                    </span>
+                    <ChevronRight
+                      aria-hidden="true"
+                      size={16}
+                      className="text-muted-foreground"
+                    />
+                  </>
                 );
-              }
-
-              return (
-                <li key={item.label}>
+                const style =
+                  "flex min-h-[72px] w-full items-center gap-3 rounded-md py-4 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+                return item.href ? (
+                  <Link href={item.href} className={style}>
+                    {content}
+                  </Link>
+                ) : (
                   <button
                     type="button"
+                    className={style}
                     onClick={item.onClick}
-                    className={className}
                   >
                     {content}
                   </button>
-                </li>
-              );
-            })}
-          </ul>
-        </motion.section>
-
-        {/* Sair */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+                );
+              })()}
+            </li>
+          ))}
+        </ul>
+      </nav>
+      <button
+        type="button"
+        disabled={signingOut}
+        onClick={async () => {
+          if (signingOut) return;
+          setSigningOut(true);
+          try {
+            await onSignOut();
+            toast.success("Você saiu da conta");
+            router.push("/");
+          } catch {
+            toast.error("Não foi possível sair. Tente novamente.");
+          } finally {
+            setSigningOut(false);
+          }
+        }}
+        className="mt-5 inline-flex min-h-11 items-center gap-3 rounded-md pr-4 text-sm font-medium text-destructive hover:bg-destructive/5 disabled:opacity-50"
+      >
+        <LogOut size={18} aria-hidden="true" />
+        Sair da conta
+      </button>
+      <Dialog open={editOpen} onOpenChange={changeOpen}>
+        <DialogContent
+          className="profile-edit-dialog"
+          overlayClassName="bg-black/25"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            heading.current?.focus({ preventScroll: true });
+          }}
         >
-          <button
-            type="button"
-            onClick={async () => {
-              await onSignOut();
-              toast.success("Você saiu da conta");
-              router.push("/");
-            }}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/15 bg-destructive/5 px-4 py-3.5 text-sm font-semibold text-destructive transition hover:bg-destructive/10"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair da conta
-          </button>
-        </motion.div>
-      </div>
-
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="rounded-3xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar dados</DialogTitle>
+          <DialogHeader className="text-left">
+            <DialogTitle
+              ref={heading}
+              tabIndex={-1}
+              className="focus:outline-none"
+            >
+              Dados pessoais
+            </DialogTitle>
+            <DialogDescription>
+              Como você quer ser chamado e seu telefone de contato.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label htmlFor="nome">Nome</Label>
+          <form onSubmit={save} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-name">Nome completo</Label>
               <Input
-                id="nome"
-                className="mt-1.5 h-11 rounded-xl"
+                id="profile-name"
+                autoComplete="name"
                 value={nome}
-                onChange={(e) => setNome(e.target.value)}
+                onChange={(event) => setNome(event.target.value)}
+                minLength={3}
+                maxLength={120}
+                required
+                disabled={saving}
+                className="h-11 rounded-lg border-input shadow-none"
               />
             </div>
-            <div>
-              <Label htmlFor="tel">Telefone</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="profile-phone">Telefone</Label>
               <Input
-                id="tel"
-                className="mt-1.5 h-11 rounded-xl"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                placeholder="(00) 00000-0000"
+                id="profile-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                value={formatPhone(telefone)}
+                onChange={(event) =>
+                  setTelefone(
+                    event.target.value.replace(/\D/g, "").slice(0, 11),
+                  )
+                }
+                required
+                disabled={saving}
+                className="h-11 rounded-lg border-input shadow-none"
               />
             </div>
-          </div>
-          <DialogFooter className="gap-2">
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
             <Button
-              variant="outline"
-              className="rounded-xl"
-              onClick={() => setEditOpen(false)}
+              type="submit"
+              disabled={saving || nome.trim().length < 3 || !dirty}
+              className="min-h-11 w-full rounded-lg"
             >
-              Cancelar
+              {saving && (
+                <Loader2
+                  aria-hidden="true"
+                  size={16}
+                  className="mr-2 animate-spin"
+                />
+              )}
+              {saving ? "Salvando…" : "Salvar alterações"}
             </Button>
-            <Button
-              className="rounded-xl bg-primary"
-              disabled={saving || nome.trim().length < 3}
-              onClick={handleSavePerfil}
-            >
-              {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Salvar
-            </Button>
-          </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
+      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Descartar alterações?</AlertDialogTitle>
+            <AlertDialogDescription>
+              As alterações nos seus dados ainda não foram salvas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setEditOpen(false);
+                setDiscardOpen(false);
+              }}
+            >
+              Descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
