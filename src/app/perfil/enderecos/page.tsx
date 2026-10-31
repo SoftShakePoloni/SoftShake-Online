@@ -23,10 +23,11 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { customerAddresses } from "@/lib/enderecos-cliente";
 import type { Endereco } from "@/types/endereco";
 
 export default function PaginaEnderecos() {
-  const { cliente, loading } = useAuth();
+  const { cliente, loading, refreshCliente } = useAuth();
   const router = useRouter();
   const [enderecos, setEnderecos] = useState<Endereco[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -45,69 +46,12 @@ export default function PaginaEnderecos() {
       if (!cliente) return;
 
       try {
-        const resposta = await fetch("/api/auth/sessao");
+        const resposta = await fetch("/api/auth/sessao", { cache: "no-store" });
 
         if (resposta.ok) {
           const dados = await resposta.json();
 
-          let enderecosCarregados: Endereco[] = [];
-
-          // SEMPRE adiciona o endereço legado (principal) se existir
-          if (dados.cliente?.endereco) {
-            enderecosCarregados.push({
-              id: "endereco-legado",
-              apelido: "Principal",
-              logradouro: dados.cliente.endereco.split(",")[0]?.trim() || "",
-              numero:
-                dados.cliente.endereco.split(",")[1]?.split("-")[0]?.trim() ||
-                "",
-              complemento: "",
-              bairro:
-                dados.cliente.endereco.split("-")[1]?.split(",")[0]?.trim() ||
-                "",
-              cidade:
-                dados.cliente.endereco.split(",")[2]?.split("/")[0]?.trim() ||
-                "",
-              estado:
-                dados.cliente.endereco.split("/")[1]?.split("-")[0]?.trim() ||
-                "",
-              cep: dados.cliente.endereco.match(/CEP:\s*(\d+)/)?.[1] || "",
-              principal: true,
-              created_at: new Date().toISOString(),
-            });
-          }
-
-          // Adiciona os endereços adicionais (se houver)
-          if (dados.cliente?.enderecos_adicionais) {
-            let enderecosAdicionais: Endereco[] = [];
-
-            if (Array.isArray(dados.cliente.enderecos_adicionais)) {
-              enderecosAdicionais = dados.cliente
-                .enderecos_adicionais as Endereco[];
-            } else if (typeof dados.cliente.enderecos_adicionais === "string") {
-              try {
-                const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
-                if (Array.isArray(parsed)) {
-                  enderecosAdicionais = parsed as Endereco[];
-                }
-              } catch {
-                // Ignora erro
-              }
-            }
-
-            // Se existe endereço legado, todos os adicionais têm principal: false
-            if (enderecosCarregados.length > 0) {
-              enderecosAdicionais = enderecosAdicionais.map((e) => ({
-                ...e,
-                principal: false,
-              }));
-            }
-
-            enderecosCarregados = [
-              ...enderecosCarregados,
-              ...enderecosAdicionais,
-            ];
-          }
+          const enderecosCarregados = customerAddresses(dados.cliente || {});
 
           setEnderecos(enderecosCarregados);
         }
@@ -153,6 +97,7 @@ export default function PaginaEnderecos() {
         return next;
       });
       setConfirmRemove(null);
+      await refreshCliente();
     } catch {
       toast.error("Erro ao remover endereço");
     } finally {
@@ -161,13 +106,6 @@ export default function PaginaEnderecos() {
   };
 
   const handleDefinirPrincipal = async (enderecoId: string) => {
-    // Não permite definir outro como principal se o legado existe
-    const temEnderecoLegado = enderecos.some((e) => e.id === "endereco-legado");
-    if (temEnderecoLegado) {
-      toast.error("O endereço principal não pode ser alterado");
-      return;
-    }
-
     if (updating) return;
     setUpdating(enderecoId);
     try {
@@ -183,6 +121,7 @@ export default function PaginaEnderecos() {
       }
 
       toast.success("Endereço principal atualizado!");
+      await refreshCliente();
       setEnderecos(
         enderecos.map((e) => ({
           ...e,
@@ -254,7 +193,7 @@ export default function PaginaEnderecos() {
                     Principal
                   </span>
                 )}
-                {endereco.id !== "endereco-legado" && (
+                {(endereco.id !== "endereco-legado" || !endereco.principal) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -267,27 +206,32 @@ export default function PaginaEnderecos() {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/perfil/enderecos/${endereco.id}/editar`}>
-                          Editar endereço
-                        </Link>
-                      </DropdownMenuItem>
-                      {!endereco.principal &&
-                        !enderecos.some((e) => e.id === "endereco-legado") && (
-                          <DropdownMenuItem
-                            onSelect={() =>
-                              void handleDefinirPrincipal(endereco.id)
-                            }
+                      {endereco.id !== "endereco-legado" && (
+                        <DropdownMenuItem asChild>
+                          <Link
+                            href={`/perfil/enderecos/${endereco.id}/editar`}
                           >
-                            Definir como principal
-                          </DropdownMenuItem>
-                        )}
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onSelect={() => setConfirmRemove(endereco)}
-                      >
-                        Excluir endereço
-                      </DropdownMenuItem>
+                            Editar endereço
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {!endereco.principal && (
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            void handleDefinirPrincipal(endereco.id)
+                          }
+                        >
+                          Definir como principal
+                        </DropdownMenuItem>
+                      )}
+                      {endereco.id !== "endereco-legado" && (
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => setConfirmRemove(endereco)}
+                        >
+                          Excluir endereço
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}

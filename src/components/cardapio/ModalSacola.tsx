@@ -13,6 +13,7 @@ import { formatBRL, getProductUnitPrice } from "@/data/tipos";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { customerAddresses } from "@/lib/enderecos-cliente";
 import type { Endereco } from "@/types/endereco";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -114,6 +115,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   // Carrega dados do cliente quando muda para step info
   useEffect(() => {
     if (!open || step !== 'info') return;
+    let cancelled = false;
     
     const loadClientData = async () => {
       // Aguarda o carregamento da sessão terminar
@@ -128,65 +130,17 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         setTelefone(cliente?.telefone || "");
 
         // Busca endereços adicionais do banco
-        const resposta = await fetch('/api/auth/sessao');
+        const resposta = await fetch('/api/auth/sessao', { cache: 'no-store' });
         
         if (resposta.ok) {
           const dados = await resposta.json();
+          if (cancelled) return;
           
-          // Processa endereços
-          let enderecos: Endereco[] = [];
-          
-          // SEMPRE adiciona o endereço legado (principal) se existir
-          if (dados.cliente?.endereco) {
-            enderecos.push({
-              id: 'endereco-legado',
-              apelido: 'Principal',
-              logradouro: dados.cliente.endereco.split(',')[0]?.trim() || '',
-              numero: dados.cliente.endereco.split(',')[1]?.split('-')[0]?.trim() || '',
-              complemento: '',
-              bairro: dados.cliente.endereco.split('-')[1]?.split(',')[0]?.trim() || '',
-              cidade: dados.cliente.endereco.split(',')[2]?.split('/')[0]?.trim() || '',
-              estado: dados.cliente.endereco.split('/')[1]?.split('-')[0]?.trim() || '',
-              cep: dados.cliente.endereco.match(/CEP:\s*(\d+)/)?.[1] || '',
-              principal: true,
-              created_at: new Date().toISOString(),
-            });
-          }
-          
-          // Adiciona endereços adicionais
-          if (dados.cliente?.enderecos_adicionais) {
-            let enderecosAdicionais: Endereco[] = [];
-            
-            if (Array.isArray(dados.cliente.enderecos_adicionais)) {
-              enderecosAdicionais = dados.cliente.enderecos_adicionais as Endereco[];
-            } else if (typeof dados.cliente.enderecos_adicionais === 'string') {
-              try {
-                const parsed = JSON.parse(dados.cliente.enderecos_adicionais);
-                if (Array.isArray(parsed)) {
-                  enderecosAdicionais = parsed as Endereco[];
-                }
-              } catch (e) {
-                // Ignora erro de parse
-              }
-            }
-            
-            // Se existe endereço legado, todos os adicionais têm principal: false
-            if (enderecos.length > 0) {
-              enderecosAdicionais = enderecosAdicionais.map(e => ({
-                ...e,
-                principal: false,
-              }));
-            }
-            
-            enderecos = [...enderecos, ...enderecosAdicionais];
-          }
-          
+          const enderecos = customerAddresses(dados.cliente || {});
+
           setEnderecosDisponiveis(enderecos);
           
-          // Seleciona o endereço principal por padrão (sempre o primeiro se existe)
-          if (enderecos.length > 0) {
-            setEnderecoSelecionado(enderecos[0].id);
-          }
+          setEnderecoSelecionado(current => enderecos.some(address => address.id === current) ? current : (enderecos.find(address => address.principal)?.id || enderecos[0]?.id || ''));
         }
       } catch (error) {
         // Usa dados do contexto como fallback
@@ -195,7 +149,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       }
     };
 
-    loadClientData();
+    void loadClientData();
+    return () => { cancelled = true; };
   }, [open, step, loading, session, cliente]);
 
   // Reset step quando fechar modal
