@@ -105,3 +105,6 @@ body:has(.admin-shell) .admin-product-sheet > button { top: .25rem; right: .5rem
  .orders-mobile-board .admin-kanban-column { margin-bottom:12px; border:1px solid #e7e1eb; border-radius:10px; overflow:hidden; }
 }
 @media(min-width:768px) { .orders-options > div { display:flex; } }
+
+/* Order details overlay the board without changing its columns. */
+body:has(.admin-shell) [role="dialog"].admin-detail-sheet { width: min(480px, 100vw); max-width: 480px; right: 0; left: auto; overflow: hidden; box-shadow: -4px 0 20px rgb(0 0 0 / .06); }
