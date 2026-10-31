@@ -6,16 +6,20 @@ import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import { useCarrinho } from "@/context/CarrinhoContext";
 import { formatBRL } from "@/data/tipos";
-const ModalSacola=dynamic(()=>import("./ModalSacola").then(module=>module.ModalSacola),{ssr:false});
+const ModalSacola = dynamic(
+  () => import("./ModalSacola").then((module) => module.ModalSacola),
+  { ssr: false },
+);
 import { useLoja } from "@/hooks/useLoja";
 import { toast } from "sonner";
 
 export function BarraSacola() {
   const { totalItens, subtotal } = useCarrinho();
-  const { loja, isLoading } = useLoja();
+  const { loja, isLoading, error, refresh } = useLoja();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
+  const lojaConfirmada = !isLoading && !!loja && !error;
+  const lojaAberta = lojaConfirmada && loja!.esta_aberto;
 
   // Fecha a sacola ao navegar pela bottom bar (sem precisar do X)
   useEffect(() => {
@@ -25,6 +29,11 @@ export function BarraSacola() {
   if (totalItens === 0) return null;
 
   const handleOpen = () => {
+    if (!lojaConfirmada) {
+      toast.info("Aguarde, verificando o funcionamento da loja…");
+      void refresh();
+      return;
+    }
     if (!lojaAberta) {
       toast.error("Loja fechada", {
         description: "No momento não estamos aceitando pedidos.",
@@ -51,6 +60,17 @@ export function BarraSacola() {
                 Ver sacola
               </span>
               <span>{formatBRL(subtotal)}</span>
+            </button>
+          ) : !lojaConfirmada ? (
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={() => void refresh()}
+              className="flex min-h-12 w-full items-center justify-center rounded-xl border border-border bg-card px-4 text-sm text-muted-foreground"
+            >
+              {isLoading
+                ? "Verificando funcionamento da loja…"
+                : "Não foi possível verificar a loja. Tentar novamente"}
             </button>
           ) : (
             <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-muted border border-border px-4 py-3.5 text-sm font-semibold text-muted-foreground shadow-lg">

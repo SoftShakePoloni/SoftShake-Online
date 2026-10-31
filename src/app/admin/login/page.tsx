@@ -19,6 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { adminNeedsMfa } from "@/lib/security/admin-mfa";
 import { cn } from "@/lib/utils";
 import { imageProxyUrl } from "@/lib/image/proxy-url";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -150,6 +151,10 @@ export default function AdminLoginPage() {
         setPhase("error");
         setFormError("E-mail ou senha inválidos.");
         return;
+      }
+
+      if (await adminNeedsMfa(supabase, user)) {
+        router.replace('/admin/verificar'); router.refresh(); return;
       }
 
       let perfil: { role: string | null; acessos?: string[] | null } | null =

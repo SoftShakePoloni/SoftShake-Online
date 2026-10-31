@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, setPrintDevice } from "@/lib/admin/automatic-print";
 import { DesktopPrinterSettings } from "./DesktopPrinterSettings";
+import { AdminMfaSettings } from "./AdminMfaSettings";
 import { UsuariosSection } from "./UsuariosSection";
 
 /* ─── Nav ─────────────────────────────────────────────────────────────── */
@@ -677,7 +678,7 @@ export function SistemaConfigManager({
             </div>
           )}
 
-          {section === "seguranca" && <EmptySection title="Segurança" />}
+          {section === "seguranca" && <AdminMfaSettings />}
           {section === "usuarios" && <UsuariosSection />}
           {section === "integracoes" && <EmptySection title="Integrações" />}
           {section === "api" && <EmptySection title="API" />}

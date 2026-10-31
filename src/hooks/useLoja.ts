@@ -38,6 +38,7 @@ export type ConfiguracoesLoja = {
 type LojaStore = {
   loja: ConfiguracoesLoja | null;
   isLoading: boolean;
+  error?: string | null;
 };
 
 const SERVER_SNAPSHOT: LojaStore = { loja: null, isLoading: true };
@@ -58,7 +59,10 @@ function setStore(partial: Partial<LojaStore>) {
 }
 
 async function loadLoja() {
-  if (inFlight) { reloadLoja = true; return inFlight; }
+  if (inFlight) {
+    reloadLoja = true;
+    return inFlight;
+  }
   inFlight = (async () => {
     try {
       const response = await fetch("/api/loja", { cache: "no-store" });
@@ -67,12 +71,25 @@ async function loadLoja() {
       const { loja } = (await response.json()) as {
         loja: ConfiguracoesLoja | null;
       };
-      setStore({ loja, isLoading: false });
+      initialAt = Date.now();
+      setStore({
+        loja,
+        isLoading: false,
+        error: loja
+          ? null
+          : "Não foi possível confirmar o funcionamento da loja.",
+      });
     } catch {
-      setStore({ isLoading: false });
+      setStore({
+        isLoading: false,
+        error: "Não foi possível consultar a loja. Tente novamente.",
+      });
     } finally {
       inFlight = null;
-      if (reloadLoja) { reloadLoja = false; void loadLoja(); }
+      if (reloadLoja) {
+        reloadLoja = false;
+        void loadLoja();
+      }
     }
   })();
   return inFlight;
@@ -80,10 +97,16 @@ async function loadLoja() {
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  if (!stopUpdates) stopUpdates = subscribeCatalogUpdates(() => { void loadLoja(); });
+  if (!stopUpdates)
+    stopUpdates = subscribeCatalogUpdates(() => {
+      void loadLoja();
+    });
   return () => {
     listeners.delete(listener);
-    if (!listeners.size) { stopUpdates?.(); stopUpdates = undefined; }
+    if (!listeners.size) {
+      stopUpdates?.();
+      stopUpdates = undefined;
+    }
   };
 }
 
@@ -120,5 +143,11 @@ export function useLoja() {
     () => store,
     () => initialSnapshot,
   );
-  return { loja: snapshot.loja, isLoading: snapshot.isLoading, live: false };
+  return {
+    loja: snapshot.loja,
+    isLoading: snapshot.isLoading,
+    error: snapshot.error ?? null,
+    refresh: loadLoja,
+    live: false,
+  };
 }
