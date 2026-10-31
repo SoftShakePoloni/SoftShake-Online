@@ -1,3 +1,4 @@
+import { adminNeedsMfa } from "@/lib/security/admin-mfa";
 import { cache } from "react";
 import { createServerSupabaseClient } from "@/integrations/supabase/server";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
@@ -51,6 +52,8 @@ export const getAdminUser = cache(async (): Promise<AdminSession | null> => {
   if (authError || !user) {
     return null;
   }
+
+  if (await adminNeedsMfa(supabase, user)) return null;
 
   // Service role para ler o perfil com segurança após auth
   let perfil: {

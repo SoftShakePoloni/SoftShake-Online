@@ -25,7 +25,7 @@ type Props = {
 
 export function ModalSacola({ open, onOpenChange }: Props) {
   const { itens, removerItem, limpar, subtotal, cupomAplicado, setCupomAplicado } = useCarrinho();
-  const { loja } = useLoja();
+  const { loja, isLoading: lojaLoading, error: lojaError, refresh: refreshLoja } = useLoja();
   const { cliente, session, loading } = useAuth();
   const [step, setStep] = useState<'cart' | 'info' | 'payment'>('cart');
   const router = useRouter();
@@ -41,6 +41,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [codigoCupom, setCodigoCupom] = useState("");
   const cupomRequest = useRef(0);
+  const resumeChecked = useRef(false);
   const [validandoCupom, setValidandoCupom] = useState(false);
   const [erroCupom, setErroCupom] = useState("");
 
@@ -167,11 +168,12 @@ export function ModalSacola({ open, onOpenChange }: Props) {
 
   // Reabre modal após login se necessário
   useEffect(() => {
-    if (!loading && session && !open) {
+    if (!loading && !lojaLoading && loja && !lojaError && session && !open) {
       const shouldReopen = sessionStorage.getItem('reopenCart');
       const savedStep = sessionStorage.getItem('cartStep');
       
       if (shouldReopen === 'true') {
+        if (!resumeChecked.current) { resumeChecked.current = true; void refreshLoja(); return; }
         sessionStorage.removeItem('reopenCart');
         sessionStorage.removeItem('cartStep');
         
@@ -184,7 +186,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         }, 100);
       }
     }
-  }, [loading, session, open, onOpenChange]);
+  }, [loading, lojaLoading, loja, lojaError, session, open, onOpenChange, refreshLoja]);
 
   const handleVoltar = () => {
     if (step === 'payment') {
@@ -195,6 +197,12 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   };
 
   const handleConfirmarInfo = () => {
+    if (lojaLoading || !loja || lojaError) {
+      toast.info(lojaLoading ? "Aguarde, verificando o funcionamento da loja…" : "Não foi possível verificar a loja. Tente novamente.");
+      if (!lojaLoading) void refreshLoja();
+      return;
+    }
+
     if (!lojaAberta) {
       toast.error('Loja fechada', {
         description: 'No momento não estamos aceitando pedidos.',
@@ -234,9 +242,16 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     window.location.href = '/perfil/enderecos/novo';
   };
 
-  const lojaAberta = Boolean(loja?.esta_aberto);
+  const lojaConfirmada = !lojaLoading && !!loja && !lojaError;
+  const lojaAberta = lojaConfirmada && Boolean(loja?.esta_aberto);
 
   const handleFinalizarPedido = async () => {
+    if (lojaLoading || !loja || lojaError) {
+      toast.info(lojaLoading ? "Aguarde, verificando o funcionamento da loja…" : "Não foi possível verificar a loja. Tente novamente.");
+      if (!lojaLoading) void refreshLoja();
+      return;
+    }
+
     if (!lojaAberta) {
       toast.error("Loja fechada", {
         description: "No momento não estamos aceitando pedidos.",
@@ -781,7 +796,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               <span className="text-primary">{formatBRL(total)}</span>
             </div>
             
-            {!lojaAberta && (
+            {!lojaConfirmada && <div role="status" className="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">{lojaLoading ? "Verificando o funcionamento da loja…" : <>Não foi possível consultar a loja. <button type="button" onClick={() => void refreshLoja()} className="min-h-9 font-medium text-primary underline">Tentar novamente</button></>}</div>}
+            {lojaConfirmada && !lojaAberta && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
                 A loja está fechada e não está aceitando pedidos no momento.
               </div>
@@ -795,7 +811,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               >
                 {loading
                   ? 'Carregando...'
-                  : !lojaAberta
+                  : !lojaConfirmada ? 'Verificando loja…' : !lojaAberta
                     ? 'Loja fechada'
                     : 'Confirmar informações'}
               </button>
@@ -824,7 +840,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                 >
                   {enviandoPedido
                     ? 'Enviando pedido...'
-                    : !lojaAberta
+                    : !lojaConfirmada ? 'Verificando loja…' : !lojaAberta
                       ? 'Loja fechada'
                       : 'Finalizar pedido'}
                 </button>

@@ -1,3 +1,4 @@
+import { adminNeedsMfa } from "@/lib/security/admin-mfa";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import {
@@ -169,6 +170,18 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const protectedAdminApi = path.startsWith('/api/admin') || path.startsWith('/api/pedidos/atualizar-status');
+  const mfaRequired = user && (path.startsWith('/admin') || protectedAdminApi) ? await adminNeedsMfa(supabase, user) : false;
+  if (mfaRequired && protectedAdminApi) {
+    return applySecurityHeaders(NextResponse.json({ erro: 'Confirme a autenticação em duas etapas.', codigo: 'MFA_REQUIRED' }, { status: 403 }));
+  }
+  if (mfaRequired && path.startsWith('/admin') && path !== '/admin/verificar') {
+    const redirectUrl = request.nextUrl.clone(); redirectUrl.pathname = '/admin/verificar'; redirectUrl.search = '';
+    const result = NextResponse.redirect(redirectUrl);
+    response.cookies.getAll().forEach(cookie => result.cookies.set(cookie));
+    return applySecurityHeaders(result);
+  }
 
   // Admin: exige usuário Supabase Auth (exceto login)
   if (path.startsWith("/admin") && path !== "/admin/login") {
