@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { headers } from "next/headers";
 import { obterSessao } from "@/lib/auth";
+import { parseAdditionalAddresses } from "@/lib/enderecos-cliente";
 import { atualizarEndereco } from "@/lib/endereco";
 import { createServerClient } from "@/integrations/supabase/client.server";
 import { sanitizeText } from "@/lib/security/sanitize";
@@ -10,7 +11,7 @@ import {
   RATE_LIMITS,
   getClientIp,
 } from "@/lib/security/rate-limit";
-import type { Endereco, EnderecoInput } from "@/types/endereco";
+import type { EnderecoInput } from "@/types/endereco";
 const schema = z.object({
   apelido: z
     .string()
@@ -71,11 +72,9 @@ export async function salvarEnderecoExistente(
     .single();
   if (error || !data)
     return { sucesso: false, erro: "Não foi possível carregar o endereço." };
-  const address = (
-    Array.isArray(data.enderecos_adicionais)
-      ? (data.enderecos_adicionais as unknown as Endereco[])
-      : []
-  ).find((item) => item.id === id);
+  const address = parseAdditionalAddresses(data.enderecos_adicionais).find(
+    (item) => item.id === id,
+  );
   if (!address) return { sucesso: false, erro: "Endereço não encontrado." };
   // Preserve principal state; the existing dedicated action changes the default address.
   return atualizarEndereco(session.id, id, {

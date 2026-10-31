@@ -136,12 +136,6 @@ export function MeusPedidosView({ clienteId }: { clienteId: string }) {
 
   return (
     <>
-      <a
-        href="#conteudo-principal"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-[#432078] focus:shadow-lg"
-      >
-        Pular para o conteúdo principal
-      </a>
       <main
         id="conteudo-principal"
         className="min-h-[70vh] bg-[#FAF9FC] text-[#21172D]"

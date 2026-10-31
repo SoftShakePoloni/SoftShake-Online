@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { salvarEnderecoExistente } from "@/actions/cliente-enderecos";
 
 export function FormularioEndereco({ endereco }: { endereco?: Endereco } = {}) {
   const router = useRouter();
+  const { refreshCliente } = useAuth();
   const [carregando, setCarregando] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [formData, setFormData] = useState({
@@ -61,6 +63,7 @@ export function FormularioEndereco({ endereco }: { endereco?: Endereco } = {}) {
         }
       }
       toast.success(endereco ? "Endereço atualizado!" : "Endereço adicionado!");
+      await refreshCliente();
       if (sessionStorage.getItem("reopenCart") === "true") {
         window.location.href = "/";
         return;

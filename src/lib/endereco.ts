@@ -1,38 +1,41 @@
-import { createServerClient } from '@/integrations/supabase/client.server';
-import type { Endereco, EnderecoInput } from '@/types/endereco';
-import { randomUUID } from 'crypto';
+import {
+  parseAdditionalAddresses,
+  customerAddresses,
+} from "@/lib/enderecos-cliente";
+import { createServerClient } from "@/integrations/supabase/client.server";
+import type { Endereco, EnderecoInput } from "@/types/endereco";
+import { randomUUID } from "crypto";
 
 /**
  * Adiciona um novo endereço à lista de endereços do cliente
  */
 export async function adicionarNovoEndereco(
   clienteId: string,
-  novoEndereco: EnderecoInput
+  novoEndereco: EnderecoInput,
 ): Promise<{ sucesso: boolean; endereco?: Endereco; erro?: string }> {
   try {
     const supabase = createServerClient();
 
     // 1. Buscar endereços atuais do cliente
     const { data: cliente, error: buscarErro } = await supabase
-      .from('clientes')
-      .select('enderecos_adicionais')
-      .eq('id', clienteId)
+      .from("clientes")
+      .select("endereco, enderecos_adicionais")
+      .eq("id", clienteId)
       .single();
 
     if (buscarErro) {
-      console.error('Erro ao buscar cliente:', buscarErro);
-      return { sucesso: false, erro: 'Cliente não encontrado' };
+      console.error("Erro ao buscar cliente:", buscarErro);
+      return { sucesso: false, erro: "Cliente não encontrado" };
     }
 
     // 2. Parsear array de endereços existente
-    let enderecosAtuais: Endereco[] = [];
-    if (cliente.enderecos_adicionais && Array.isArray(cliente.enderecos_adicionais)) {
-      enderecosAtuais = JSON.parse(JSON.stringify(cliente.enderecos_adicionais)) as Endereco[];
-    }
+    let enderecosAtuais = parseAdditionalAddresses(
+      cliente.enderecos_adicionais,
+    );
 
     // 3. Se o novo endereço é principal, desmarcar outros
     if (novoEndereco.principal) {
-      enderecosAtuais = enderecosAtuais.map(end => ({
+      enderecosAtuais = enderecosAtuais.map((end) => ({
         ...end,
         principal: false,
       }));
@@ -44,12 +47,15 @@ export async function adicionarNovoEndereco(
       apelido: novoEndereco.apelido,
       logradouro: novoEndereco.logradouro,
       numero: novoEndereco.numero,
-      complemento: novoEndereco.complemento || '',
+      complemento: novoEndereco.complemento || "",
       bairro: novoEndereco.bairro,
       cidade: novoEndereco.cidade,
       estado: novoEndereco.estado,
       cep: novoEndereco.cep,
-      principal: enderecosAtuais.length === 0 ? true : (novoEndereco.principal || false),
+      principal: Boolean(
+        novoEndereco.principal ||
+        (!cliente.endereco && enderecosAtuais.length === 0),
+      ),
       created_at: new Date().toISOString(),
     };
 
@@ -58,19 +64,21 @@ export async function adicionarNovoEndereco(
 
     // 6. Salvar no banco
     const { error: atualizarErro } = await supabase
-      .from('clientes')
-      .update({ enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)) })
-      .eq('id', clienteId);
+      .from("clientes")
+      .update({
+        enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)),
+      })
+      .eq("id", clienteId);
 
     if (atualizarErro) {
-      console.error('Erro ao atualizar endereços:', atualizarErro);
-      return { sucesso: false, erro: 'Erro ao salvar endereço' };
+      console.error("Erro ao atualizar endereços:", atualizarErro);
+      return { sucesso: false, erro: "Erro ao salvar endereço" };
     }
 
     return { sucesso: true, endereco: enderecoCompleto };
   } catch (erro) {
-    console.error('Erro ao adicionar endereço:', erro);
-    return { sucesso: false, erro: 'Erro interno' };
+    console.error("Erro ao adicionar endereço:", erro);
+    return { sucesso: false, erro: "Erro interno" };
   }
 }
 
@@ -79,32 +87,34 @@ export async function adicionarNovoEndereco(
  */
 export async function removerEndereco(
   clienteId: string,
-  enderecoId: string
+  enderecoId: string,
 ): Promise<{ sucesso: boolean; erro?: string }> {
   try {
     const supabase = createServerClient();
 
     // 1. Buscar endereços atuais
     const { data: cliente, error: buscarErro } = await supabase
-      .from('clientes')
-      .select('enderecos_adicionais')
-      .eq('id', clienteId)
+      .from("clientes")
+      .select("enderecos_adicionais")
+      .eq("id", clienteId)
       .single();
 
     if (buscarErro || !cliente) {
-      return { sucesso: false, erro: 'Cliente não encontrado' };
+      return { sucesso: false, erro: "Cliente não encontrado" };
     }
 
     // 2. Filtrar removendo o endereço
-    const enderecosAtuais: Endereco[] = Array.isArray(cliente.enderecos_adicionais) 
-      ? JSON.parse(JSON.stringify(cliente.enderecos_adicionais)) as Endereco[]
-      : [];
+    const enderecosAtuais = parseAdditionalAddresses(
+      cliente.enderecos_adicionais,
+    );
 
-    const enderecosAtualizados = enderecosAtuais.filter(end => end.id !== enderecoId);
+    const enderecosAtualizados = enderecosAtuais.filter(
+      (end) => end.id !== enderecoId,
+    );
 
     // 3. Se removeu o principal e ainda há endereços, marcar o primeiro como principal
     if (enderecosAtualizados.length > 0) {
-      const temPrincipal = enderecosAtualizados.some(end => end.principal);
+      const temPrincipal = enderecosAtualizados.some((end) => end.principal);
       if (!temPrincipal) {
         enderecosAtualizados[0].principal = true;
       }
@@ -112,18 +122,20 @@ export async function removerEndereco(
 
     // 4. Salvar no banco
     const { error: atualizarErro } = await supabase
-      .from('clientes')
-      .update({ enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)) })
-      .eq('id', clienteId);
+      .from("clientes")
+      .update({
+        enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)),
+      })
+      .eq("id", clienteId);
 
     if (atualizarErro) {
-      return { sucesso: false, erro: 'Erro ao remover endereço' };
+      return { sucesso: false, erro: "Erro ao remover endereço" };
     }
 
     return { sucesso: true };
   } catch (erro) {
-    console.error('Erro ao remover endereço:', erro);
-    return { sucesso: false, erro: 'Erro interno' };
+    console.error("Erro ao remover endereço:", erro);
+    return { sucesso: false, erro: "Erro interno" };
   }
 }
 
@@ -132,46 +144,54 @@ export async function removerEndereco(
  */
 export async function definirEnderecoPrincipal(
   clienteId: string,
-  enderecoId: string
+  enderecoId: string,
 ): Promise<{ sucesso: boolean; erro?: string }> {
   try {
     const supabase = createServerClient();
 
     // 1. Buscar endereços atuais
     const { data: cliente, error: buscarErro } = await supabase
-      .from('clientes')
-      .select('enderecos_adicionais')
-      .eq('id', clienteId)
+      .from("clientes")
+      .select("endereco, enderecos_adicionais")
+      .eq("id", clienteId)
       .single();
 
     if (buscarErro || !cliente) {
-      return { sucesso: false, erro: 'Cliente não encontrado' };
+      return { sucesso: false, erro: "Cliente não encontrado" };
     }
 
     // 2. Atualizar flags de principal
-    const enderecosAtuais: Endereco[] = Array.isArray(cliente.enderecos_adicionais)
-      ? JSON.parse(JSON.stringify(cliente.enderecos_adicionais)) as Endereco[]
-      : [];
+    const enderecosAtuais = parseAdditionalAddresses(
+      cliente.enderecos_adicionais,
+    );
 
-    const enderecosAtualizados = enderecosAtuais.map(end => ({
+    if (
+      enderecoId === "endereco-legado"
+        ? !cliente.endereco
+        : !enderecosAtuais.some((end) => end.id === enderecoId)
+    )
+      return { sucesso: false, erro: "Endereço não encontrado" };
+    const enderecosAtualizados = enderecosAtuais.map((end) => ({
       ...end,
       principal: end.id === enderecoId,
     }));
 
     // 3. Salvar no banco
     const { error: atualizarErro } = await supabase
-      .from('clientes')
-      .update({ enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)) })
-      .eq('id', clienteId);
+      .from("clientes")
+      .update({
+        enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)),
+      })
+      .eq("id", clienteId);
 
     if (atualizarErro) {
-      return { sucesso: false, erro: 'Erro ao definir endereço principal' };
+      return { sucesso: false, erro: "Erro ao definir endereço principal" };
     }
 
     return { sucesso: true };
   } catch (erro) {
-    console.error('Erro ao definir endereço principal:', erro);
-    return { sucesso: false, erro: 'Erro interno' };
+    console.error("Erro ao definir endereço principal:", erro);
+    return { sucesso: false, erro: "Erro interno" };
   }
 }
 
@@ -181,28 +201,30 @@ export async function definirEnderecoPrincipal(
 export async function atualizarEndereco(
   clienteId: string,
   enderecoId: string,
-  dadosAtualizados: Partial<EnderecoInput>
+  dadosAtualizados: Partial<EnderecoInput>,
 ): Promise<{ sucesso: boolean; erro?: string }> {
   try {
     const supabase = createServerClient();
 
     // 1. Buscar endereços atuais
     const { data: cliente, error: buscarErro } = await supabase
-      .from('clientes')
-      .select('enderecos_adicionais')
-      .eq('id', clienteId)
+      .from("clientes")
+      .select("enderecos_adicionais")
+      .eq("id", clienteId)
       .single();
 
     if (buscarErro || !cliente) {
-      return { sucesso: false, erro: 'Cliente não encontrado' };
+      return { sucesso: false, erro: "Cliente não encontrado" };
     }
 
     // 2. Atualizar o endereço específico
-    const enderecosAtuais: Endereco[] = Array.isArray(cliente.enderecos_adicionais)
-      ? JSON.parse(JSON.stringify(cliente.enderecos_adicionais)) as Endereco[]
-      : [];
+    const enderecosAtuais = parseAdditionalAddresses(
+      cliente.enderecos_adicionais,
+    );
 
-    const enderecosAtualizados = enderecosAtuais.map(end => {
+    if (!enderecosAtuais.some((end) => end.id === enderecoId))
+      return { sucesso: false, erro: "Endereço não encontrado" };
+    const enderecosAtualizados = enderecosAtuais.map((end) => {
       if (end.id === enderecoId) {
         return { ...end, ...dadosAtualizados };
       }
@@ -215,45 +237,47 @@ export async function atualizarEndereco(
 
     // 3. Salvar no banco
     const { error: atualizarErro } = await supabase
-      .from('clientes')
-      .update({ enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)) })
-      .eq('id', clienteId);
+      .from("clientes")
+      .update({
+        enderecos_adicionais: JSON.parse(JSON.stringify(enderecosAtualizados)),
+      })
+      .eq("id", clienteId);
 
     if (atualizarErro) {
-      return { sucesso: false, erro: 'Erro ao atualizar endereço' };
+      return { sucesso: false, erro: "Erro ao atualizar endereço" };
     }
 
     return { sucesso: true };
   } catch (erro) {
-    console.error('Erro ao atualizar endereço:', erro);
-    return { sucesso: false, erro: 'Erro interno' };
+    console.error("Erro ao atualizar endereço:", erro);
+    return { sucesso: false, erro: "Erro interno" };
   }
 }
 
 /**
  * Obtém o endereço principal do cliente
  */
-export async function obterEnderecoPrincipal(clienteId: string): Promise<Endereco | null> {
+export async function obterEnderecoPrincipal(
+  clienteId: string,
+): Promise<Endereco | null> {
   try {
     const supabase = createServerClient();
 
     const { data: cliente, error } = await supabase
-      .from('clientes')
-      .select('enderecos_adicionais')
-      .eq('id', clienteId)
+      .from("clientes")
+      .select("endereco, enderecos_adicionais")
+      .eq("id", clienteId)
       .single();
 
     if (error || !cliente) {
       return null;
     }
 
-    const enderecos: Endereco[] = Array.isArray(cliente.enderecos_adicionais)
-      ? JSON.parse(JSON.stringify(cliente.enderecos_adicionais)) as Endereco[]
-      : [];
+    const enderecos = customerAddresses(cliente);
 
-    return enderecos.find(end => end.principal) || enderecos[0] || null;
+    return enderecos.find((end) => end.principal) || enderecos[0] || null;
   } catch (erro) {
-    console.error('Erro ao obter endereço principal:', erro);
+    console.error("Erro ao obter endereço principal:", erro);
     return null;
   }
 }

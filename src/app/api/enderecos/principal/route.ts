@@ -13,7 +13,10 @@ import {
 } from "@/lib/security/api-response";
 
 const principalSchema = z.object({
-  enderecoId: z.string().uuid("ID do endereço inválido"),
+  enderecoId: z.union([
+    z.string().uuid("ID do endereço inválido"),
+    z.literal("endereco-legado"),
+  ]),
 });
 
 export const PUT = withApiGuard(
@@ -45,13 +48,13 @@ export const PUT = withApiGuard(
 
       const resultado = await definirEnderecoPrincipal(
         sessao.id,
-        validacao.data.enderecoId
+        validacao.data.enderecoId,
       );
 
       if (!resultado.sucesso) {
         return apiError(
           resultado.erro || "Erro ao definir endereço principal",
-          500
+          500,
         );
       }
 
@@ -61,5 +64,5 @@ export const PUT = withApiGuard(
     } catch (erro) {
       return apiServerError(erro);
     }
-  }
+  },
 );

@@ -1,9 +1,6 @@
 import { withApiGuard } from "@/lib/security/with-api-guard";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
-import {
-  apiOk,
-  apiServerError,
-} from "@/lib/security/api-response";
+import { apiOk, apiServerError } from "@/lib/security/api-response";
 import { obterSessao } from "@/lib/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
 
@@ -17,28 +14,29 @@ export const GET = withApiGuard(
     try {
       const sessao = await obterSessao();
       // Visitantes sem cookie têm uma sessão vazia, não uma falha HTTP.
-      if (!sessao) return apiOk({ autenticado: false, cliente: null });
+      if (!sessao)
+        return apiOk({ autenticado: false, cliente: null }, 200, {
+          "Cache-Control": "private, no-store",
+        });
 
       const supabase = createServerClient();
-      const { data: clienteCompleto } = await supabase
+      const { data: clienteCompleto, error } = await supabase
         .from("clientes")
-        .select(
-          "id, nome, telefone, endereco, enderecos_adicionais, email, created_at"
-        )
+        .select("id, nome, telefone, endereco, enderecos_adicionais")
         .eq("id", sessao.id)
         .maybeSingle();
 
-      return apiOk({
-        autenticado: true,
-        cliente: clienteCompleto || {
-          id: sessao.id,
-          nome: sessao.nome,
-          telefone: sessao.telefone,
-          endereco: sessao.endereco,
+      if (error) return apiServerError(error);
+      return apiOk(
+        {
+          autenticado: Boolean(clienteCompleto),
+          cliente: clienteCompleto ?? null,
         },
-      });
+        200,
+        { "Cache-Control": "private, no-store" },
+      );
     } catch (erro) {
       return apiServerError(erro);
     }
-  }
+  },
 );
