@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint src middleware.ts next.config.ts",
     "format": "prettier --write .",
-    "test": "node --test scripts/responsive/admin-mfa-test.cjs scripts/responsive/cart-store-loading-test.cjs scripts/responsive/promotions-ui-test.cjs scripts/responsive/addresses-sync-test.cjs scripts/responsive/profile-address-test.cjs scripts/responsive/catalog-realtime-test.cjs scripts/responsive/address-return-test.cjs scripts/responsive/combo-options-test.cjs scripts/responsive/coupon-history-test.cjs scripts/responsive/image-contract-test.cjs scripts/responsive/performance-unit.cjs scripts/responsive/register-contract-test.cjs scripts/responsive/reports-pdf-test.cjs scripts/responsive/automatic-print-test.cjs"
+    "test": "node --test scripts/responsive/mfa-qr-test.cjs scripts/responsive/admin-mfa-test.cjs scripts/responsive/cart-store-loading-test.cjs scripts/responsive/promotions-ui-test.cjs scripts/responsive/addresses-sync-test.cjs scripts/responsive/profile-address-test.cjs scripts/responsive/catalog-realtime-test.cjs scripts/responsive/address-return-test.cjs scripts/responsive/combo-options-test.cjs scripts/responsive/coupon-history-test.cjs scripts/responsive/image-contract-test.cjs scripts/responsive/performance-unit.cjs scripts/responsive/register-contract-test.cjs scripts/responsive/reports-pdf-test.cjs scripts/responsive/automatic-print-test.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
