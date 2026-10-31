@@ -519,7 +519,7 @@ export function PedidosManager({
         </DndContext>
 
         <Sheet open={!!selectedPedido} onOpenChange={(open) => { if (!open) handleClose(); }}>
-          <SheetContent className="admin-detail-sheet w-full sm:max-w-[min(900px,90vw)] border-l border-[#E7E1EB] bg-white"
+          <SheetContent overlayClassName="bg-black/15" className="admin-detail-sheet w-full sm:max-w-[480px] border-l border-[#E7E1EB] bg-white"
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               const trigger = detailTrigger.current;

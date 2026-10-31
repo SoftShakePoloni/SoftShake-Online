@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { Pedido } from "@/types/pedido";
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/utils/formatters";
+import { formatCurrency, formatPhone } from "@/lib/utils/formatters";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +36,16 @@ import {
   STATUS_META,
   type OrderAction,
 } from "./order-status";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { OrderElapsedTimer } from "./OrderElapsedTimer";
 
 interface PedidoDetailPanelProps {
@@ -57,19 +67,6 @@ const actionIcons = {
   print: Printer,
 };
 
-const actionStyles: Record<OrderAction["variant"], string> = {
-  primary:
-    "bg-[#4C258C] hover:bg-[#5E35B1] text-white transition-colors duration-150",
-  success:
-    "bg-emerald-600 hover:bg-emerald-700 text-white transition-colors duration-150",
-  warning:
-    "bg-orange-500 hover:bg-orange-600 text-white transition-colors duration-150",
-  danger:
-    "text-red-600 hover:bg-red-50 border border-red-200 transition-colors duration-150",
-  secondary:
-    "text-[#4C258C] hover:bg-[#F3EEFA] border border-[#D4C4F0] transition-colors duration-150",
-};
-
 const orderDateTime = new Intl.DateTimeFormat("pt-BR", {
   hour: "2-digit",
   minute: "2-digit",
@@ -77,12 +74,12 @@ const orderDateTime = new Intl.DateTimeFormat("pt-BR", {
 
 // Compact status badge colors
 const STATUS_BADGE: Record<Pedido["status"], string> = {
-  pendente:   "bg-purple-100 text-purple-800",
+  pendente: "bg-purple-100 text-purple-800",
   confirmado: "bg-indigo-100 text-indigo-700",
   preparando: "bg-blue-100   text-blue-700",
   saiu_entrega: "bg-orange-100 text-orange-700",
-  entregue:   "bg-emerald-100 text-emerald-700",
-  cancelado:  "bg-red-100    text-red-700",
+  entregue: "bg-emerald-100 text-emerald-700",
+  cancelado: "bg-red-100    text-red-700",
 };
 
 export function PedidoDetailPanel({
@@ -92,17 +89,22 @@ export function PedidoDetailPanel({
   busy = false,
 }: PedidoDetailPanelProps) {
   const [printTipo, setPrintTipo] = useState<OrderPrintTipo | null>(null);
+  const [pendingAction, setPendingAction] = useState<OrderAction | null>(null);
   const actions = getOrderActions(pedido);
   const delivery = isDeliveryType(pedido.tipo_entrega);
 
   const primaryActions = actions.filter(
-    (a) => a.variant === "primary" || a.variant === "success" || a.variant === "warning",
+    (a) =>
+      a.variant === "primary" ||
+      a.variant === "success" ||
+      a.variant === "warning",
   );
   const secondaryActions = actions.filter((a) => a.variant === "secondary");
-  const dangerActions    = actions.filter((a) => a.variant === "danger");
+  const dangerActions = actions.filter((a) => a.variant === "danger");
 
   const statusLabel = STATUS_META[pedido.status]?.label ?? pedido.status;
-  const statusBadge = STATUS_BADGE[pedido.status] ?? "bg-gray-100 text-gray-600";
+  const statusBadge =
+    STATUS_BADGE[pedido.status] ?? "bg-gray-100 text-gray-600";
 
   const hasPrimaryEnterHint = primaryActions.some(
     (a) => a.status === "preparando" && !a.printAfter,
@@ -113,8 +115,16 @@ export function PedidoDetailPanel({
     if (!printTipo) return;
     let printed = false;
     let finished = false;
-    const runPrint = () => { if (printed) return; printed = true; window.print(); };
-    const done    = () => { if (finished) return; finished = true; setPrintTipo(null); };
+    const runPrint = () => {
+      if (printed) return;
+      printed = true;
+      window.print();
+    };
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      setPrintTipo(null);
+    };
     const t1 = window.setTimeout(runPrint, 250);
     const t2 = window.setTimeout(done, 8000);
     window.addEventListener("afterprint", done);
@@ -130,20 +140,36 @@ export function PedidoDetailPanel({
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (
+        e.defaultPrevented ||
+        pendingAction ||
+        (e.target as HTMLElement)?.closest(
+          'button, a, [role="menu"], [role="alertdialog"], [contenteditable="true"]',
+        )
+      )
+        return;
       if (e.key === "Enter" && !busy) {
-        const accept = actions.find((a) => a.status === "preparando" && !a.printAfter);
-        if (accept) { e.preventDefault(); void onStatusChange(accept.status); }
+        const accept = actions.find(
+          (a) => a.status === "preparando" && !a.printAfter,
+        );
+        if (accept) {
+          e.preventDefault();
+          void onStatusChange(accept.status);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [actions, busy, onClose, onStatusChange]);
+  }, [actions, busy, onClose, onStatusChange, pendingAction]);
 
   // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const copy = (text: string) => {
-    void navigator.clipboard.writeText(text);
-    toast.success("Copiado");
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Copiado");
+    } catch {
+      toast.error("Não foi possível copiar. Tente novamente.");
+    }
   };
 
   const openWhatsApp = () => {
@@ -162,16 +188,20 @@ export function PedidoDetailPanel({
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
-
       {/* â”€â”€ HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="shrink-0 border-b border-[#F0EEF3] px-3 sm:px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2.5 min-w-0">
             <h2 className="text-lg font-bold text-[#111827] leading-none">
-              #{shortOrderId(pedido.id)}
+              Pedido #{shortOrderId(pedido.id)}
             </h2>
 
-            <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none", statusBadge)}>
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none",
+                statusBadge,
+              )}
+            >
               {statusLabel}
             </span>
           </div>
@@ -185,7 +215,8 @@ export function PedidoDetailPanel({
                 <button
                   type="button"
                   aria-label="Imprimir pedido"
-                  className="ml-1 flex h-8 w-8 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F9FAFB] hover:text-[#374151] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
+                  title="Imprimir pedido"
+                  className="ml-1 flex h-9 w-9 items-center justify-center rounded-md text-[#9CA3AF] hover:bg-[#F9FAFB] hover:text-[#374151] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
                 >
                   <Printer aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -212,7 +243,7 @@ export function PedidoDetailPanel({
         </div>
 
         {/* Sub-line: time */}
-        <p className="mt-1 text-xs text-[#9CA3AF]">
+        <p className="mt-1 text-xs text-[#6B7280]">
           {orderDateTime.format(new Date(pedido.created_at))}
           {" · "}
           {tipoEntregaLabel(pedido.tipo_entrega)}
@@ -220,100 +251,22 @@ export function PedidoDetailPanel({
       </div>
 
       {/* â”€â”€ ACTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      {actions.length > 0 && (
-        <div className="shrink-0 border-b border-[#F0EEF3] px-5 py-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {primaryActions.map((action) => {
-              const Icon = actionIcons[action.icon];
-              return (
-                <button
-                  key={`${action.label}-${action.status}`}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    void (async () => {
-                      const result = await onStatusChange(action.status);
-                      if (action.printAfter && result !== false) setPrintTipo("completo");
-                    })();
-                  }}
-                  aria-label={action.label}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40",
-                    actionStyles[action.variant],
-                    primaryActions.length === 1 && "flex-1 justify-center",
-                  )}
-                >
-                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                  {action.label}
-                </button>
-              );
-            })}
-
-            {secondaryActions.map((action) => {
-              const Icon = actionIcons[action.icon];
-              return (
-                <button
-                  key={`${action.label}-${action.status}-s`}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    void (async () => {
-                      const result = await onStatusChange(action.status);
-                      if (action.printAfter && result !== false) setPrintTipo("completo");
-                    })();
-                  }}
-                  aria-label={action.label}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40",
-                    actionStyles[action.variant],
-                  )}
-                >
-                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                  {action.label}
-                </button>
-              );
-            })}
-
-            {dangerActions.map((action) => {
-              const Icon = actionIcons[action.icon];
-              return (
-                <button
-                  key={`${action.label}-${action.status}-d`}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => { void onStatusChange(action.status); }}
-                  aria-label={action.label}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
-                    actionStyles[action.variant],
-                  )}
-                >
-                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                  {action.label}
-                </button>
-              );
-            })}
-
-            {hasPrimaryEnterHint && (
-              <span className="ml-auto text-[11px] text-[#D1D5DB] select-none">
-                Enter â†µ
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* â”€â”€ CONTENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="px-3 sm:px-5 py-4 space-y-5">
-
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Produtos
+          </h3>
           {/* Items */}
           <ul className="divide-y divide-[#F3F4F6]">
             {pedido.itens.map((item, index) => {
               const complementos = extractComplementos(item);
               const grupos = groupComplementos(complementos);
               return (
-                <li key={item.uid || item.id || index} className="py-3 first:pt-0">
+                <li
+                  key={item.uid || item.id || index}
+                  className="py-3 first:pt-0"
+                >
                   <div className="flex items-start gap-2.5">
                     {/* Qty */}
                     <span className="mt-px flex h-5 min-w-[24px] items-center justify-center rounded bg-[#F3EEFA] px-1 text-[11px] font-bold text-[#4C258C] tabular-nums shrink-0">
@@ -331,14 +284,16 @@ export function PedidoDetailPanel({
                           {grupo.items.map((opcao, oi) => (
                             <p key={oi} className="text-xs text-[#9CA3AF]">
                               + {opcao.name}
-                              {Number(opcao.price) > 0 ? ` · ${formatCurrency(opcao.price)}` : ""}
+                              {Number(opcao.price) > 0
+                                ? ` · ${formatCurrency(opcao.price)}`
+                                : ""}
                             </p>
                           ))}
                         </div>
                       ))}
 
                       {item.observacoes && (
-                        <p className="mt-0.5 text-xs text-[#9CA3AF] italic">
+                        <p className="mt-0.5 text-xs text-[#6B7280] italic">
                           {item.observacoes}
                         </p>
                       )}
@@ -377,18 +332,23 @@ export function PedidoDetailPanel({
           {/* Divider */}
           <div className="h-px bg-[#F3F4F6]" aria-hidden="true" />
 
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Cliente e entrega
+          </h3>
           {/* Cliente */}
           <div className="space-y-1">
             <p className="font-medium text-[#111827]">{pedido.cliente_nome}</p>
 
             {pedido.cliente_telefone && (
               <div className="flex items-center gap-1.5">
-                <span className="text-sm text-[#6B7280]">{pedido.cliente_telefone}</span>
+                <span className="text-sm text-[#6B7280]">
+                  {formatPhone(pedido.cliente_telefone)}
+                </span>
                 <button
                   type="button"
                   onClick={openWhatsApp}
                   aria-label="WhatsApp"
-                  className="flex h-6 w-6 items-center justify-center rounded text-[#9CA3AF] hover:text-[#25D366] hover:bg-[#F0FDF4] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
+                  className="flex h-8 w-8 items-center justify-center rounded text-[#9CA3AF] hover:text-[#25D366] hover:bg-[#F0FDF4] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4C258C]/40"
                 >
                   <MessageSquare aria-hidden="true" className="h-3.5 w-3.5" />
                 </button>
@@ -403,11 +363,14 @@ export function PedidoDetailPanel({
               </div>
             )}
 
-            {pedido.endereco_completo && (
+            {delivery && pedido.endereco_completo && (
               <div className="flex items-start gap-1.5 mt-1">
-                <MapPin aria-hidden="true" className="h-3.5 w-3.5 mt-0.5 text-[#9CA3AF] shrink-0" />
+                <MapPin
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 mt-0.5 text-[#9CA3AF] shrink-0"
+                />
                 <div className="min-w-0">
-                  <p className="text-sm text-[#6B7280] leading-relaxed">
+                  <p className="break-words text-sm text-[#6B7280] leading-relaxed">
                     {pedido.endereco_completo}
                   </p>
                   <button
@@ -419,6 +382,13 @@ export function PedidoDetailPanel({
                     <ExternalLink aria-hidden="true" className="h-3 w-3" />
                     Ver no mapa
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void copy(pedido.endereco_completo!)}
+                    className="ml-3 min-h-8 text-xs text-primary hover:underline"
+                  >
+                    Copiar endereço
+                  </button>
                 </div>
               </div>
             )}
@@ -427,33 +397,153 @@ export function PedidoDetailPanel({
           {/* Divider */}
           <div className="h-px bg-[#F3F4F6]" aria-hidden="true" />
 
-          {pedido.cupom_codigo && (
-            <section aria-label="Cupom utilizado" className="space-y-2 border-b border-border pb-4 text-sm">
-              <p className="font-medium text-primary">Cupom {pedido.cupom_codigo}</p>
-              <dl className="space-y-1">
-                <div className="flex justify-between gap-3"><dt>Subtotal antes do desconto</dt><dd>{formatCurrency(pedido.subtotal)}</dd></div>
-                <div className="flex justify-between gap-3 text-primary"><dt>Desconto aplicado</dt><dd>− {formatCurrency(Number(pedido.desconto_cupom || 0))}</dd></div>
-                <div className="flex justify-between gap-3 font-semibold"><dt>Total final</dt><dd>{formatCurrency(pedido.total)}</dd></div>
-              </dl>
-            </section>
-          )}
-          {/* Total + pagamento â€” uma Ãºnica linha */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-[#6B7280]">
+          <section aria-labelledby="order-payment-title" className="space-y-3">
+            <h3
+              id="order-payment-title"
+              className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              Pagamento
+            </h3>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Subtotal</dt>
+                <dd className="tabular-nums">
+                  {formatCurrency(pedido.subtotal)}
+                </dd>
+              </div>
+              {Number(pedido.desconto_cupom) > 0 && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">
+                    Desconto
+                    {pedido.cupom_codigo ? ` · ${pedido.cupom_codigo}` : ""}
+                  </dt>
+                  <dd className="tabular-nums text-primary">
+                    − {formatCurrency(pedido.desconto_cupom)}
+                  </dd>
+                </div>
+              )}
+              {pedido.cupom_codigo && !Number(pedido.desconto_cupom) && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-muted-foreground">Cupom</dt>
+                  <dd>{pedido.cupom_codigo}</dd>
+                </div>
+              )}
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Taxa de entrega</dt>
+                <dd className="tabular-nums">
+                  {formatCurrency(pedido.taxa_entrega)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4 border-t border-border pt-3 text-base font-semibold">
+                <dt>Total</dt>
+                <dd className="tabular-nums">{formatCurrency(pedido.total)}</dd>
+              </div>
+            </dl>
+            <p className="text-sm text-muted-foreground">
               {pedido.meio_pagamento}
-              {Number(pedido.troco_para) > 0 && ` · troco p/ ${formatCurrency(pedido.troco_para)}`}
-              {" · "}
-              {Number(pedido.taxa_entrega) > 0
-                ? `entrega ${formatCurrency(pedido.taxa_entrega)}`
-                : delivery ? "entrega grátis" : "retirada"}
-            </span>
-            <span className="text-base font-bold text-[#111827] tabular-nums">
-              {formatCurrency(pedido.total)}
-            </span>
-          </div>
-
+              {Number(pedido.troco_para) > 0 &&
+                ` · troco para ${formatCurrency(pedido.troco_para)}`}
+            </p>
+          </section>
         </div>
       </div>
+
+      {actions.length > 0 && (
+        <footer className="shrink-0 border-t border-border bg-white px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-2">
+            {primaryActions.slice(0, 1).map((action) => {
+              const Icon = actionIcons[action.icon];
+              return (
+                <button
+                  key={action.label}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void onStatusChange(action.status);
+                  }}
+                  className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50"
+                >
+                  <Icon aria-hidden="true" size={16} />
+                  {action.label}
+                </button>
+              );
+            })}
+            {(secondaryActions.length > 0 || dangerActions.length > 0) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="min-h-11 rounded-md border border-input px-3 text-sm font-medium hover:bg-muted"
+                  >
+                    Mais ações
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {secondaryActions.map((action) => (
+                    <DropdownMenuItem
+                      key={action.label}
+                      disabled={busy}
+                      onSelect={() => {
+                        void (async () => {
+                          const result = await onStatusChange(action.status);
+                          if (action.printAfter && result !== false)
+                            setPrintTipo("completo");
+                        })();
+                      }}
+                    >
+                      {action.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {dangerActions.map((action) => (
+                    <DropdownMenuItem
+                      key={action.label}
+                      disabled={busy}
+                      className="text-red-700 focus:text-red-700"
+                      onSelect={() => setPendingAction(action)}
+                    >
+                      {action.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+          {hasPrimaryEnterHint && (
+            <p className="mt-1.5 hidden text-center text-[11px] text-muted-foreground sm:block">
+              Enter para aceitar
+            </p>
+          )}
+        </footer>
+      )}
+      <AlertDialog
+        open={!!pendingAction}
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pendingAction?.label} pedido?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O pedido #{shortOrderId(pedido.id)} será cancelado. Confirme para
+              continuar.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={busy}
+              onClick={() => {
+                if (pendingAction) void onStatusChange(pendingAction.status);
+                setPendingAction(null);
+              }}
+            >
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Print */}
       {printTipo && <OrderPrint pedido={pedido} tipo={printTipo} />}
