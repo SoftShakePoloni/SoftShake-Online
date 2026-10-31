@@ -18,24 +18,34 @@ test('native print selects a real configured printer and rejects virtual or miss
 test('the real IPC handler validates the sender and requests silent native printing', async () => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
   const handlers = {};
+  const windowEvents = {};
+  let windowOptions, fullscreen;
   const startup = [];
   let cacheFailure = false;
   let readyCallback, handler, options, receiptReady = true, devices = [{ name: 'HP Test', isDefault: true }];
   const frame = { url: 'https://softshake.com.br/admin/pedidos' };
-  const contents = { mainFrame: frame, on() {}, setWindowOpenHandler() {}, session: { setPermissionRequestHandler() {}, async clearCache() { startup.push("cache"); if (cacheFailure) throw Error("cache unavailable"); } },
+  const contents = { mainFrame: frame, on(name, callback) { windowEvents[name] = callback; }, setWindowOpenHandler() {}, session: { setPermissionRequestHandler() {}, async clearCache() { startup.push("cache"); if (cacheFailure) throw Error("cache unavailable"); } },
     executeJavaScript: async () => receiptReady, getPrintersAsync: async () => devices,
     print(value, callback) { options = value; callback(true); },
   };
   const electron = {
     app: { setName() {}, setPath() {}, setAppUserModelId() {}, requestSingleInstanceLock: () => true, on() {}, whenReady: () => ({ then(callback) { readyCallback = callback; } }), getPath: () => require('node:os').tmpdir() },
-    BrowserWindow: class { constructor() { this.webContents = contents; } isDestroyed() { return false; } setMenuBarVisibility() {} once() {} loadURL(url, config) { startup.push({ url, config }); return Promise.resolve(); } },
+    BrowserWindow: class { constructor(options) { windowOptions = options; fullscreen = options.fullscreen; this.webContents = contents; } setFullScreen(value) { fullscreen = value; } isFullScreen() { return fullscreen; } isDestroyed() { return false; } setMenuBarVisibility() {} once() {} loadURL(url, config) { startup.push({ url, config }); return Promise.resolve(); } },
     Menu: { setApplicationMenu() {} }, ipcMain: { handle(channel, callback) { handlers[channel] = callback; if (channel === 'softshake:print') handler = callback; } },
     dialog: { showMessageBox: async () => ({ response: 0 }) }, shell: {},
   };
   const native = createRequire(path.join(__dirname, 'main.cjs'));
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8'), { __dirname, require: name => name === 'electron' ? electron : native(name) });
   await readyCallback();
+  assert.equal(windowOptions.fullscreen, true);
   assert.equal(startup[0], 'cache');
+  let prevented = 0;
+  windowEvents['before-input-event']({ preventDefault() { prevented++; } }, { type: 'keyDown', key: 'F11' });
+  assert.equal(fullscreen, false); assert.equal(prevented, 1);
+  windowEvents['before-input-event']({ preventDefault() { prevented++; } }, { type: 'keyDown', key: 'F11', isAutoRepeat: true });
+  assert.equal(fullscreen, false); assert.equal(prevented, 1);
+  windowEvents['before-input-event']({ preventDefault() { prevented++; } }, { type: 'keyDown', key: 'F11' });
+  assert.equal(fullscreen, true);
   assert.equal(startup[1].url, 'https://softshake.com.br/admin/pedidos');
   assert.match(startup[1].config.extraHeaders, /Pragma: no-cache/);
   await assert.rejects(() => handler({ sender: {}, senderFrame: frame }), /Origem/);

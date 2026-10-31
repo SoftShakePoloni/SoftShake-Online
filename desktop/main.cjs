@@ -49,11 +49,17 @@ ipcMain.handle('softshake:print', async event => {
 });
 
 async function createWindow() {
-  mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false,
+  mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false, fullscreen: true,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, backgroundThrottling: false, partition: 'persist:softshake-admin' } });
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11' && !input.isAutoRepeat) {
+      event.preventDefault();
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    }
+  });
   mainWindow.webContents.on('page-title-updated', event => { event.preventDefault(); mainWindow.setTitle('Softshake'); });
   mainWindow.webContents.on('will-navigate', (event, url) => { if (!trustedUrl(url)) event.preventDefault(); });
   mainWindow.webContents.on('will-redirect', (event, url) => { if (!trustedUrl(url)) event.preventDefault(); });

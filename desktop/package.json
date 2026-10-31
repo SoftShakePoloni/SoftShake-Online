@@ -1,7 +1,7 @@
 {
   "name": "softshake-admin-desktop",
   "productName": "Softshake",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "description": "Painel administrativo SoftShake com impressão direta de cozinha e cliente",
   "author": "SoftShake",
