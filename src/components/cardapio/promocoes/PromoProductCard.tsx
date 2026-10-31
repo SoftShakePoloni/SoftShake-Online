@@ -36,7 +36,11 @@ export function PromoProductCard({
   const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
   const disponivel = product.disponivel !== false;
   const unit = getProductUnitPrice(product);
-  const needsOptions = productNeedsOptions(product);
+  const optionsNotLoaded =
+    product.comboId == null &&
+    /^\d+$/.test(product.id) &&
+    !(product.optionGroups ?? []).some((group) => group.id !== "obs");
+  const needsOptions = productNeedsOptions(product) || optionsNotLoaded;
   const discount = productDiscountPercent(product);
   const [failedImage, setFailedImage] = useState<string | null>(null);
   const featured = variant === "featured";
@@ -97,11 +101,13 @@ export function PromoProductCard({
           className="offer-photo"
         >
           {product.image && failedImage !== product.image ? (
-            <Image preset="offer"
+            <Image
+              preset="offer"
               src={product.image}
               alt=""
               width={1200}
               height={1200}
+              sizes="(max-width: 359px) 88px, 108px"
               quality={90}
               className="h-auto w-full object-contain"
               onError={() => setFailedImage(product.image ?? null)}
@@ -111,54 +117,46 @@ export function PromoProductCard({
           )}
         </button>
         <div className="offer-info">
-          <span className="offer-benefit">
-            {!disponivel
-              ? "Indisponível"
-              : discount > 0
-                ? `−${discount}%`
-                : product.freteGratis
-                  ? "Frete grátis"
-                  : product.comboId != null
-                    ? "Combo"
-                    : "Oferta"}
-          </span>
-          <h3>
+          <h2>
             <button type="button" onClick={openProduct} disabled={!disponivel}>
               {product.name}
             </button>
-          </h3>
+          </h2>
           {product.description && (
             <p className="offer-description">{product.description}</p>
           )}
           <div className="offer-purchase">
             <div className="offer-prices">
+              <strong>{formatBRL(unit)}</strong>
               {hasProductPromo(product) && (
                 <del>{formatBRL(product.price)}</del>
               )}
-              <strong>{formatBRL(unit)}</strong>
+              {discount > 0 ? (
+                <span className="offer-benefit">{discount}% OFF</span>
+              ) : product.freteGratis ? (
+                <span className="offer-benefit">Frete grátis</span>
+              ) : null}
             </div>
             <button
               type="button"
               onClick={handlePrimary}
               disabled={!disponivel}
               className="offer-add"
+              title={
+                needsOptions
+                  ? `Escolher opções de ${product.name}`
+                  : `Adicionar ${product.name}`
+              }
               aria-label={
                 needsOptions
                   ? `Escolher opções de ${product.name}`
                   : `Adicionar ${product.name} à sacola`
               }
             >
-              {needsOptions ? (
-                "Escolher"
-              ) : (
-                <>
-                  <Plus size={16} aria-hidden="true" />
-                  <span>Adicionar</span>
-                </>
-              )}
+              <Plus size={19} aria-hidden="true" />
             </button>
           </div>
-          {product.freteGratisPrazo && (
+          {product.freteGratis && product.freteGratisPrazo && (
             <p className="offer-validity">{product.freteGratisPrazo}</p>
           )}
         </div>
