@@ -3,7 +3,7 @@ const values=new Map(),storage={getItem:key=>values.get(key)??null,setItem:(key,
 const location={href:''};let pushed='';
 const router={push:value=>pushed=value,refresh(){},back(){}};
 function load(file,states,imports){let index=0;const native=createRequire(path.resolve(file)),react={...native('react'),useState:initial=>[states(index++,initial),()=>{}],useEffect(){},useRef:initial=>({current:initial})};
- const mocks={'react':react,'next/navigation':{useRouter:()=>router},'sonner':{toast:{success(){},error(){},info(){}}},...imports};
+ const mocks={'@/actions/cliente-enderecos':{salvarEnderecoExistente:async()=>({sucesso:true})},'react':react,'next/navigation':{useRouter:()=>router},'sonner':{toast:{success(){},error(){},info(){}}},...imports};
  const req=name=>mocks[name]??(name.startsWith('@/components/ui/')?new Proxy({},{get:(_,key)=>String(key)}):name.startsWith('@/lib/utils/pedido')?{resolveSelectionsFromProduct:()=>[]}:native(name));
  const mod={exports:{}};
  new Function('require','module','exports','window','sessionStorage','fetch',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText)(req,mod,mod.exports,{location},storage,async()=>({ok:true,json:async()=>({})}));

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -12,20 +11,9 @@ import {
   Pencil,
   Settings2,
   ChevronRight,
-  Loader2,
   Phone,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import type { Endereco } from "@/types/endereco";
 import { useClientePedidos } from "@/hooks/useClientePedidos";
 
@@ -60,7 +48,6 @@ type MenuItem = {
 
 export function MeuPerfilView({
   cliente,
-  onRefresh,
   onSignOut,
 }: {
   cliente: ClienteFull;
@@ -69,47 +56,14 @@ export function MeuPerfilView({
 }) {
   const router = useRouter();
   const { pedidos, loading: loadingPedidos } = useClientePedidos(cliente.id);
-  const [editOpen, setEditOpen] = useState(false);
-  const [nome, setNome] = useState(cliente.nome || "");
-  const [telefone, setTelefone] = useState(cliente.telefone || "");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setNome(cliente.nome || "");
-    setTelefone(cliente.telefone || "");
-  }, [cliente]);
-
   const pedidosCount = pedidos.filter((p) => p.status !== "cancelado").length;
-
-  const handleSavePerfil = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/clientes/atualizar", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, telefone }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.erro || "Erro ao atualizar");
-        return;
-      }
-      toast.success("Dados atualizados");
-      setEditOpen(false);
-      await onRefresh();
-    } catch {
-      toast.error("Erro ao salvar");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const menuItems: MenuItem[] = [
     {
       label: "Dados pessoais",
       description: "Nome e telefone",
       icon: User,
-      onClick: () => setEditOpen(true),
+      onClick: () => router.push("/perfil/dados-pessoais"),
     },
     {
       href: "/perfil/enderecos",
@@ -150,7 +104,7 @@ export function MeuPerfilView({
             </div>
             <button
               type="button"
-              onClick={() => setEditOpen(true)}
+              onClick={() => router.push("/perfil/dados-pessoais")}
               className="absolute -bottom-0.5 -right-0.5 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
               aria-label="Editar perfil"
             >
@@ -169,7 +123,7 @@ export function MeuPerfilView({
           ) : (
             <button
               type="button"
-              onClick={() => setEditOpen(true)}
+              onClick={() => router.push("/perfil/dados-pessoais")}
               className="mt-1 text-sm font-medium text-primary"
             >
               Adicionar telefone
@@ -254,54 +208,6 @@ export function MeuPerfilView({
           </button>
         </motion.div>
       </div>
-
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="rounded-3xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Editar dados</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label htmlFor="nome">Nome</Label>
-              <Input
-                id="nome"
-                className="mt-1.5 h-11 rounded-xl"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="tel">Telefone</Label>
-              <Input
-                id="tel"
-                className="mt-1.5 h-11 rounded-xl"
-                value={telefone}
-                onChange={(e) => setTelefone(e.target.value)}
-                placeholder="(00) 00000-0000"
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              className="rounded-xl"
-              onClick={() => setEditOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="rounded-xl bg-primary"
-              disabled={saving || nome.trim().length < 3}
-              onClick={handleSavePerfil}
-            >
-              {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
