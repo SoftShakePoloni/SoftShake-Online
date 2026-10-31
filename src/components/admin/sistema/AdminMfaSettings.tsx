@@ -1,4 +1,5 @@
 "use client";
+import { mfaQrImageSource } from "@/lib/security/mfa-qr";
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -140,7 +141,7 @@ export function AdminMfaSettings() {
               code.
             </p>
             <Image
-              src={enrollment.qr}
+              src={mfaQrImageSource(enrollment.qr)}
               alt="QR code para cadastrar o autenticador da sua conta"
               width={200}
               height={200}
