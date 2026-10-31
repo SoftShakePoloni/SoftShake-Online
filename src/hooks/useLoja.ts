@@ -7,6 +7,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import { subscribeCatalogUpdates } from "@/lib/catalog-updates";
 import { PublicDataContext } from "@/context/PublicDataContext";
 
 export type ConfiguracoesLoja = {
@@ -42,9 +43,10 @@ type LojaStore = {
 const SERVER_SNAPSHOT: LojaStore = { loja: null, isLoading: true };
 let store = SERVER_SNAPSHOT;
 const listeners = new Set<() => void>();
-let bootstrapped = false;
+let stopUpdates: (() => void) | undefined;
 let inFlight: Promise<void> | null = null;
 let initialAt = 0;
+let reloadLoja = false;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -56,7 +58,7 @@ function setStore(partial: Partial<LojaStore>) {
 }
 
 async function loadLoja() {
-  if (inFlight) return inFlight;
+  if (inFlight) { reloadLoja = true; return inFlight; }
   inFlight = (async () => {
     try {
       const response = await fetch("/api/loja", { cache: "no-store" });
@@ -70,28 +72,19 @@ async function loadLoja() {
       setStore({ isLoading: false });
     } finally {
       inFlight = null;
+      if (reloadLoja) { reloadLoja = false; void loadLoja(); }
     }
   })();
   return inFlight;
 }
 
-function ensureLoaded() {
-  if (bootstrapped) return;
-  bootstrapped = true;
-  if (store.isLoading) void loadLoja();
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") void loadLoja();
-  });
-  // Polling reduzido de 60 segundos para 10 minutos (dados da loja mudam raramente)
-  window.setInterval(() => {
-    if (document.visibilityState === "visible") void loadLoja();
-  }, 10 * 60_000);
-}
-
 function subscribe(listener: () => void) {
-  ensureLoaded();
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  if (!stopUpdates) stopUpdates = subscribeCatalogUpdates(() => { void loadLoja(); });
+  return () => {
+    listeners.delete(listener);
+    if (!listeners.size) { stopUpdates?.(); stopUpdates = undefined; }
+  };
 }
 
 export function useLoja() {
@@ -120,7 +113,6 @@ export function useLoja() {
 
   useEffect(() => {
     primeInitialLoja();
-    ensureLoaded();
   }, [primeInitialLoja]);
 
   const snapshot = useSyncExternalStore(

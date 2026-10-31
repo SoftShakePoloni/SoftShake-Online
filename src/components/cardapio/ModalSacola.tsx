@@ -1,5 +1,7 @@
 "use client";
 
+import { useMenu } from "@/hooks/useCardapio";
+
 import { ShoppingBag, Trash2, X, Clock, ChevronRight, User, Phone, MapPin, CreditCard, Banknote, Home, Truck } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { StorageImage as Image } from "@/components/ui/storage-image";
@@ -41,7 +43,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const [validandoCupom, setValidandoCupom] = useState(false);
   const [erroCupom, setErroCupom] = useState("");
 
-  const temFreteGratis = itens.some((item) => item.produto.freteGratis);
+  const { categories: currentCategories, isLoading: menuLoading } = useMenu();
+  const temFreteGratis = itens.some(item => menuLoading ? item.produto.freteGratis : currentCategories.some(category => category.products.some(product => product.id === item.produto.id && product.disponivel !== false && product.freteGratis)));
   const frete = tipoEntrega === 'entrega' && !temFreteGratis ? (loja?.taxa_entrega ?? 3) : 0;
   const descontoCupom = cupomAplicado?.desconto ?? 0;
   const total = Math.max(0, subtotal - descontoCupom) + frete;

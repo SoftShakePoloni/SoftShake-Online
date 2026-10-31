@@ -62,7 +62,7 @@ export const GET = withApiGuard(
       });
 
       return apiOk({ optionGroups: [...optionGroups, notesOptionGroup] }, 200, {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        "Cache-Control": "no-store",
       });
     } catch (error) {
       return apiServerError(error);

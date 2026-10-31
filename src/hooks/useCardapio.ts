@@ -5,9 +5,9 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   useSyncExternalStore,
 } from "react";
+import { subscribeCatalogUpdates } from "@/lib/catalog-updates";
 import { PublicDataContext } from "@/context/PublicDataContext";
 import type { Category, Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
@@ -27,20 +27,13 @@ let store: MenuStore = {
 };
 
 const listeners = new Set<() => void>();
-let bootstrapped = false;
-let loadSeq = 0;
+let stopUpdates: (() => void) | undefined;
+let menuLoad: Promise<void> | null = null;
+let reloadMenu = false;
 let menuRequest: Promise<Category[]> | null = null;
-let promoCountRequest: Promise<number> | null = null;
-let menuCache: Category[] | null = null;
 let menuCacheAt = 0;
-let promoCountCache: number | null = null;
-let promoCountCacheAt = 0;
 
 function requestMenu() {
-  // Cache aumentado para 5 minutos (era 30 segundos)
-  if (menuCache && Date.now() - menuCacheAt < 5 * 60_000) {
-    return Promise.resolve(menuCache);
-  }
   if (!menuRequest) {
     menuRequest = fetch("/api/cardapio", { cache: "no-store" })
       .then(async (response) => {
@@ -49,7 +42,6 @@ function requestMenu() {
         const { categorias } = (await response.json()) as {
           categorias: Category[];
         };
-        menuCache = categorias;
         menuCacheAt = Date.now();
         return categorias;
       })
@@ -58,28 +50,6 @@ function requestMenu() {
       });
   }
   return menuRequest;
-}
-
-function requestPromoCount() {
-  // Cache aumentado para 5 minutos (era 30 segundos)
-  if (promoCountCache !== null && Date.now() - promoCountCacheAt < 5 * 60_000) {
-    return Promise.resolve(promoCountCache);
-  }
-  if (!promoCountRequest) {
-    promoCountRequest = fetch("/api/promocoes/contagem", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok)
-          throw new Error("Não foi possível contar as promoções.");
-        const data = (await response.json()) as { count: number };
-        promoCountCache = data.count;
-        promoCountCacheAt = Date.now();
-        return data.count;
-      })
-      .finally(() => {
-        promoCountRequest = null;
-      });
-  }
-  return promoCountRequest;
 }
 
 function emit() {
@@ -91,41 +61,33 @@ function setStore(partial: Partial<MenuStore>) {
   emit();
 }
 
-async function loadMenu() {
-  const seq = ++loadSeq;
-  try {
-    const menu = await requestMenu();
-    if (seq !== loadSeq) return;
-    setStore({ categories: menu, error: null, isLoading: false });
-  } catch (err: unknown) {
-    if (seq !== loadSeq) return;
-    const message =
-      err instanceof Error
-        ? err.message
-        : "Não foi possível carregar o cardápio.";
-    setStore({ error: message, isLoading: false });
-  }
+function loadMenu(): Promise<void> {
+  reloadMenu = true;
+  if (menuLoad) return menuLoad;
+  menuLoad = (async () => {
+    do {
+      reloadMenu = false;
+      try {
+        const menu = await requestMenu();
+        setStore({ categories: menu, error: null, isLoading: false });
+      } catch (err) {
+        setStore({ error: err instanceof Error ? err.message : "Não foi possível carregar o cardápio.", isLoading: false });
+      }
+    } while (reloadMenu);
+  })().finally(() => { menuLoad = null; });
+  return menuLoad;
 }
 
 function ensureMenuLoaded() {
-  if (bootstrapped) return;
-  bootstrapped = true;
-
-  if (store.isLoading) void loadMenu();
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") void loadMenu();
-  });
-  // Polling reduzido de 60 segundos para 5 minutos
-  window.setInterval(() => {
-    if (document.visibilityState === "visible") void loadMenu();
-  }, 5 * 60_000);
+  if (!stopUpdates) stopUpdates = subscribeCatalogUpdates(() => { void loadMenu(); });
 }
 
 function subscribe(listener: () => void) {
-  ensureMenuLoaded();
   listeners.add(listener);
+  ensureMenuLoaded();
   return () => {
     listeners.delete(listener);
+    if (!listeners.size) { stopUpdates?.(); stopUpdates = undefined; }
   };
 }
 
@@ -176,7 +138,6 @@ export function useMenu() {
   );
   const primeInitialMenu = useCallback(() => {
     if (initial?.categories && initial.generatedAt > menuCacheAt) {
-      menuCache = initial.categories;
       menuCacheAt = initial.generatedAt;
       store = {
         ...store,
@@ -197,7 +158,6 @@ export function useMenu() {
 
   useEffect(() => {
     primeInitialMenu();
-    ensureMenuLoaded();
   }, [primeInitialMenu]);
 
   const snap = useSyncExternalStore(
@@ -219,31 +179,6 @@ export function useMenu() {
 
 /** Quantidade de promoções ativas (para badge na navegação) */
 export function usePromocoesCount() {
-  const [count, setCount] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    const loadCount = async () => {
-      try {
-        const promoCount = await requestPromoCount();
-        if (active) setCount(promoCount);
-      } catch {
-        // A navegação continua funcional mesmo se o badge não puder atualizar.
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-    void loadCount();
-    // Polling reduzido de 60 segundos para 5 minutos
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void loadCount();
-    }, 5 * 60_000);
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  return { count, isLoading };
+  const { categories, isLoading } = useMenu();
+  return { count: countPromocoesAtivas(categories), isLoading };
 }
