@@ -1,15 +1,11 @@
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { StorageImage as Image } from "@/components/ui/storage-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { imageProxyUrl } from "@/lib/image/proxy-url";
 import "./auth.css";
 
-const LOGO = imageProxyUrl("Sorveteria/logo_loja.webp")!;
-const PRODUCT = imageProxyUrl("Sorveteria/banner-login.webp")!;
 type AuthError = {
   message: string;
   field?: "nome" | "telefone";
@@ -165,42 +161,9 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
         Pular para o formulário
       </a>
       <div className="auth-composition">
-        <aside
-          className="auth-art"
-          aria-label="SoftShake: açaí, sorvetes e milkshakes"
-        >
-          <header className="auth-identity">
-            <Image
-              src={LOGO}
-              alt="SoftShake"
-              width={1254}
-              height={1254}
-              sizes="(min-width: 1024px) 128px, 88px"
-              priority
-              className="auth-logo"
-            />
-          </header>
-          <figure className="auth-product">
-            <Image
-              src={PRODUCT}
-              alt="Açaís e milkshakes SoftShake"
-              width={2172}
-              height={724}
-              sizes="(min-width: 1024px) 53vw, 100vw"
-              quality={90}
-              priority
-            />
-          </figure>
-        </aside>
         <section className="auth-main" aria-labelledby="auth-title">
-          <Link href="/" className="auth-back">
-            <ArrowLeft aria-hidden="true" size={16} />
-            <span>Voltar ao cardápio</span>
-          </Link>
           <div className="auth-heading">
-            <h1 id="auth-title">
-              {registering ? "Crie sua conta" : "Entre ou cadastre-se"}
-            </h1>
+            <h1 id="auth-title">{registering ? "Crie sua conta" : "Entrar"}</h1>
           </div>
           <form
             id="auth-form"
