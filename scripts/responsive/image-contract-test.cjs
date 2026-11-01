@@ -36,10 +36,31 @@ function load(file, mocks = {}) {
   assert.match(processed.filename, /^acai-original-\d{13}\.webp$/);
   assert.equal(await sharp(original).metadata().then(m => m.width), 1600, 'Input was not replaced');
   let uploaded;
-  const { uploadImageToStorage } = load('src/lib/image/upload.ts', { '@/integrations/supabase/client.server': { createServiceRoleClient: () => ({ storage: { from: () => ({ upload: async (path, buffer, config) => { uploaded = { path, buffer, config }; return { data: { path } }; }, getPublicUrl: path => ({ data: { publicUrl: path } }) }) } }) } });
+  const { uploadImageToStorage } = load('src/lib/image/upload.ts', { '@/integrations/supabase/client.server': { createServiceRoleClient: () => ({ storage: { from: bucket => { assert.equal(bucket, 'SoftShake Images'); return ({ upload: async (path, buffer, config) => { uploaded = { path, buffer, config }; return { data: { path } }; }, getPublicUrl: path => ({ data: { publicUrl: path } }) }); } } }) } });
   await uploadImageToStorage(processed.buffer, processed.filename);
   assert.equal(uploaded.config.upsert, false);
   assert.equal(uploaded.config.contentType, 'image/webp');
   assert.equal(uploaded.config.cacheControl, '31536000');
+
+  assert.match(uploaded.path, /^Produtos\//);
+  await uploadImageToStorage(processed.buffer, 'logo-123.webp', 'Sorveteria');
+  assert.equal(uploaded.path, 'Sorveteria/logo-123.webp');
+  let denied=false, received=[];
+  const { POST }=load('src/app/api/upload/loja-imagem/route.ts', {
+    '@/lib/security/with-api-guard': { withApiGuard: (_options, handler)=>handler },
+    '@/lib/security/rate-limit': { RATE_LIMITS: { mutation: {} } },
+    '@/lib/admin/auth': { requirePermissionApi: async permission=>{assert.equal(permission,'config:write');if(denied)throw Error('FORBIDDEN');} },
+    '@/lib/image/upload': { uploadImageToStorage: async(buffer,name,folder)=>{received.push({name,folder,meta:await sharp(buffer).metadata()});return {path:folder+'/'+name};} },
+  });
+  const request=(type,file)=>{const form=new FormData();form.append('type',type);if(file)form.append('image',file);return {formData:async()=>form};};
+  const file=new File([original],'banner.png',{type:'image/png'});
+  let response=await POST(request('banner',file));assert.equal(response.status,201);const body=await response.json();assert.match(body.path,/^Sorveteria\/banner-\d+\.webp$/);assert.equal(received[0].folder,'Sorveteria');assert.equal(received[0].meta.width,1600);assert.equal(received[0].meta.height,800);assert.equal(received[0].meta.hasAlpha,true);
+  response=await POST(request('logo',file));assert.equal(response.status,201);assert.equal(received[1].meta.width,1200);assert.equal(received[1].meta.height,600);
+  const count=received.length;
+  assert.equal((await POST(request('unknown',file))).status,400);
+  assert.equal((await POST(request('logo',new File(['x'],'bad.svg',{type:'image/svg+xml'})))).status,400);
+  assert.equal((await POST(request('logo',null))).status,400);
+  denied=true;assert.equal((await POST(request('logo',file))).status,403);assert.equal(received.length,count,'invalid or unauthorized upload must never write to storage');
+  console.log('Store upload passed: logo/banner go to Sorveteria, preserve proportions/alpha, reject invalid input and require config permission. No live Storage writes.');
   console.log('Image contracts passed: stable URLs, concurrent-source deduplication, version-safe cache, one Sharp version, alpha/aspect preservation and mocked upload without overwrite. No Storage writes.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

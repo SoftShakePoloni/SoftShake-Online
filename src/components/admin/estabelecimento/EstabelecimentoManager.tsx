@@ -25,7 +25,7 @@ import {
   parseDiasFuncionamento,
 } from "@/types/configuracoes";
 import { updateConfiguracoesLoja } from "@/actions/admin/configuracoes";
-import { createClient } from "@/lib/supabase/client";
+import { uploadStoreImage } from "@/lib/image/upload-store.client";
 import { cn } from "@/lib/utils";
 
 /** Cor principal da loja */
@@ -66,7 +66,7 @@ function Panel({
     <div
       className={cn(
         "overflow-hidden rounded-md border border-[#E5E7EB] bg-white",
-        className
+        className,
       )}
     >
       {children}
@@ -92,7 +92,7 @@ function Row({
       className={cn(
         "admin-settings-row px-4 sm:px-6 py-4 min-h-[64px]",
         align === "center" ? "items-center" : "items-start",
-        !last && "border-b border-[#E5E7EB]"
+        !last && "border-b border-[#E5E7EB]",
       )}
     >
       <div className="min-w-0">
@@ -105,9 +105,7 @@ function Row({
           </p>
         ) : null}
       </div>
-      <div className="admin-settings-value">
-        {children}
-      </div>
+      <div className="admin-settings-value">{children}</div>
     </div>
   );
 }
@@ -132,7 +130,7 @@ function BrandSwitch({
       className={cn(
         "h-5 w-9 shrink-0",
         "data-[state=checked]:bg-[#4C258C] data-[state=unchecked]:bg-[#D1D5DB]",
-        "[&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+        "[&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4",
       )}
     />
   );
@@ -168,7 +166,7 @@ export function EstabelecimentoManager({
       try {
         const data = await updateConfiguracoesLoja(config.id, patch);
         const normalized = normalizeConfiguracao(
-          data as Record<string, unknown>
+          data as Record<string, unknown>,
         );
         setConfig((prev) => ({
           ...prev,
@@ -187,7 +185,7 @@ export function EstabelecimentoManager({
         setSaving(false);
       }
     },
-    [config.id]
+    [config.id],
   );
 
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,7 +194,7 @@ export function EstabelecimentoManager({
   const queueField = useCallback(
     (
       field: keyof ConfiguracaoLoja,
-      value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+      value: ConfiguracaoLoja[keyof ConfiguracaoLoja],
     ) => {
       setConfig((prev) => ({ ...prev, [field]: value }));
       pendingPatch.current = { ...pendingPatch.current, [field]: value };
@@ -207,18 +205,18 @@ export function EstabelecimentoManager({
         void persist(p);
       }, 450);
     },
-    [persist]
+    [persist],
   );
 
   const setFieldNow = useCallback(
     (
       field: keyof ConfiguracaoLoja,
-      value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+      value: ConfiguracaoLoja[keyof ConfiguracaoLoja],
     ) => {
       setConfig((prev) => ({ ...prev, [field]: value }));
       void persist({ [field]: value } as Partial<ConfiguracaoLoja>);
     },
-    [persist]
+    [persist],
   );
 
   useEffect(() => {
@@ -236,64 +234,29 @@ export function EstabelecimentoManager({
   };
 
   const handleUpload = async (file: File, type: "logo" | "banner") => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Apenas imagens são permitidas");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Imagem muito grande (máximo 5MB)");
-      return;
-    }
-
-    const setUploading = type === "logo" ? setUploadingLogo : setUploadingBanner;
+    if (uploadingLogo || uploadingBanner) return;
+    const setUploading =
+      type === "logo" ? setUploadingLogo : setUploadingBanner;
     setUploading(true);
-    const supabase = createClient();
-
     try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${type}-${Date.now()}.${fileExt}`;
-      const filePath = `configuracoes/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("images")
-        .upload(filePath, file, { cacheControl: "3600", upsert: false });
-
-      if (uploadError) throw uploadError;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("images").getPublicUrl(filePath);
-
-      const oldUrl = type === "logo" ? config.logo_url : config.banner_url;
-      if (oldUrl) {
-        const oldPath = oldUrl.split("/").slice(-2).join("/");
-        await supabase.storage.from("images").remove([oldPath]);
-      }
-
+      const path = await uploadStoreImage(file, type);
       const field = type === "logo" ? "logo_url" : "banner_url";
-      setConfig((prev) => ({ ...prev, [field]: publicUrl }));
-      await persist({ [field]: publicUrl });
+      await persist({ [field]: path });
     } catch (error) {
-      console.error("Erro ao fazer upload:", error);
-      toast.error("Erro ao fazer upload");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar a imagem.",
+      );
     } finally {
       setUploading(false);
     }
   };
 
   const handleRemoveImage = async (type: "logo" | "banner") => {
-    const url = type === "logo" ? config.logo_url : config.banner_url;
-    if (!url) return;
-    try {
-      const supabase = createClient();
-      const oldPath = url.split("/").slice(-2).join("/");
-      await supabase.storage.from("images").remove([oldPath]);
-      const field = type === "logo" ? "logo_url" : "banner_url";
-      setConfig((prev) => ({ ...prev, [field]: null }));
-      await persist({ [field]: null });
-    } catch {
-      toast.error("Erro ao remover imagem");
-    }
+    if (uploadingLogo || uploadingBanner) return;
+    const field = type === "logo" ? "logo_url" : "banner_url";
+    await persist({ [field]: null });
   };
 
   return (
@@ -316,13 +279,9 @@ export function EstabelecimentoManager({
                       "w-full rounded px-3 py-2 text-left text-sm transition-colors",
                       active
                         ? "font-medium text-[#4C258C]"
-                        : "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]"
+                        : "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]",
                     )}
-                    style={
-                      active
-                        ? { backgroundColor: BRAND_SOFT }
-                        : undefined
-                    }
+                    style={active ? { backgroundColor: BRAND_SOFT } : undefined}
                   >
                     {s.label}
                   </button>
@@ -395,7 +354,7 @@ export function EstabelecimentoManager({
                     rows={3}
                     className={cn(
                       fieldClass,
-                      "h-auto min-h-[80px] resize-none py-2"
+                      "h-auto min-h-[80px] resize-none py-2",
                     )}
                   />
                 </Row>
@@ -427,7 +386,7 @@ export function EstabelecimentoManager({
               <Panel>
                 <Row
                   title="Logo"
-                  description="Recomendado: 512×512px, PNG ou JPG até 5MB."
+                  description="Recomendado: 512×512px, JPEG, PNG, WebP ou GIF até 10MB."
                   align="start"
                 >
                   <div className="w-full max-w-[420px] space-y-2">
@@ -483,12 +442,12 @@ export function EstabelecimentoManager({
                     <input
                       id="logo-input"
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       className="hidden"
                       onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          void handleUpload(e.target.files[0], "logo");
-                        }
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void handleUpload(file, "logo");
                       }}
                     />
                   </div>
@@ -553,12 +512,12 @@ export function EstabelecimentoManager({
                     <input
                       id="banner-input"
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
                       className="hidden"
                       onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          void handleUpload(e.target.files[0], "banner");
-                        }
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) void handleUpload(file, "banner");
                       }}
                     />
                   </div>
@@ -624,7 +583,7 @@ export function EstabelecimentoManager({
                       const q = `${config.endereco}, ${config.cidade}, ${config.estado || ""}`;
                       window.open(
                         `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`,
-                        "_blank"
+                        "_blank",
                       );
                     }}
                     className="h-9 border-[#E5E7EB] text-sm hover:border-[#4C258C]/40 hover:text-[#4C258C]"
@@ -642,7 +601,11 @@ export function EstabelecimentoManager({
               <SectionTitle>Contato</SectionTitle>
               <SectionHint>Telefone e redes sociais da loja.</SectionHint>
               <Panel>
-                <Row title="Telefone" description="Número principal." align="start">
+                <Row
+                  title="Telefone"
+                  description="Número principal."
+                  align="start"
+                >
                   <Input
                     value={config.telefone || ""}
                     disabled={saving}
@@ -664,7 +627,11 @@ export function EstabelecimentoManager({
                     className={fieldClass}
                   />
                 </Row>
-                <Row title="Instagram" description="@perfil ou URL." align="start">
+                <Row
+                  title="Instagram"
+                  description="@perfil ou URL."
+                  align="start"
+                >
                   <Input
                     value={config.instagram || ""}
                     disabled={saving}
@@ -673,7 +640,12 @@ export function EstabelecimentoManager({
                     className={fieldClass}
                   />
                 </Row>
-                <Row title="Facebook" description="URL da página." align="start" last>
+                <Row
+                  title="Facebook"
+                  description="URL da página."
+                  align="start"
+                  last
+                >
                   <Input
                     value={config.facebook || ""}
                     disabled={saving}
@@ -706,7 +678,11 @@ export function EstabelecimentoManager({
                       className={cn(fieldClass, "max-w-[160px]")}
                     />
                   </Row>
-                  <Row title="Fechamento" description="Horário de fechamento." last>
+                  <Row
+                    title="Fechamento"
+                    description="Horário de fechamento."
+                    last
+                  >
                     <Input
                       type="time"
                       value={config.horario_fechamento || ""}
@@ -766,7 +742,7 @@ export function EstabelecimentoManager({
                         "taxa_entrega",
                         e.target.value === ""
                           ? null
-                          : parseFloat(e.target.value)
+                          : parseFloat(e.target.value),
                       )
                     }
                     placeholder="0,00"
@@ -788,7 +764,7 @@ export function EstabelecimentoManager({
                         "pedido_minimo",
                         e.target.value === ""
                           ? null
-                          : parseFloat(e.target.value)
+                          : parseFloat(e.target.value),
                       )
                     }
                     placeholder="0,00"
@@ -809,7 +785,7 @@ export function EstabelecimentoManager({
                         "tempo_entrega_min",
                         e.target.value === ""
                           ? null
-                          : parseInt(e.target.value, 10)
+                          : parseInt(e.target.value, 10),
                       )
                     }
                     placeholder="30"
@@ -831,7 +807,7 @@ export function EstabelecimentoManager({
                         "tempo_entrega_max",
                         e.target.value === ""
                           ? null
-                          : parseInt(e.target.value, 10)
+                          : parseInt(e.target.value, 10),
                       )
                     }
                     placeholder="45"

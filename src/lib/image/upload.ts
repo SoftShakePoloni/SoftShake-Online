@@ -22,12 +22,13 @@ export interface UploadResult {
  */
 export async function uploadImageToStorage(
   buffer: Buffer,
-  filename: string
+  filename: string,
+  folder: "Produtos" | "Sorveteria" = PRODUTOS_FOLDER,
 ): Promise<UploadResult> {
   const supabase = createServiceRoleClient();
 
   // Path completo no storage
-  const storagePath = `${PRODUTOS_FOLDER}/${filename}`;
+  const storagePath = `${folder}/${filename}`;
 
   try {
     // Upload para o bucket
@@ -49,9 +50,9 @@ export async function uploadImageToStorage(
     }
 
     // Retorna o path e URL pública (nota: bucket é privado, então URL precisa de signed URL)
-    const { data: { publicUrl } } = supabase.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(storagePath);
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(BUCKET_NAME).getPublicUrl(storagePath);
 
     return {
       path: data.path,
@@ -74,9 +75,7 @@ export async function deleteImageFromStorage(path: string): Promise<void> {
   const supabase = createServiceRoleClient();
 
   try {
-    const { error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .remove([path]);
+    const { error } = await supabase.storage.from(BUCKET_NAME).remove([path]);
 
     if (error) {
       console.error("Erro ao remover imagem:", error);
