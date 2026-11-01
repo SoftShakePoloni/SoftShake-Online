@@ -175,42 +175,38 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
               alt="SoftShake"
               width={1920}
               height={810}
-              sizes="(min-width: 1024px) 210px, 160px"
+              sizes="(min-width: 1024px) 240px, (min-width: 600px) 180px, 155px"
               priority
               className="auth-logo"
             />
-            <Link href="/" className="auth-back">
-              <ArrowLeft aria-hidden="true" size={16} />
-              <span>Cardápio</span>
-            </Link>
           </header>
-          <p className="auth-art-copy" aria-hidden="true">
-            Do seu
-            <br />
-            jeito.
-          </p>
           <figure className="auth-product">
             <Image
               src={PRODUCT}
               alt="Açaí SoftShake com morango, granola e acompanhamentos"
               width={1619}
               height={972}
-              sizes="(min-width: 1024px) 65vw, 620px"
+              sizes="(min-width: 1024px) 560px, (min-width: 600px) 360px, 300px"
               quality={90}
               priority
             />
           </figure>
-          <p className="auth-signature">Açaí. Sorvete. Milkshake.</p>
         </aside>
         <section className="auth-main" aria-labelledby="auth-title">
+          <Link href="/" className="auth-back">
+            <ArrowLeft aria-hidden="true" size={16} />
+            <span>Voltar ao cardápio</span>
+          </Link>
           <div className="auth-heading">
             <h1 id="auth-title">
-              {registering ? "Vamos começar." : "Entre e aproveite."}
+              {registering
+                ? "Seu próximo favorito começa aqui."
+                : "Bateu vontade de um SoftShake?"}
             </h1>
             <p>
               {registering
-                ? "Crie sua conta com nome e telefone."
-                : "Seu telefone é o caminho para o próximo pedido."}
+                ? "Preencha seus dados e aproveite a SoftShake."
+                : "Entre com seu telefone para continuar."}
             </p>
           </div>
           <form
@@ -229,7 +225,7 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
                   name="nome"
                   autoComplete="name"
                   autoCapitalize="words"
-                  placeholder="Seu nome completo"
+                  placeholder="Como podemos te chamar?"
                   value={nome}
                   onChange={(event) => {
                     setNome(event.target.value);
@@ -246,7 +242,7 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
               </div>
             )}
             <div className="auth-field">
-              <label htmlFor="auth-phone">Telefone</label>
+              <label htmlFor="auth-phone">Celular</label>
               <Input
                 ref={phoneRef}
                 id="auth-phone"
@@ -254,7 +250,7 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel-national"
-                placeholder="(17) 99999-9999"
+                placeholder="(DDD) 99999-9999"
                 value={formatAuthPhone(telefone)}
                 onChange={(event) => changePhone(event.target.value)}
                 required
@@ -283,9 +279,8 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
                   ? "Criando conta…"
                   : "Entrando…"
                 : registering
-                  ? "Criar conta"
-                  : "Entrar"}
-              {!busy && <span className="auth-cta-arrow" aria-hidden="true">↗</span>}
+                  ? "Criar minha conta"
+                  : "Continuar"}
             </button>
             <p className="auth-status" role="status" aria-live="polite">
               {status}
@@ -294,10 +289,10 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
           {!error?.register && (
             <nav className="auth-switch" aria-label="Acesso à conta">
               <span>
-                {registering ? "Já tem uma conta?" : "Primeira vez por aqui?"}
+                {registering ? "Já tem uma conta?" : "Ainda não tem uma conta?"}
               </span>
               <Link href={registering ? "/entrar" : "/cadastrar"}>
-                {registering ? "Entrar" : "Criar conta"}
+                {registering ? "Entrar" : "Cadastre-se"}
               </Link>
             </nav>
           )}
