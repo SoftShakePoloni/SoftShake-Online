@@ -17,60 +17,48 @@
   min-height: 100svh;
 }
 .auth-art {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  height: clamp(220px, 34svh, 310px);
-  padding: max(8px, env(safe-area-inset-top)) 24px 24px;
+  padding: max(16px, env(safe-area-inset-top)) 0 32px;
   background: #f2ecf8;
   overflow: hidden;
-}
-.auth-art::after {
-  content: "";
-  position: absolute;
-  bottom: -19px;
-  left: -10%;
-  width: 120%;
-  height: 40px;
-  border-radius: 50% 50% 0 0;
-  background: var(--auth-paper);
+  border-radius: 0 0 50% 50% / 0 0 32px 32px;
 }
 .auth-identity {
-  flex: 0 0 auto;
+  padding: 0 24px 16px;
 }
 .auth-logo {
   display: block;
-  width: 155px;
-  height: auto;
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  border-radius: 50%;
 }
 .auth-product {
   margin: 0;
-  width: min(300px, 100%);
-  min-height: 0;
+  width: 100%;
 }
+/* Keep the whole supplied artwork above the curved edge, without cropping. */
 .auth-product img {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 190px;
   object-fit: contain;
-  border-radius: 12px;
 }
 .auth-main {
   width: 100%;
   max-width: 468px;
   margin: 0 auto;
-  padding: 12px 24px max(24px, env(safe-area-inset-bottom));
+  padding: 8px 24px max(24px, env(safe-area-inset-bottom));
 }
 .auth-back {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   color: var(--auth-muted);
   font-size: 12px;
   text-decoration: none;
@@ -79,11 +67,12 @@
   color: var(--auth-purple);
 }
 .auth-heading {
-  margin-bottom: 24px;
+  margin-bottom: 26px;
+  text-align: center;
 }
 .auth-heading h1 {
   margin: 0;
-  font-size: clamp(27px, 7vw, 32px);
+  font-size: 28px;
   font-weight: 750;
   letter-spacing: -1px;
   line-height: 1.16;
@@ -256,23 +245,18 @@
     transform: rotate(360deg);
   }
 }
+
+.auth-heading {
+  text-align: center;
+  margin-bottom: 26px;
+}
 @media (min-width: 600px) and (max-width: 1023px) {
   .auth-art {
-    height: 34svh;
-    min-height: 270px;
-    max-height: 360px;
-  }
-  .auth-logo {
-    width: 180px;
-  }
-  .auth-product {
-    width: 360px;
-  }
-  .auth-product img {
-    max-height: 216px;
+    max-width: 720px;
+    margin-inline: auto;
   }
   .auth-main {
-    padding-top: 24px;
+    padding-top: 20px;
   }
 }
 @media (min-width: 1024px) {
@@ -281,23 +265,17 @@
     grid-template-columns: minmax(0, 1.1fr) minmax(420px, 1fr);
   }
   .auth-art {
-    height: auto;
     min-height: 100svh;
-    padding: 64px 48px;
-    gap: 32px;
+    padding: 48px 0 64px;
+    gap: 40px;
+    border-radius: 0 0 50% 50% / 0 0 64px 64px;
   }
-  .auth-art::after {
-    display: none;
+  .auth-identity {
+    padding-bottom: 0;
   }
   .auth-logo {
-    width: 240px;
-  }
-  .auth-product {
-    width: min(560px, 100%);
-  }
-  .auth-product img {
-    max-height: none;
-    border-radius: 18px;
+    width: 128px;
+    height: 128px;
   }
   .auth-main {
     align-self: center;
@@ -307,34 +285,29 @@
   .auth-back {
     margin-bottom: 28px;
   }
-  .auth-heading {
-    margin-bottom: 32px;
-  }
   .auth-heading h1 {
-    font-size: 38px;
-    letter-spacing: -1.3px;
+    font-size: 32px;
   }
   .auth-form {
     gap: 22px;
   }
 }
-@media (max-width: 359px), (max-height: 700px) and (max-width: 599px) {
+@media (max-height: 700px) and (max-width: 599px) {
   .auth-art {
-    height: 210px;
-    padding-bottom: 20px;
-    gap: 0;
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: 24px;
+    border-bottom-left-radius: 50% 24px;
+    border-bottom-right-radius: 50% 24px;
   }
   .auth-logo {
-    width: 130px;
+    width: 68px;
+    height: 68px;
   }
-  .auth-product {
-    width: 240px;
-  }
-  .auth-main {
-    padding: 4px 20px 24px;
+  .auth-identity {
+    padding-bottom: 10px;
   }
   .auth-back {
-    margin-bottom: 6px;
+    margin-bottom: 8px;
   }
   .auth-heading {
     margin-bottom: 18px;
@@ -346,9 +319,6 @@
     gap: 14px;
   }
   .auth-switch {
-    margin-top: 10px;
-  }
-  .auth-terms {
     margin-top: 10px;
   }
 }

@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { imageProxyUrl } from "@/lib/image/proxy-url";
 import "./auth.css";
 
-const LOGO = imageProxyUrl("Sorveteria/softshake_text.png")!;
-const PRODUCT = imageProxyUrl("Produtos/banner_acai.webp")!;
+const LOGO = imageProxyUrl("Sorveteria/logo_loja.webp")!;
+const PRODUCT = imageProxyUrl("Sorveteria/banner-login.webp")!;
 type AuthError = {
   message: string;
   field?: "nome" | "telefone";
@@ -173,9 +173,9 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
             <Image
               src={LOGO}
               alt="SoftShake"
-              width={1920}
-              height={810}
-              sizes="(min-width: 1024px) 240px, (min-width: 600px) 180px, 155px"
+              width={1254}
+              height={1254}
+              sizes="(min-width: 1024px) 128px, 88px"
               priority
               className="auth-logo"
             />
@@ -183,10 +183,10 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
           <figure className="auth-product">
             <Image
               src={PRODUCT}
-              alt="Açaí SoftShake com morango, granola e acompanhamentos"
-              width={1619}
-              height={972}
-              sizes="(min-width: 1024px) 560px, (min-width: 600px) 360px, 300px"
+              alt="Açaís e milkshakes SoftShake"
+              width={2172}
+              height={724}
+              sizes="(min-width: 1024px) 53vw, 100vw"
               quality={90}
               priority
             />
@@ -199,15 +199,8 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
           </Link>
           <div className="auth-heading">
             <h1 id="auth-title">
-              {registering
-                ? "Seu próximo favorito começa aqui."
-                : "Bateu vontade de um SoftShake?"}
+              {registering ? "Crie sua conta" : "Entre ou cadastre-se"}
             </h1>
-            <p>
-              {registering
-                ? "Preencha seus dados e aproveite a SoftShake."
-                : "Entre com seu telefone para continuar."}
-            </p>
           </div>
           <form
             id="auth-form"
@@ -262,7 +255,9 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
                     : "auth-phone-help"
                 }
               />
-              <p id="auth-phone-help">Informe o número com DDD.</p>
+              <p id="auth-phone-help" className="sr-only">
+                Informe o número com DDD.
+              </p>
             </div>
             {error && (
               <div id="auth-error" className="auth-error" role="alert">
