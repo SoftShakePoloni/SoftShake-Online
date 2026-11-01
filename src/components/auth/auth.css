@@ -1,4 +1,5 @@
 .customer-auth {
+  position: relative;
   --auth-purple: var(--primary, #4c258c);
   --auth-ink: #29232f;
   --auth-muted: #706879;
@@ -17,7 +18,7 @@
   min-height: 100svh;
   display: flex;
   align-items: center;
-  padding: max(16px, env(safe-area-inset-top)) 0
+  padding: max(72px, calc(env(safe-area-inset-top) + 60px)) 0
     max(24px, env(safe-area-inset-bottom));
 }
 .auth-main {
@@ -221,4 +222,21 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+.auth-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--auth-purple);
+  background: #f2ecf8;
+}
+.auth-close:hover {
+  background: #e9e0f3;
 }
