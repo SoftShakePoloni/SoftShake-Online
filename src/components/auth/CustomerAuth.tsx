@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import "./auth.css";
 
@@ -160,6 +160,13 @@ export function CustomerAuth({ mode }: { mode: "entrar" | "cadastrar" }) {
       <a className="auth-skip" href="#auth-form">
         Pular para o formulário
       </a>
+      <Link
+        href="/"
+        className="auth-close"
+        aria-label="Fechar e voltar ao cardápio"
+      >
+        <X size={22} aria-hidden="true" />
+      </Link>
       <div className="auth-composition">
         <section className="auth-main" aria-labelledby="auth-title">
           <div className="auth-heading">
