@@ -1,6 +1,6 @@
 "use client";
 
-import { ShoppingBag, Store } from "lucide-react";
+import { ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
@@ -19,7 +19,6 @@ export function BarraSacola() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const lojaConfirmada = !isLoading && !!loja && !error;
-  const lojaAberta = lojaConfirmada && loja!.esta_aberto;
 
   // Fecha a sacola ao navegar pela bottom bar (sem precisar do X)
   useEffect(() => {
@@ -34,12 +33,6 @@ export function BarraSacola() {
       void refresh();
       return;
     }
-    if (!lojaAberta) {
-      toast.error("Loja fechada", {
-        description: "No momento não estamos aceitando pedidos.",
-      });
-      return;
-    }
     setOpen(true);
   };
 
@@ -47,7 +40,7 @@ export function BarraSacola() {
     <>
       {!open && (
         <div className="fixed bottom-16 inset-x-0 z-[60] px-4 pb-2 md:bottom-4 md:z-50">
-          {lojaAberta ? (
+          {lojaConfirmada ? (
             <button
               onClick={handleOpen}
               className="flex w-full items-center justify-between gap-3 rounded-xl bg-primary px-4 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg transition hover:opacity-95"
@@ -61,7 +54,7 @@ export function BarraSacola() {
               </span>
               <span>{formatBRL(subtotal)}</span>
             </button>
-          ) : !lojaConfirmada ? (
+          ) : (
             <button
               type="button"
               disabled={isLoading}
@@ -72,16 +65,11 @@ export function BarraSacola() {
                 ? "Verificando funcionamento da loja…"
                 : "Não foi possível verificar a loja. Tentar novamente"}
             </button>
-          ) : (
-            <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-muted border border-border px-4 py-3.5 text-sm font-semibold text-muted-foreground shadow-lg">
-              <Store className="h-4 w-4" />
-              Loja fechada — não é possível finalizar pedidos
-            </div>
           )}
         </div>
       )}
 
-      <ModalSacola open={open && lojaAberta} onOpenChange={setOpen} />
+      <ModalSacola open={open} onOpenChange={setOpen} />
     </>
   );
 }

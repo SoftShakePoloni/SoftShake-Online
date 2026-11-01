@@ -9,5 +9,16 @@ test('checkout distinguishes a loading or failed store lookup from a confirmed c
  assert.ok(!text(BarraSacola()).includes('Loja fechada'));const action=()=>find(ModalSacola({open:true,onOpenChange(){}}),node=>node.type==='button'&&/^(Confirmar informações|Verificando loja…|Loja fechada)$/.test(text(node))).props.onClick();action();assert.equal(errors.length,0);assert.equal(notices.length,1);assert.ok(!changes.includes('info'));
  shop={...shop,isLoading:false,error:'offline'};assert.ok(!text(BarraSacola()).includes('Loja fechada'));action();assert.equal(errors.length,0);
  shop={...shop,loja:{esta_aberto:true},error:null};action();assert.ok(changes.includes('info'));assert.ok(text(BarraSacola()).includes('Ver sacola'));
- shop={...shop,loja:{esta_aberto:false}};action();assert.equal(errors.at(-1),'Loja fechada');assert.ok(text(BarraSacola()).includes('Loja fechada'));
+ shop={...shop,loja:{esta_aberto:false}};action();assert.equal(errors.at(-1),'Loja fechada');assert.ok(text(BarraSacola()).includes('Ver sacola'));const closedButton=find(ModalSacola({open:true,onOpenChange(){}}),node=>node.type==='button'&&text(node)==='Loja fechada');assert.equal(closedButton.props.disabled,true);
+});
+
+test('closed store has one banner notice and product details remain available',()=>{
+ const React=require('react');let shop={loja:{nome:'SoftShake',esta_aberto:false,horario_abertura:'13:45'},isLoading:false,error:null},changes=[];
+ const mocks={react:{...React,useState:v=>[v,n=>changes.push(n)]},'next/dynamic':{__esModule:true,default:()=> 'Dialog'},'@/hooks/useModalHistory':{useModalHistory(){}},'@/hooks/useLoja':{useLoja:()=>shop},'@/components/ui/storage-image':{StorageImage:'img'},'@/data/tipos':{formatBRL:String,hasProductPromo:()=>false},'@/components/ui/TagBadge':{TagBadge:'TagBadge'},'@/components/ui/FreteGratisBadge':{FreteGratisBadge:'FreteGratisBadge'},'@/lib/utils':{cn:(...v)=>v.join(' ')},'./PrecoProduto':{PrecoProduto:'PrecoProduto'}};
+ const {StoreHero}=load('src/components/cardapio/HeroLoja.tsx',mocks);
+ let hero=StoreHero();assert.match(text(hero),/Loja fechadaAbre às 13:45/);assert.ok(!text(hero).includes('Loja fechada no momento'));assert.ok(!text(hero).includes('Aberto agora'));
+ shop={...shop,isLoading:true};assert.ok(!text(StoreHero()).includes('Loja fechada'));assert.ok(!text(StoreHero()).includes('Aberto agora'));
+ shop={...shop,isLoading:false,error:'offline'};assert.ok(!text(StoreHero()).includes('Loja fechada'));
+ shop={...shop,error:null,loja:{...shop.loja,esta_aberto:true}};assert.ok(text(StoreHero()).includes('Aberto agora'));assert.ok(!text(StoreHero()).includes('Loja fechada'));
+ const {ProductCard}=load('src/components/cardapio/CardProduto.tsx',mocks);const card=ProductCard({product:{id:'1',name:'Açaí',price:20}});const trigger=find(card,node=>node.type==='article');assert.equal(trigger.props['aria-disabled'],false);trigger.props.onClick();assert.ok(changes.includes(true));
 });

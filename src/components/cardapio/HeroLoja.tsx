@@ -4,18 +4,22 @@ import { useState } from "react";
 import { useModalHistory } from "@/hooks/useModalHistory";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 import dynamic from "next/dynamic";
-import { Bike, ChevronRight, MapPin } from "lucide-react";
+import { Bike, ChevronRight, MapPin, Store } from "lucide-react";
 import { useLoja } from "@/hooks/useLoja";
 import { formatBRL } from "@/data/tipos";
-const ModalInfoLoja=dynamic(()=>import("./ModalInfoLoja").then(module=>module.ModalInfoLoja));
+const ModalInfoLoja = dynamic(() =>
+  import("./ModalInfoLoja").then((module) => module.ModalInfoLoja),
+);
 
 export function StoreHero() {
-  const { loja, isLoading } = useLoja();
+  const { loja, isLoading, error } = useLoja();
   const [infoOpen, setInfoOpen] = useState(false);
   useModalHistory(infoOpen, setInfoOpen);
   const nome = loja?.nome ?? "SoftShake";
   const localizacao = [loja?.cidade, loja?.estado].filter(Boolean).join(", ");
-  const estaAberto = isLoading ? true : (loja?.esta_aberto ?? false);
+  const lojaConfirmada = !isLoading && !!loja && !error;
+  const estaAberto = lojaConfirmada && loja!.esta_aberto;
+  const estaFechado = lojaConfirmada && !loja!.esta_aberto;
   const banner = loja?.banner_url ?? null;
   const logo = loja?.logo_url ?? null;
   const minimo = Number(loja?.pedido_minimo ?? 0);
@@ -50,6 +54,28 @@ export function StoreHero() {
             className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-black/5"
             aria-hidden="true"
           />
+          {estaFechado && (
+            <div
+              role="status"
+              className="absolute inset-0 flex items-center gap-4 bg-black/65 px-6 pb-6 text-white sm:gap-5 sm:px-10"
+            >
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/80 sm:h-16 sm:w-16">
+                <Store
+                  aria-hidden="true"
+                  className="h-7 w-7"
+                  strokeWidth={1.6}
+                />
+              </span>
+              <div>
+                <p className="text-xl font-semibold leading-tight sm:text-2xl">
+                  Loja fechada
+                </p>
+                <p className="mt-1 text-sm text-white/95 sm:text-base">
+                  {horario || "Não estamos aceitando pedidos agora."}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="relative z-10 mx-2 -mt-8 rounded-[22px] border border-border/70 bg-card px-4 pb-3 pt-8 shadow-[0_10px_26px_rgba(31,20,43,0.11)] sm:mx-5 sm:px-6 sm:pb-4 sm:pt-9">
@@ -81,21 +107,15 @@ export function StoreHero() {
                 {nome}
               </span>
               <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-muted-foreground sm:text-sm">
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 rounded-full ${estaAberto ? "bg-emerald-500" : "bg-muted-foreground/50"}`}
-                  />
-                  <span
-                    className={estaAberto ? "font-medium text-emerald-700" : ""}
-                  >
-                    {estaAberto
-                      ? "Aberto agora"
-                      : `Fechado${horario ? ` · ${horario}` : ""}`}
+                {estaAberto && (
+                  <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Aberto agora
                   </span>
-                </span>
+                )}
                 {temMinimo && (
                   <>
-                    <span aria-hidden="true">·</span>
+                    {estaAberto && <span aria-hidden="true">·</span>}
                     <span>Mínimo {formatBRL(minimo)}</span>
                   </>
                 )}
@@ -161,19 +181,6 @@ export function StoreHero() {
             </>
           )}
         </div>
-
-        {!estaAberto && (
-          <div
-            role="status"
-            className="mx-2 mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:mx-5"
-          >
-            <p className="font-semibold">Loja fechada no momento</p>
-            <p className="mt-0.5 text-red-700/90">
-              Não estamos aceitando pedidos agora.
-              {horario ? ` ${horario}.` : " Volte mais tarde."}
-            </p>
-          </div>
-        )}
       </section>
 
       {infoOpen && <ModalInfoLoja open={infoOpen} onOpenChange={setInfoOpen} />}
