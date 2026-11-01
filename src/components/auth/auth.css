@@ -26,27 +26,6 @@
   margin: 0 auto;
   padding: 16px 24px;
 }
-.auth-logo {
-  display: block;
-  width: 80px;
-  height: 80px;
-  margin: 4px auto 24px;
-  object-fit: contain;
-  border-radius: 50%;
-}
-.auth-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  margin-bottom: 16px;
-  color: var(--auth-muted);
-  font-size: 12px;
-  text-decoration: none;
-}
-.auth-back:hover {
-  color: var(--auth-purple);
-}
 .auth-heading {
   margin-bottom: 26px;
   text-align: center;
@@ -234,11 +213,6 @@
 @media (max-height: 650px) {
   .auth-composition {
     align-items: flex-start;
-  }
-  .auth-logo {
-    width: 64px;
-    height: 64px;
-    margin-bottom: 16px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
