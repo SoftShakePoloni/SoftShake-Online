@@ -47,25 +47,13 @@ export function PromoProductCard({
 
   const openProduct = () => {
     if (!disponivel) return;
-    if (!lojaAberta) {
-      toast.error("Loja fechada", {
-        description: "No momento não estamos aceitando pedidos.",
-      });
-      return;
-    }
     setOpen(true);
   };
 
   const handlePrimary = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!disponivel) return;
-    if (!lojaAberta) {
-      toast.error("Loja fechada", {
-        description: "No momento não estamos aceitando pedidos.",
-      });
-      return;
-    }
-    if (needsOptions) {
+    if (!lojaAberta || needsOptions) {
       setOpen(true);
       return;
     }

@@ -9,28 +9,20 @@ import type { Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
 import { TagBadge } from "@/components/ui/TagBadge";
 import { FreteGratisBadge } from "@/components/ui/FreteGratisBadge";
-const ProductDetailDialog=dynamic(()=>import("./ModalProduto").then(module=>module.ProductDetailDialog));
+const ProductDetailDialog = dynamic(() =>
+  import("./ModalProduto").then((module) => module.ProductDetailDialog),
+);
 import { PrecoProduto } from "./PrecoProduto";
 import { cn } from "@/lib/utils";
-import { useLoja } from "@/hooks/useLoja";
-import { toast } from "sonner";
 
 export function ProductCard({ product }: { product: Product }) {
   const [open, setOpen] = useState(false);
   useModalHistory(open, setOpen);
-  const { loja, isLoading } = useLoja();
   const isDisponivel = product.disponivel !== false;
-  const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
-  const podePedir = isDisponivel && lojaAberta;
+  const podePedir = isDisponivel;
 
   const handleOpen = () => {
     if (!isDisponivel) return;
-    if (!lojaAberta) {
-      toast.error("Loja fechada", {
-        description: "No momento não estamos aceitando pedidos.",
-      });
-      return;
-    }
     setOpen(true);
   };
 
@@ -42,7 +34,12 @@ export function ProductCard({ product }: { product: Product }) {
         tabIndex={podePedir ? 0 : -1}
         aria-label={`Escolher ${product.name}`}
         aria-disabled={!podePedir}
-        onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();handleOpen()}}}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleOpen();
+          }
+        }}
         className={cn(
           "group relative flex h-full gap-3 overflow-hidden rounded-xl border p-4 text-left shadow-sm transition hover:shadow-md",
           "border-border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
@@ -106,7 +103,8 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="shrink-0 relative z-[5]">
           {product.image ? (
             <div className="relative">
-              <Image preset="productCard"
+              <Image
+                preset="productCard"
                 src={product.image}
                 alt={product.name}
                 width={320}

@@ -11,5 +11,5 @@ test('promotion action opens unknown or required options and preserves direct-ad
  click(product);assert.equal(added.length,0);assert.equal(opened.length,1,'lazy-loaded options must be checked in the product dialog');
  opened=[];click({...product,id:'configured',optionGroups:[{id:'flavor',required:true,items:[{id:'1'}]}]});assert.equal(added.length,0);assert.equal(opened.length,1);
  click({...product,id:'combo-1',comboId:1,comboOptionsMode:'fixo'});assert.equal(added.length,1);assert.equal(added[0].total,15);assert.equal(added[0].qty,1);
- storeOpen=false;click({...product,id:'combo-2',comboId:2,comboOptionsMode:'fixo'});assert.equal(added.length,1);
+ storeOpen=false;opened=[];click({...product,id:'combo-2',comboId:2,comboOptionsMode:'fixo'});assert.equal(added.length,1);assert.equal(opened.length,1,'closed store allows viewing details without adding to cart');
 });
