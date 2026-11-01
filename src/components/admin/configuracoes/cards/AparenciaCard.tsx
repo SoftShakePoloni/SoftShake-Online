@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ConfiguracaoLoja } from "@/types/configuracoes";
-import { createClient } from "@/lib/supabase/client";
+import { uploadStoreImage } from "@/lib/image/upload-store.client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ImageIcon, Upload, X, Loader2 } from "lucide-react";
@@ -12,7 +12,7 @@ interface AparenciaCardProps {
   config: ConfiguracaoLoja;
   onChange: (
     field: keyof ConfiguracaoLoja,
-    value: ConfiguracaoLoja[keyof ConfiguracaoLoja]
+    value: ConfiguracaoLoja[keyof ConfiguracaoLoja],
   ) => void;
 }
 
@@ -21,74 +21,39 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [dragActiveLogo, setDragActiveLogo] = useState(false);
   const [dragActiveBanner, setDragActiveBanner] = useState(false);
-  const supabase = createClient();
 
   const handleUpload = async (file: File, type: "logo" | "banner") => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Apenas imagens são permitidas");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Imagem muito grande (máximo 5MB)");
-      return;
-    }
-
-    const setUploading = type === "logo" ? setUploadingLogo : setUploadingBanner;
+    if (uploadingLogo || uploadingBanner) return;
+    const setUploading =
+      type === "logo" ? setUploadingLogo : setUploadingBanner;
     setUploading(true);
-
     try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${type}-${Date.now()}.${fileExt}`;
-      const filePath = `configuracoes/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("images")
-        .upload(filePath, file, { cacheControl: "3600", upsert: false });
-
-      if (uploadError) throw uploadError;
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("images").getPublicUrl(filePath);
-
-      // Remover imagem antiga se existir
-      const oldUrl = type === "logo" ? config.logo_url : config.banner_url;
-      if (oldUrl) {
-        const oldPath = oldUrl.split("/").slice(-2).join("/");
-        await supabase.storage.from("images").remove([oldPath]);
-      }
-
-      // Atualizar
-      onChange(type === "logo" ? "logo_url" : "banner_url", publicUrl);
-      toast.success(`${type === "logo" ? "Logo" : "Banner"} atualizado`);
+      const path = await uploadStoreImage(file, type);
+      const field = type === "logo" ? "logo_url" : "banner_url";
+      onChange(field, path);
+      toast.success("Imagem enviada. Salve as alterações para aplicar.");
     } catch (error) {
-      console.error("Erro ao fazer upload:", error);
-      toast.error("Erro ao fazer upload");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar a imagem.",
+      );
     } finally {
       setUploading(false);
     }
   };
 
   const handleRemove = async (type: "logo" | "banner") => {
-    const url = type === "logo" ? config.logo_url : config.banner_url;
-    if (!url) return;
-
-    try {
-      const oldPath = url.split("/").slice(-2).join("/");
-      await supabase.storage.from("images").remove([oldPath]);
-      onChange(type === "logo" ? "logo_url" : "banner_url", null);
-      toast.success(`${type === "logo" ? "Logo" : "Banner"} removido`);
-    } catch (error) {
-      console.error("Erro ao remover:", error);
-      toast.error("Erro ao remover imagem");
-    }
+    if (uploadingLogo || uploadingBanner) return;
+    const field = type === "logo" ? "logo_url" : "banner_url";
+    onChange(field, null);
   };
 
   const handleDrag = (e: React.DragEvent, type: "logo" | "banner") => {
     e.preventDefault();
     e.stopPropagation();
-    const setDragActive = type === "logo" ? setDragActiveLogo : setDragActiveBanner;
+    const setDragActive =
+      type === "logo" ? setDragActiveLogo : setDragActiveBanner;
     if (e.type === "dragenter" || e.type === "dragover") {
       setDragActive(true);
     } else if (e.type === "dragleave") {
@@ -99,7 +64,8 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
   const handleDrop = (e: React.DragEvent, type: "logo" | "banner") => {
     e.preventDefault();
     e.stopPropagation();
-    const setDragActive = type === "logo" ? setDragActiveLogo : setDragActiveBanner;
+    const setDragActive =
+      type === "logo" ? setDragActiveLogo : setDragActiveBanner;
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -149,7 +115,9 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => document.getElementById("logo-input")?.click()}
+                    onClick={() =>
+                      document.getElementById("logo-input")?.click()
+                    }
                   >
                     <Upload className="w-4 h-4 mr-2" />
                     Trocar
@@ -178,12 +146,14 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
                       Arraste uma imagem ou clique
                     </p>
                     <p className="text-xs text-[#6B7280] mb-3">
-                      PNG, JPG ou WEBP até 5MB
+                      JPEG, PNG, WebP ou GIF até 10MB
                     </p>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => document.getElementById("logo-input")?.click()}
+                      onClick={() =>
+                        document.getElementById("logo-input")?.click()
+                      }
                     >
                       <Upload className="w-4 h-4 mr-2" />
                       Selecionar Arquivo
@@ -195,12 +165,12 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
             <input
               id="logo-input"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               className="hidden"
               onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  handleUpload(e.target.files[0], "logo");
-                }
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void handleUpload(file, "logo");
               }}
             />
           </div>
@@ -238,7 +208,9 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => document.getElementById("banner-input")?.click()}
+                    onClick={() =>
+                      document.getElementById("banner-input")?.click()
+                    }
                   >
                     <Upload className="w-4 h-4 mr-2" />
                     Trocar
@@ -267,12 +239,14 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
                       Arraste uma imagem ou clique
                     </p>
                     <p className="text-xs text-[#6B7280] mb-3">
-                      PNG, JPG ou WEBP até 5MB
+                      JPEG, PNG, WebP ou GIF até 10MB
                     </p>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => document.getElementById("banner-input")?.click()}
+                      onClick={() =>
+                        document.getElementById("banner-input")?.click()
+                      }
                     >
                       <Upload className="w-4 h-4 mr-2" />
                       Selecionar Arquivo
@@ -284,12 +258,12 @@ export function AparenciaCard({ config, onChange }: AparenciaCardProps) {
             <input
               id="banner-input"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               className="hidden"
               onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  handleUpload(e.target.files[0], "banner");
-                }
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void handleUpload(file, "banner");
               }}
             />
           </div>
