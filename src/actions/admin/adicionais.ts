@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 export type OpcaoUpdate = {
@@ -76,7 +76,7 @@ function sanitizeOpcaoUpdate(updates: OpcaoUpdate) {
 }
 
 export async function updateOpcao(id: string | number, updates: OpcaoUpdate) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const opcaoId = toId(id);
   const payload = sanitizeOpcaoUpdate(updates);
@@ -111,7 +111,7 @@ export async function updateOpcao(id: string | number, updates: OpcaoUpdate) {
 }
 
 export async function deleteOpcao(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const opcaoId = toId(id);
 
@@ -135,7 +135,7 @@ export async function removeOpcaoDoProduto(
   opcaoId: string | number,
   produtoId: string | number
 ) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const oid = toId(opcaoId);
   const pid = toId(produtoId);

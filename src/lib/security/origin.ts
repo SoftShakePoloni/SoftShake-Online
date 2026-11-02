@@ -12,13 +12,8 @@ export function isTrustedOrigin(request: NextRequest): boolean {
   const referer = request.headers.get("referer");
   const host = request.headers.get("host");
 
-  // Sem Origin (ex.: same-origin form em alguns browsers / server-to-server)
-  if (!origin && !referer) {
-    // Em dev, permite; em produção, mutações de browser normalmente mandam Origin
-    if (process.env.NODE_ENV !== "production") return true;
-    // Server Actions / fetch same-origin às vezes omitem Origin em edge cases
-    return true;
-  }
+  // Cookie-authenticated mutations must carry a verifiable browser origin.
+  if (!origin && !referer) return process.env.NODE_ENV !== "production";
 
   const allowed = getAllowedOrigins(host);
 
@@ -67,14 +62,16 @@ function getAllowedOrigins(host: string | null): string[] {
     }
   }
 
-  if (host) {
+  if (process.env.NODE_ENV !== "production" && host) {
     list.add(`https://${host}`);
     list.add(`http://${host}`);
   }
 
-  // localhost dev
-  list.add("http://localhost:3000");
-  list.add("http://127.0.0.1:3000");
+  // Local origins are never implicitly trusted in production.
+  if (process.env.NODE_ENV !== "production") {
+    list.add("http://localhost:3000");
+    list.add("http://127.0.0.1:3000");
+  }
 
   return [...list];
 }

@@ -7,7 +7,7 @@ import {
   resolveComboChoices,
   type ComboOptionsConfig,
 } from "@/lib/combos/options";
-import { requirePageAccess } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 export type ComboItem = {
@@ -27,7 +27,7 @@ export type ComboAdmin = {
 };
 
 export async function listCombos(): Promise<ComboAdmin[]> {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:read");
   const supabase = createServiceRoleClient();
   const { data: combos, error } = await supabase
     .from("combos")
@@ -85,7 +85,7 @@ export async function createCombo(input: {
   itens: { produto_id: number; quantidade: number }[];
   opcoes_config?: ComboOptionsConfig;
 }) {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:write");
   const nome = input.nome.trim();
   const itens = input.itens.filter(
     (item) =>
@@ -121,7 +121,7 @@ export async function createCombo(input: {
       : z
           .object({
             modo: z.enum(["cliente", "fixo"]),
-            selecoes: z.record(z.array(z.string().regex(/^\d+$/)).max(100)),
+            selecoes: z.record(z.string(), z.array(z.string().regex(/^\d+$/)).max(100)),
           })
           .parse(input.opcoes_config);
   const groups = await loadComboOptionGroups(supabase, itens);
@@ -184,7 +184,7 @@ export async function createCombo(input: {
 }
 
 export async function deleteCombo(id: number) {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:write");
   const { error } = await createServiceRoleClient()
     .from("combos")
     .delete()
@@ -195,7 +195,7 @@ export async function deleteCombo(id: number) {
 export async function getComboProductOptions(
   items: { produto_id: number; quantidade: number }[],
 ) {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:read");
   if (
     items.length > 100 ||
     items.some(

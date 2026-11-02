@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 type ServiceClient = ReturnType<typeof createServiceRoleClient>;
@@ -22,7 +22,7 @@ async function getNextId(supabase: ServiceClient, table: "categorias") {
 }
 
 export async function listCategorias() {
-  await requireAdmin();
+  await requirePermission("catalogo:read");
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("categorias")
@@ -37,7 +37,7 @@ export async function createCategoria(input: {
   nome: string;
   ordem?: number;
 }) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const nome = input.nome.trim();
   if (!nome) throw new Error("Nome é obrigatório");
@@ -67,7 +67,7 @@ export async function createCategoria(input: {
 
   if (error || !data) {
     console.error(error);
-    throw new Error(error?.message || "Não foi possível criar a categoria");
+    throw new Error("Não foi possível criar a categoria");
   }
   return data;
 }
@@ -76,7 +76,7 @@ export async function updateCategoria(
   id: string | number,
   updates: { nome?: string; ordem?: number }
 ) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const payload: Record<string, unknown> = {};
   if (updates.nome !== undefined) payload.nome = updates.nome.trim();
@@ -94,13 +94,13 @@ export async function updateCategoria(
     .maybeSingle();
 
   if (error || !data) {
-    throw new Error(error?.message || "Não foi possível atualizar a categoria");
+    throw new Error("Não foi possível atualizar a categoria");
   }
   return data;
 }
 
 export async function deleteCategoria(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const catId = toId(id);
 
@@ -112,13 +112,13 @@ export async function deleteCategoria(id: string | number) {
 
   const { error } = await supabase.from("categorias").delete().eq("id", catId);
   if (error) {
-    throw new Error(error.message || "Não foi possível excluir a categoria");
+    throw new Error("Não foi possível excluir a categoria");
   }
   return { success: true };
 }
 
 export async function duplicateCategoria(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const catId = toId(id);
 
@@ -136,7 +136,7 @@ export async function duplicateCategoria(id: string | number) {
 }
 
 export async function reorderCategorias(orderedIds: (string | number)[]) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
 
   await Promise.all(

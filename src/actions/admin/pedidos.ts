@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 const STATUS_VALIDOS = [
@@ -18,7 +18,7 @@ export async function updatePedidoStatus(
   id: string,
   status: PedidoStatusUpdate
 ) {
-  await requireAdmin();
+  await requirePermission("pedido:update_status");
 
   if (!STATUS_VALIDOS.includes(status)) {
     throw new Error("Status de pedido inválido");
@@ -49,7 +49,7 @@ export async function updatePedidoStatus(
 }
 
 export async function listPedidosAdmin(limit = 100) {
-  await requireAdmin();
+  await requirePermission("pedido:read");
   const supabase = createServiceRoleClient();
 
   const { data, error } = await supabase

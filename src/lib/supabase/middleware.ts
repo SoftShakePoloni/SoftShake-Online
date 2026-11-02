@@ -22,7 +22,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     process.env.CONTENT_SECURITY_POLICY ||
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      process.env.NODE_ENV === "production" ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
@@ -127,11 +127,6 @@ export async function updateSession(request: NextRequest) {
             value,
             ...options,
           });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
           response.cookies.set({
             name,
             value,
@@ -151,11 +146,6 @@ export async function updateSession(request: NextRequest) {
             value: "",
             ...options,
           });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
           response.cookies.set({
             name,
             value: "",
@@ -171,16 +161,24 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const refreshedCookies = response.cookies.getAll();
+  response = NextResponse.next({ request: { headers: request.headers } });
+  refreshedCookies.forEach(cookie => response.cookies.set(cookie));
+  const complete = (result: NextResponse) => {
+    if (result !== response) refreshedCookies.forEach(cookie => result.cookies.set(cookie));
+    return applySecurityHeaders(result);
+  };
+
   const protectedAdminApi = path.startsWith('/api/admin') || path.startsWith('/api/pedidos/atualizar-status');
   const mfaRequired = user && (path.startsWith('/admin') || protectedAdminApi) ? await adminNeedsMfa(supabase, user) : false;
   if (mfaRequired && protectedAdminApi) {
-    return applySecurityHeaders(NextResponse.json({ erro: 'Confirme a autenticação em duas etapas.', codigo: 'MFA_REQUIRED' }, { status: 403 }));
+    return complete(NextResponse.json({ erro: 'Confirme a autenticação em duas etapas.', codigo: 'MFA_REQUIRED' }, { status: 403 }));
   }
   if (mfaRequired && path.startsWith('/admin') && path !== '/admin/verificar') {
     const redirectUrl = request.nextUrl.clone(); redirectUrl.pathname = '/admin/verificar'; redirectUrl.search = '';
     const result = NextResponse.redirect(redirectUrl);
     response.cookies.getAll().forEach(cookie => result.cookies.set(cookie));
-    return applySecurityHeaders(result);
+    return complete(result);
   }
 
   // Admin: exige usuário Supabase Auth (exceto login)
@@ -188,7 +186,7 @@ export async function updateSession(request: NextRequest) {
     if (!user) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/admin/login";
-      return applySecurityHeaders(NextResponse.redirect(redirectUrl));
+      return complete(NextResponse.redirect(redirectUrl));
     }
   }
 
@@ -198,17 +196,20 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/api/admin")
   ) {
     if (!user) {
-      return applySecurityHeaders(
+      return complete(
         NextResponse.json({ erro: "Não autenticado" }, { status: 401 })
       );
     }
   }
 
-  if (path === "/admin/login" && user) {
+  const ownStaffProfile = path === "/admin/login" && user
+    ? await supabase.from("perfis").select("id").eq("id", user.id).maybeSingle()
+    : null;
+  if (path === "/admin/login" && user && ownStaffProfile?.data) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/admin";
-    return applySecurityHeaders(NextResponse.redirect(redirectUrl));
+    return complete(NextResponse.redirect(redirectUrl));
   }
 
-  return applySecurityHeaders(response);
+  return complete(response);
 }

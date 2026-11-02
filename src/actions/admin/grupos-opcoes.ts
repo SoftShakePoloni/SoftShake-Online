@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 type ServiceClient = ReturnType<typeof createServiceRoleClient>;
@@ -25,7 +25,7 @@ async function getNextId(
 }
 
 export async function listGruposOpcoes() {
-  await requireAdmin();
+  await requirePermission("catalogo:read");
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("grupos_opcoes")
@@ -41,7 +41,7 @@ export async function createGrupoOpcoes(input: {
   max_escolha?: number;
   tag_id?: number | string | null;
 }) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const nome = input.nome.trim();
   if (!nome) throw new Error("Nome é obrigatório");
@@ -68,7 +68,7 @@ export async function createGrupoOpcoes(input: {
 
   if (error || !data) {
     console.error(error);
-    throw new Error(error?.message || "Não foi possível criar a categoria");
+    throw new Error("Não foi possível criar a categoria");
   }
   return data;
 }
@@ -82,7 +82,7 @@ export async function updateGrupoOpcoes(
     tag_id?: number | string | null;
   }
 ) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const payload: Record<string, unknown> = {};
   if (updates.nome !== undefined) payload.nome = updates.nome.trim();
@@ -109,13 +109,13 @@ export async function updateGrupoOpcoes(
     .maybeSingle();
 
   if (error || !data) {
-    throw new Error(error?.message || "Não foi possível atualizar");
+    throw new Error("Não foi possível atualizar");
   }
   return data;
 }
 
 export async function deleteGrupoOpcoes(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const gid = toId(id);
 
@@ -125,7 +125,7 @@ export async function deleteGrupoOpcoes(id: string | number) {
   await supabase.from("opcoes").delete().eq("grupo_id", gid);
 
   const { error } = await supabase.from("grupos_opcoes").delete().eq("id", gid);
-  if (error) throw new Error(error.message || "Não foi possível excluir");
+  if (error) throw new Error("Não foi possível excluir");
   return { success: true };
 }
 
@@ -134,7 +134,7 @@ export async function setProdutoGrupos(
   produtoId: string | number,
   grupoIds: (string | number)[]
 ) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const pid = toId(produtoId);
   const ids = grupoIds.map(toId);
@@ -169,7 +169,7 @@ export async function setProdutoGrupos(
 }
 
 export async function getProdutoGrupoIds(produtoId: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:read");
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("produto_grupos")
@@ -188,7 +188,7 @@ export async function createOpcaoInGrupo(input: {
   ordem?: number;
   tag_id?: number | string | null;
 }) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const nome = input.nome.trim();
   if (!nome) throw new Error("Nome é obrigatório");
@@ -214,7 +214,7 @@ export async function createOpcaoInGrupo(input: {
 
   if (error || !data) {
     console.error(error);
-    throw new Error(error?.message || "Não foi possível criar o adicional");
+    throw new Error("Não foi possível criar o adicional");
   }
   return data;
 }

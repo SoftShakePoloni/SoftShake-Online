@@ -69,20 +69,26 @@ export const RATE_LIMITS = {
 } as const satisfies Record<string, RateLimitConfig>;
 
 export function getClientIp(request: Request): string {
-  const h = request.headers;
-  const forwarded = h.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
-  return (
-    h.get("x-real-ip") ||
-    h.get("cf-connecting-ip") ||
-    h.get("x-vercel-forwarded-for") ||
-    "unknown"
-  );
+  // Only infrastructure explicitly selected by the deployment may supply identity.
+  const header = process.env.VERCEL
+    ? "x-vercel-forwarded-for"
+    : process.env.TRUSTED_PROXY_IP_HEADER;
+  const allowed = new Set([
+    "x-vercel-forwarded-for",
+    "cf-connecting-ip",
+    "x-real-ip",
+    "x-forwarded-for",
+  ]);
+  if (!header || !allowed.has(header)) return "unknown";
+  const raw = request.headers.get(header)?.split(",")[0]?.trim();
+  return raw && raw.length <= 64 && /^[0-9a-f:.]+$/i.test(raw)
+    ? raw
+    : "unknown";
 }
 
 function memoryRateLimit(
   key: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
 ): RateLimitResult {
   const now = Date.now();
   gc(now);
@@ -112,7 +118,7 @@ function memoryRateLimit(
 
 function hasUpstash(): boolean {
   return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
   );
 }
 
@@ -122,63 +128,59 @@ function hasUpstash(): boolean {
  */
 async function upstashRateLimit(
   key: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
 ): Promise<RateLimitResult> {
   const url = process.env.UPSTASH_REDIS_REST_URL!;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN!;
-  const redisKey = `rl:${config.bucket}:${key}`;
-  const windowSec = config.windowSec;
-
+  const script =
+    "local n=redis.call('INCR',KEYS[1]); local t=redis.call('PTTL',KEYS[1]); if t<0 then redis.call('PEXPIRE',KEYS[1],ARGV[1]); t=tonumber(ARGV[1]); end; return {n,t}";
   try {
-    // Pipeline: INCR + TTL (para saber se precisa EXPIRE)
-    const res = await fetch(`${url}/pipeline`, {
+    const res = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: "Bearer " + token,
         "Content-Type": "application/json",
       },
       body: JSON.stringify([
-        ["INCR", redisKey],
-        ["PTTL", redisKey],
+        "EVAL",
+        script,
+        "1",
+        "rl:" + config.bucket + ":" + key,
+        String(config.windowSec * 1000),
       ]),
       cache: "no-store",
+      signal: AbortSignal.timeout(3000),
     });
-
-    if (!res.ok) {
-      console.error("[rate-limit] Upstash pipeline failed", res.status);
-      return memoryRateLimit(key, config);
-    }
-
-    const data = (await res.json()) as { result: number }[];
-    const count = Number(data?.[0]?.result ?? 0);
-    let pttl = Number(data?.[1]?.result ?? -1);
-
-    // Primeira vez na janela: define TTL
-    if (pttl < 0 || count === 1) {
-      await fetch(`${url}/pipeline`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify([["EXPIRE", redisKey, windowSec]]),
-        cache: "no-store",
-      });
-      pttl = windowSec * 1000;
-    }
-
-    const reset = Date.now() + Math.max(pttl, 0);
-    const success = count <= config.limit;
-    const remaining = Math.max(0, config.limit - count);
-
-    return {
-      success,
-      limit: config.limit,
-      remaining,
-      reset,
+    if (!res.ok) throw new Error("rate limit backend unavailable");
+    const data = (await res.json()) as {
+      result?: [number, number];
+      error?: string;
     };
-  } catch (e) {
-    console.error("[rate-limit] Upstash error, fallback memory", e);
+    if (data.error || !Array.isArray(data.result))
+      throw new Error("invalid rate limit response");
+    const [count, ttl] = data.result.map(Number);
+    if (
+      !Number.isFinite(count) ||
+      count < 1 ||
+      !Number.isFinite(ttl) ||
+      ttl < 0
+    )
+      throw new Error("invalid rate limit counters");
+    return {
+      success: count <= config.limit,
+      limit: config.limit,
+      remaining: Math.max(0, config.limit - count),
+      reset: Date.now() + ttl,
+    };
+  } catch {
+    console.error("[rate-limit] shared counter unavailable");
+    if (process.env.NODE_ENV === "production")
+      return {
+        success: false,
+        limit: config.limit,
+        remaining: 0,
+        reset: Date.now() + 3000,
+      };
     return memoryRateLimit(key, config);
   }
 }
@@ -188,7 +190,7 @@ async function upstashRateLimit(
  */
 export function rateLimit(
   key: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
 ): RateLimitResult {
   return memoryRateLimit(key, config);
 }
@@ -199,7 +201,7 @@ export function rateLimit(
  */
 export async function rateLimitCheck(
   key: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
 ): Promise<RateLimitResult> {
   if (hasUpstash()) {
     return upstashRateLimit(key, config);
@@ -216,7 +218,7 @@ export function rateLimitHeaders(result: RateLimitResult): HeadersInit {
       ? {}
       : {
           "Retry-After": String(
-            Math.max(1, Math.ceil((result.reset - Date.now()) / 1000))
+            Math.max(1, Math.ceil((result.reset - Date.now()) / 1000)),
           ),
         }),
   };

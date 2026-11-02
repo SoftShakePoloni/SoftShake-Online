@@ -1,6 +1,6 @@
 "use server";
 
-import { requirePageAccess } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 export type PromocaoFrete = {
@@ -15,7 +15,7 @@ export type PromocaoFrete = {
 };
 
 export async function listPromocoesFrete(): Promise<PromocaoFrete[]> {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:read");
   const { data, error } = await createServiceRoleClient()
     .from("promocoes_frete_gratis")
     .select("id, produto_id, data_inicio, data_fim, hora_inicio, hora_fim, ativa, produto:produtos(nome)")
@@ -49,7 +49,7 @@ export async function createPromocaoFrete(input: {
   hora_inicio: string;
   hora_fim: string;
 }) {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:write");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.data_inicio) || !/^\d{4}-\d{2}-\d{2}$/.test(input.data_fim) || input.data_fim < input.data_inicio) {
     throw new Error("Informe um período válido para a campanha.");
   }
@@ -76,7 +76,7 @@ export async function createPromocaoFrete(input: {
 }
 
 export async function deletePromocaoFrete(id: number) {
-  await requirePageAccess("catalogo");
+  await requirePermission("catalogo:write");
   const { error } = await createServiceRoleClient().from("promocoes_frete_gratis").delete().eq("id", id);
   if (error) throw new Error("Não foi possível remover a campanha.");
 }
