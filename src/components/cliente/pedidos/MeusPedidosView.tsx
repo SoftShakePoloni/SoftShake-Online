@@ -57,6 +57,7 @@ function PedidoCard({
     >
       <Link
         href={`/pedidos/${pedido.id}`}
+        prefetch={false}
         className="block rounded-[20px] p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#6B3FA0] sm:p-5"
       >
         <div className="flex items-center gap-3">
