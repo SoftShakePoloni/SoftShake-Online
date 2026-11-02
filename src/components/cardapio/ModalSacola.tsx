@@ -1,4 +1,5 @@
 "use client";
+import { invalidateCustomerResources } from "@/lib/customer-resource";
 
 import { useMenu } from "@/hooks/useCardapio";
 
@@ -115,46 +116,15 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     setErroCupom("");
   };
 
-  // Carrega dados do cliente quando muda para step info
+  // Address edits refresh AuthContext before returning to the bag.
   useEffect(() => {
-    if (!open || step !== 'info') return;
-    let cancelled = false;
-    
-    const loadClientData = async () => {
-      // Aguarda o carregamento da sessão terminar
-      if (loading) return;
-      
-      // Se não há sessão, não é um erro - apenas retorna
-      if (!session || !session.user) return;
-
-      try {
-        // Usa dados do contexto (já vem da API de sessão)
-        setNome(cliente?.nome || "");
-        setTelefone(cliente?.telefone || "");
-
-        // Busca endereços adicionais do banco
-        const resposta = await fetch('/api/auth/sessao', { cache: 'no-store' });
-        
-        if (resposta.ok) {
-          const dados = await resposta.json();
-          if (cancelled) return;
-          
-          const enderecos = customerAddresses(dados.cliente || {});
-
-          setEnderecosDisponiveis(enderecos);
-          
-          setEnderecoSelecionado(current => enderecos.some(address => address.id === current) ? current : (enderecos.find(address => address.principal)?.id || enderecos[0]?.id || ''));
-        }
-      } catch (error) {
-        // Usa dados do contexto como fallback
-        setNome(cliente?.nome || "");
-        setTelefone(cliente?.telefone || "");
-      }
-    };
-
-    void loadClientData();
-    return () => { cancelled = true; };
-  }, [open, step, loading, session, cliente]);
+    if (!open || step !== "info" || loading || !cliente) return;
+    setNome(cliente.nome || "");
+    setTelefone(cliente.telefone || "");
+    const enderecos = customerAddresses(cliente);
+    setEnderecosDisponiveis(enderecos);
+    setEnderecoSelecionado(current => enderecos.some(address => address.id === current) ? current : (enderecos.find(address => address.principal)?.id || enderecos[0]?.id || ""));
+  }, [open, step, loading, cliente]);
 
   // Reset step quando fechar modal
   useEffect(() => {
@@ -323,6 +293,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       
       const { pedido } = await resposta.json();
       checkoutAttempt.current = null;
+      invalidateCustomerResources();
       
       toast.success('Pedido realizado com sucesso!', {
         description: `Pedido #${pedido.id.slice(0, 8)} · Total confirmado: ${formatBRL(Number(pedido.total))}`,

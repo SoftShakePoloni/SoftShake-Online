@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 const AutomaticOrderPrint = dynamic(() => import("@/components/admin/pedidos/AutomaticOrderPrint").then(module => module.AutomaticOrderPrint), { ssr: false });
+import { ConfiguracoesLojaProvider } from "@/hooks/useConfiguracoesLojaRealtime";
 import { PremiumSidebar } from "./PremiumSidebar";
 import { PremiumTopbar } from "./PremiumTopbar";
 import { cn } from "@/lib/utils";
@@ -69,6 +70,7 @@ export function AdminShell({
   }, []);
 
   return (
+    <ConfiguracoesLojaProvider>
     <div className="admin-shell min-h-dvh bg-[#F7F8FC]">
       {canAutoPrint && <AutomaticOrderPrint />}
       <a href="#admin-content" className="admin-skip-link">Ir para o conteúdo</a>
@@ -111,5 +113,6 @@ export function AdminShell({
         </main>
       </div>
     </div>
+    </ConfiguracoesLojaProvider>
   );
 }

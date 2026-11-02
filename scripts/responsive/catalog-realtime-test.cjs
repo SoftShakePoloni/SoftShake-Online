@@ -12,6 +12,7 @@ test('only successful public catalog writes schedule invalidation; payload conta
   const callbacks = [], invalidated = [], requests = [];
   let ok = true;
   const api = load('src/lib/catalog-fetch.server.ts', {
+    '@/lib/public-read.server': { invalidatePublicReads() {} },
     'server-only': {}, 'next/server': { after: callback => callbacks.push(callback) },
     'next/cache': { revalidatePath: path => invalidated.push(path) },
   }, { fetch: async (url, init) => { requests.push({ url, init }); return new Response('{}', { status: ok ? 200 : 400 }); },

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Endereco } from "@/types/endereco";
-import { useClientePedidos } from "@/hooks/useClientePedidos";
+import { useClientePedidosCount } from "@/hooks/useClientePedidos";
 
 type ClienteFull = {
   id: string;
@@ -55,8 +55,7 @@ export function MeuPerfilView({
   onSignOut: () => Promise<void>;
 }) {
   const router = useRouter();
-  const { pedidos, loading: loadingPedidos } = useClientePedidos(cliente.id);
-  const pedidosCount = pedidos.filter((p) => p.status !== "cancelado").length;
+  const { count: pedidosCount, loading: loadingPedidos } = useClientePedidosCount(cliente.id);
 
   const menuItems: MenuItem[] = [
     {

@@ -27,8 +27,10 @@ export function ProdutosManager({
 
   // Setup Realtime
   useEffect(() => {
+    let active = true;
+    const revisions = new Map<string, number>();
     const channel = supabase
-      .channel("produtos-changes")
+      .channel("produtos-changes-" + crypto.randomUUID())
       .on(
         "postgres_changes",
         {
@@ -37,6 +39,9 @@ export function ProdutosManager({
           table: "produtos",
         },
         async (payload) => {
+          const key = String((payload.new as Produto)?.id ?? (payload.old as Produto)?.id);
+          const revision = (revisions.get(key) ?? 0) + 1;
+          revisions.set(key, revision);
           if (payload.eventType === "INSERT") {
             const novoProduto = payload.new as Produto;
             // Buscar dados completos com relações
@@ -52,8 +57,8 @@ export function ProdutosManager({
               .eq("id", novoProduto.id)
               .single();
 
-            if (data) {
-              setProdutos((prev) => [data as Produto, ...prev]);
+            if (active && revisions.get(key) === revision && data) {
+              setProdutos((prev) => [data as Produto, ...prev.filter(p => String(p.id) !== String(data.id))]);
               toast.success("Novo produto adicionado");
             }
           } else if (payload.eventType === "UPDATE") {
@@ -71,23 +76,19 @@ export function ProdutosManager({
               .eq("id", produtoAtualizado.id)
               .single();
 
-            if (data) {
+            if (active && revisions.get(key) === revision && data) {
               setProdutos((prev) =>
                 prev.map((p) => (String(p.id) === String(data.id) ? (data as Produto) : p))
               );
               // Atualizar produto selecionado se for o mesmo
-              if (selectedProduto && String(selectedProduto.id) === String(data.id)) {
-                setSelectedProduto(data as Produto);
-              }
+              setSelectedProduto(current => current && String(current.id) === String(data.id) ? data as Produto : current);
               // Toast removido - já é mostrado no ProdutoDetailPanel
             }
           } else if (payload.eventType === "DELETE") {
             const produtoRemovido = payload.old as Produto;
             setProdutos((prev) => prev.filter((p) => String(p.id) !== String(produtoRemovido.id)));
             // Limpar seleção se for o produto removido
-            if (selectedProduto && String(selectedProduto.id) === String(produtoRemovido.id)) {
-              setSelectedProduto(null);
-            }
+            setSelectedProduto(current => current && String(current.id) === String(produtoRemovido.id) ? null : current);
             toast.success("Produto removido");
           }
         }
@@ -95,9 +96,10 @@ export function ProdutosManager({
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      void supabase.removeChannel(channel);
     };
-  }, [supabase, selectedProduto]);
+  }, [supabase]);
 
   const handleSelect = (produto: Produto) => {
     setIsTransitioning(true);

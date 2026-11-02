@@ -1,63 +1,40 @@
 import { withApiGuard } from "@/lib/security/with-api-guard";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
-import {
-  apiOk,
-  apiServerError,
-} from "@/lib/security/api-response";
+import { apiOk, apiServerError } from "@/lib/security/api-response";
 import { obterSessao } from "@/lib/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
-import {
-  enrichPedidoItens,
-  type OpcaoLookup,
-  type GrupoLookup,
-} from "@/lib/utils/pedido";
+const headers = { "Cache-Control": "private, no-store" };
 
 export const GET = withApiGuard(
-  {
-    methods: ["GET"],
-    rateLimit: RATE_LIMITS.apiStrict,
-    checkOrigin: false,
-  },
-  async () => {
+  { methods: ["GET"], rateLimit: RATE_LIMITS.apiStrict, checkOrigin: false },
+  async (request) => {
     try {
       const sessao = await obterSessao();
-      // A lista vazia é o estado esperado para visitantes sem sessão.
-      if (!sessao) return apiOk({ pedidos: [] });
-
-      const supabase = createServerClient();
-
-      const [{ data: pedidos, error }, { data: opcoes }, { data: grupos }] =
-        await Promise.all([
-          supabase
-            .from("pedidos")
-            .select("id, cliente_nome, cliente_telefone, tipo_entrega, endereco_completo, meio_pagamento, troco_para, subtotal, taxa_entrega, total, itens, status, created_at, updated_at")
-            .eq("cliente_id", sessao.id)
-            .order("created_at", { ascending: false })
-            .limit(100),
-          supabase
-            .from("opcoes")
-            .select(
-              "id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)"
-            ),
-          supabase.from("grupos_opcoes").select("id, nome"),
-        ]);
-
-      if (error) {
-        return apiServerError(error);
-      }
-
-      const pedidosEnriquecidos = (pedidos || []).map((pedido) => ({
-        ...pedido,
-        itens: enrichPedidoItens(
-          Array.isArray(pedido.itens) ? pedido.itens : [],
-          (opcoes || []) as OpcaoLookup[],
-          (grupos || []) as GrupoLookup[]
-        ),
-      }));
-
-      return apiOk({ pedidos: pedidosEnriquecidos });
-    } catch (e) {
-      return apiServerError(e);
+      if (!sessao) return apiOk({ pedidos: [], hasMore: false }, 200, { ...headers, "X-Customer-Id": "anonymous" });
+      const raw = new URL(request.url).searchParams.get("page") ?? "0";
+      const page = /^\d{1,5}$/.test(raw) ? Number(raw) : 0;
+      const size = 20;
+      const { data, error } = await createServerClient()
+        .from("pedidos")
+        .select(
+          "id, status, created_at, updated_at, total, produto_nome:itens->0->produto->>name, produto_imagem:itens->0->produto->>image",
+        )
+        .eq("cliente_id", sessao.id)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(page * size, page * size + size);
+      if (error) return apiServerError(error);
+      return apiOk(
+        {
+          pedidos: (data ?? []).slice(0, size).map(resumirPedido),
+          hasMore: (data ?? []).length > size,
+        },
+        200,
+        { ...headers, "X-Customer-Id": sessao.id },
+      );
+    } catch (error) {
+      return apiServerError(error);
     }
-  }
+  },
 );
+import { resumirPedido } from "@/lib/customer-order-summary";

@@ -1,8 +1,9 @@
 import "server-only";
+import { publicRead } from "@/lib/public-read.server";
 import { createServerClient } from "@/integrations/supabase/client.server";
 import { imageProxyUrl } from "@/lib/image/proxy-url";
 
-export async function fetchLojaResumo() {
+async function readData() {
   const { data, error } = await createServerClient()
     .from("configuracoes_loja")
     .select(
@@ -18,3 +19,5 @@ export async function fetchLojaResumo() {
     banner_url: imageProxyUrl(data.banner_url),
   };
 }
+
+export function fetchLojaResumo() { return publicRead("store", readData); }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { listPedidosAdmin } from "@/actions/admin/pedidos";
 import { toast } from "sonner";
 
 export type RealtimeConnectionStatus = "connecting" | "live" | "error";
@@ -60,6 +61,8 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
   );
 
   const supabase = createClient();
+  const announcedIds = useRef(new Set(pedidosIniciais.map(row => row.id)));
+  const mountedAt = useRef(Date.now());
   const channelRef = useRef<RealtimeChannel | null>(null);
   const highlightTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
@@ -103,9 +106,47 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
   // Não re-sincronizar com pedidosIniciais para não sobrescrever inserts ao vivo.
 
   useEffect(() => {
+    let alive = true;
+    let recovering = false;
+    let realtimeHealthy = false;
+    let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+    const journal = new Map<string, PedidoRow | null>();
+    const recover = async () => {
+      if (!alive || recovering || document.visibilityState === "hidden") return;
+      recovering = true; journal.clear();
+      try {
+        const snapshot = await listPedidosAdmin(150);
+        if (!alive) return;
+        const replay = new Map(journal);
+        setPedidosState(current => {
+          const merged = new Map(snapshot.map(row => [row.id, row as PedidoRow]));
+          for (const row of current) {
+            const recovered = merged.get(row.id);
+            if (recovered && Date.parse(row.updated_at ?? "") > Date.parse(recovered.updated_at ?? "")) merged.set(row.id, row);
+          }
+          for (const [id, row] of replay) { if (row) merged.set(id, row); else merged.delete(id); }
+          return [...merged.values()].sort((a, b) => Date.parse(b.created_at ?? "") - Date.parse(a.created_at ?? ""));
+        });
+        for (const row of snapshot) {
+          if (!announcedIds.current.has(row.id) && Date.parse(row.created_at) >= mountedAt.current) {
+            markHighlight(row.id); void playNewOrderSound(); toast.success("Novo pedido recebido!");
+          }
+          announcedIds.current.add(row.id);
+        }
+      } catch { if (alive) setStatus("error"); }
+      finally {
+        recovering = false; journal.clear();
+        if (alive && !realtimeHealthy) recoveryTimer = setTimeout(() => void recover(), 30_000);
+      }
+    };
+    const resume = () => { clearTimeout(recoveryTimer); recoveryTimer = setTimeout(() => void recover(), 500); };
+    window.addEventListener("online", resume);
+    document.addEventListener("visibilitychange", resume);
+    // One snapshot on connection/reconnection recovers events missed while offline.
+    // No idle HTTP polling is added.
     // Canal único e estável
     const channel = supabase
-      .channel(CHANNEL_NAME)
+      .channel(CHANNEL_NAME + "-" + crypto.randomUUID())
       .on(
         "postgres_changes",
         {
@@ -115,12 +156,14 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
         },
         (payload) => {
           const row = payload.new as PedidoRow;
-          if (!row?.id) return;
+          if (!alive || !row?.id) return;
+          if (recovering) journal.set(row.id, row);
 
           setPedidosState((prev) => {
             // idempotência: se já existe, substitui; senão, topo da lista
             const idx = prev.findIndex((p) => p.id === row.id);
             if (idx !== -1) {
+              if (Date.parse(prev[idx].updated_at ?? "") > Date.parse(row.updated_at ?? "")) return prev;
               const copy = prev.slice();
               copy[idx] = row;
               return copy;
@@ -128,6 +171,8 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
             return [row, ...prev];
           });
 
+          if (announcedIds.current.has(row.id)) return;
+          announcedIds.current.add(row.id);
           markHighlight(row.id);
           void playNewOrderSound();
           const autoAceito = row.status === "preparando";
@@ -156,7 +201,8 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
         },
         (payload) => {
           const row = payload.new as PedidoRow;
-          if (!row?.id) return;
+          if (!alive || !row?.id) return;
+          if (recovering) journal.set(row.id, row);
 
           setPedidosState((prev) => {
             const idx = prev.findIndex((p) => p.id === row.id);
@@ -165,7 +211,7 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
               return [row, ...prev];
             }
             // atualiza somente o item alterado
-            if (prev[idx] === row) return prev;
+            if (prev[idx] === row || Date.parse(prev[idx].updated_at ?? "") > Date.parse(row.updated_at ?? "")) return prev;
             const copy = prev.slice();
             copy[idx] = { ...prev[idx], ...row };
             return copy;
@@ -182,7 +228,8 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
         (payload) => {
           const old = payload.old as Partial<PedidoRow>;
           const id = old?.id;
-          if (!id) return;
+          if (!alive || !id) return;
+          if (recovering) journal.set(id, null);
 
           setPedidosState((prev) => {
             const next = prev.filter((p) => p.id !== id);
@@ -192,12 +239,17 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
         }
       )
       .subscribe((subscribeStatus) => {
+        if (!alive) return;
         if (subscribeStatus === "SUBSCRIBED") {
+          realtimeHealthy = true;
           setStatus("live");
+          resume();
         } else if (
           subscribeStatus === "CHANNEL_ERROR" ||
           subscribeStatus === "TIMED_OUT"
         ) {
+          realtimeHealthy = false;
+          clearTimeout(recoveryTimer); recoveryTimer = setTimeout(() => void recover(), 30_000);
           setStatus("error");
         } else if (subscribeStatus === "CLOSED") {
           setStatus("error");
@@ -209,6 +261,9 @@ export function usePedidosRealtime(pedidosIniciais: PedidoRow[]) {
     channelRef.current = channel;
 
     return () => {
+      alive = false; clearTimeout(recoveryTimer);
+      window.removeEventListener("online", resume);
+      document.removeEventListener("visibilitychange", resume);
       channelRef.current = null;
       void supabase.removeChannel(channel);
       // limpa timers de highlight
