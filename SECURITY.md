@@ -18,6 +18,14 @@
 3. Configurar UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN no servidor para limites compartilhados entre instâncias. Sem Redis, ainda existe somente limite local. Não incluir valores secretos em arquivos versionados. Uma falha do Redis configurado devolve 429 temporário em produção.
 4. Executar npm ci, npm test, npm run lint e npm audit --omit=dev --audit-level=moderate. Fazer build com as variáveis de staging; nenhum segredo é necessário nos testes automatizados.
 
+## Políticas reais recebidas do operador
+
+A consulta do projeto mostrou policies extras, incluindo RLS_perfis FOR ALL com id=auth.uid(), permitindo autoalteração de role quando há grant de escrita. Para esse projeto, usar **0018_live_policy_hardening.sql em vez de 0017**. A 0018 é independente de 0016/0017, inclui as 17 policies informadas e protege também perfis; não altera usuários, pedidos ou catálogo. Não executar 0017 depois de 0018.
+
+A 0018 guarda todas as definições anteriores de pedidos, clientes, audit_logs e perfis, recusa nomes inesperados e troca as policies dessas quatro tabelas por SELECTs limitados. INSERT/UPDATE/DELETE dessas tabelas ficam somente pelo backend service_role já autorizado. Ler o próprio perfil permanece permitido; equipe mantém suas leituras e a gestão de perfis continua nas Server Actions protegidas. Testar primeiro com backup/staging e contas distintas. O rollback específico é supabase/rollbacks/0018_live_policy_hardening.sql e restaura as permissões antigas, incluindo os riscos; usar somente para retorno operacional temporário.
+
+O teste scripts/security/live-rls-test.cjs reproduz as 17 policies fornecidas, confirma a autopromoção antes, nega depois e compara integralmente o snapshot após rollback. Nenhuma policy foi aplicada ao projeto da loja pelo agente.
+
 ## Banco: staging e ativação separada
 
 Nenhuma migration deste lote foi aplicada ao Supabase da loja. Os testes de SQL usam PostgreSQL local isolado (PGlite), com identidades fictícias e políticas, nunca service_role para simular clientes.
