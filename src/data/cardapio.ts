@@ -2,18 +2,18 @@ import "server-only";
 import { publicRead } from "@/lib/public-read.server";
 import { createServerClient } from "@/integrations/supabase/client.server";
 import { notesOptionGroup, type Category, type Product, type Tag, type OptionGroup } from "./tipos";
-import { getFreteDeadlineLabel, getSaoPauloDateTime, isFreteCampaignActive } from "@/lib/promocoes/frete";
+import { getFreteDeadlineLabel, getSaoPauloDateTime, isFreteCampaignActive, nextFreteRefresh } from "@/lib/promocoes/frete";
 import { imageProxyUrl } from "@/lib/image/proxy-url";
 import { loadComboOptionGroups, resolveComboChoices, type ComboOptionsConfig } from "@/lib/combos/options";
 
-async function readData(): Promise<Category[]> {
+async function readData() {
   const supabase = createServerClient();
   const agoraBrasil = getSaoPauloDateTime();
   const [categoriesResult,productsResult,combosResult,freightResult,tagsResult] = await Promise.all([
     supabase.from("categorias").select("id, nome, ordem").order("ordem", {ascending:true}),
     supabase.from("produtos").select("id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id").order("ordem", {ascending:true}),
     supabase.from("combos").select("*").eq("ativa",true).order("created_at",{ascending:false}),
-    supabase.from("promocoes_frete_gratis").select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim").eq("ativa",true).lte("data_inicio",agoraBrasil.date).gte("data_fim",agoraBrasil.date),
+    supabase.from("promocoes_frete_gratis").select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim").eq("ativa",true).gte("data_fim",agoraBrasil.date),
     supabase.from("tags").select("id, nome, cor_fundo, cor_texto"),
   ]);
   const {data:categorias,error:catError}=categoriesResult;
@@ -117,9 +117,11 @@ async function readData(): Promise<Category[]> {
     } satisfies Product];
   });
 
-  return comboProducts.length
+  const categoriasMenu: Category[] = comboProducts.length
     ? [...menuCategories, { id: "combos", name: "Combos", products: comboProducts }]
     : menuCategories;
+  return { categorias: categoriasMenu, nextRefreshAt: nextFreteRefresh(freightResult.data ?? []) };
 }
 
-export function fetchMenu() { return publicRead("menu", readData); }
+export function fetchMenuSnapshot() { return publicRead("menu", readData); }
+export async function fetchMenu(): Promise<Category[]> { return (await fetchMenuSnapshot()).categorias; }

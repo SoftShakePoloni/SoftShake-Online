@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PaginaInicio from "@/components/paginas/PaginaInicio";
-import { fetchMenu } from "@/data/cardapio";
+import { fetchMenuSnapshot } from "@/data/cardapio";
 import { fetchLojaResumo } from "@/data/loja";
 import { PublicDataProvider } from "@/context/PublicDataContext";
 import type { ConfiguracoesLoja } from "@/hooks/useLoja";
@@ -16,13 +16,13 @@ export const metadata: Metadata = {
 
 export default async function Home() {
   const [menu, loja] = await Promise.allSettled([
-    fetchMenu(),
+    fetchMenuSnapshot(),
     fetchLojaResumo(),
   ]);
   return (
     <PublicDataProvider
       value={{
-        categories: menu.status === "fulfilled" ? menu.value : undefined,
+        categories: menu.status === "fulfilled" ? menu.value.categorias : undefined,
         loja:
           loja.status === "fulfilled"
             ? (loja.value as ConfiguracoesLoja | null)

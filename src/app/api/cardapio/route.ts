@@ -1,4 +1,4 @@
-import { fetchMenu } from "@/data/cardapio";
+import { fetchMenuSnapshot } from "@/data/cardapio";
 import { publicJson } from "@/lib/public-json.server";
 import { apiServerError } from "@/lib/security/api-response";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
@@ -7,7 +7,7 @@ export const GET = withApiGuard(
   { methods: ["GET"], rateLimit: RATE_LIMITS.apiStrict, checkOrigin: false },
   async (request) => {
     try {
-      return publicJson(request, { categorias: await fetchMenu() });
+      return publicJson(request, await fetchMenuSnapshot());
     } catch (error) {
       return apiServerError(error);
     }

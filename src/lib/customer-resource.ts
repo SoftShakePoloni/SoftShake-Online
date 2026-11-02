@@ -14,8 +14,88 @@ type Entry = {
 const entries = new Map<string, Entry>();
 let identity: string | null = null;
 const empty: Snapshot<never> = { data: null, loading: true, error: null };
+let stopEvents: (() => void) | undefined;
+let eventsLive = false;
+let eventsFailedAt = 0;
+let lastEventVersion = "";
+function hasReaders() {
+  return [...entries.values()].some((entry) => entry.listeners.size > 0);
+}
+function ensureOrderEvents() {
+  if (
+    stopEvents ||
+    !identity ||
+    !hasReaders() ||
+    typeof EventSource === "undefined"
+  )
+    return;
+  const owner = identity;
+  let source: EventSource | undefined;
+  let debounce: ReturnType<typeof setTimeout> | undefined;
+  const failed = () => {
+    if (eventsLive || !eventsFailedAt) eventsFailedAt = Date.now();
+    eventsLive = false;
+  };
+  const connect = () => {
+    if (document.visibilityState === "hidden" || source) return;
+    eventsFailedAt = Date.now();
+    source = new EventSource(
+      "/api/pedidos/eventos?version=" + encodeURIComponent(lastEventVersion),
+    );
+    source.addEventListener("ready", (event) => {
+      if (identity !== owner) return;
+      try {
+        if (JSON.parse((event as MessageEvent<string>).data).owner !== owner) {
+          setCustomerResourceIdentity(null);
+          window.dispatchEvent(new Event("softshake-customer-session-changed"));
+          return;
+        }
+        lastEventVersion = (event as MessageEvent<string>).lastEventId;
+        eventsLive = true;
+        eventsFailedAt = 0;
+      } catch {
+        failed();
+      }
+    });
+    source.addEventListener("changed", (event) => {
+      if (identity !== owner) return;
+      lastEventVersion = (event as MessageEvent<string>).lastEventId;
+      clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        if (identity === owner) invalidateCustomerResources();
+      }, 300);
+    });
+    source.addEventListener("unavailable", failed);
+    source.onerror = failed;
+  };
+  const visibility = () => {
+    if (document.visibilityState === "hidden") {
+      source?.close();
+      source = undefined;
+      eventsLive = false;
+    } else connect();
+  };
+  document.addEventListener("visibilitychange", visibility);
+  stopEvents = () => {
+    clearTimeout(debounce);
+    source?.close();
+    document.removeEventListener("visibilitychange", visibility);
+    eventsLive = false;
+    eventsFailedAt = 0;
+    stopEvents = undefined;
+  };
+  connect();
+}
+function needsRecovery() {
+  if (typeof EventSource === "undefined") return true;
+  return (
+    !eventsLive && eventsFailedAt > 0 && Date.now() - eventsFailedAt >= 15_000
+  );
+}
 export function setCustomerResourceIdentity(next: string | null) {
   if (identity === next) return;
+  stopEvents?.();
+  lastEventVersion = "";
   identity = next;
   for (const entry of entries.values()) {
     entry.controller?.abort();
@@ -38,16 +118,28 @@ function entryFor(key: string) {
   }
   return entry;
 }
-export function invalidateCustomerOrderDetail(owner: string, id: string, version: string) {
+export function invalidateCustomerOrderDetail(
+  owner: string,
+  id: string,
+  version: string,
+) {
   const url = "/api/pedidos/detalhe?id=" + encodeURIComponent(id);
-  const key = JSON.stringify([owner, url]), entry = entries.get(key);
+  const key = JSON.stringify([owner, url]),
+    entry = entries.get(key);
   if (!entry) return;
-  const data = entry.snapshot.data as { pedido?: { updated_at?: string; status?: string } } | null;
-  if (data?.pedido && data.pedido.status + ":" + (data.pedido.updated_at ?? "") === version) return;
+  const data = entry.snapshot.data as {
+    pedido?: { updated_at?: string; status?: string };
+  } | null;
+  if (
+    data?.pedido &&
+    data.pedido.status + ":" + (data.pedido.updated_at ?? "") === version
+  )
+    return;
   entry.at = 0;
-  entry.controller?.abort(); entry.request = undefined;
+  entry.controller?.abort();
+  entry.request = undefined;
   entry.snapshot = { data: null, loading: true, error: null };
-  entry.listeners.forEach(fn => fn());
+  entry.listeners.forEach((fn) => fn());
   if (entry.listeners.size) void load(owner, key, url, true);
 }
 export function invalidateCustomerResources() {
@@ -79,6 +171,11 @@ async function load(owner: string, key: string, url: string, force = false) {
         cache: "no-store",
         signal: controller.signal,
       });
+      if (response.status === 401 && current()) {
+        setCustomerResourceIdentity(null);
+        window.dispatchEvent(new Event("softshake-customer-session-changed"));
+        return;
+      }
       if (!response.ok) {
         if ([401, 403, 404].includes(response.status) && current())
           entry.snapshot = {
@@ -130,9 +227,11 @@ export function useCustomerResource<T>(
       const entry = entryFor(key);
       clearTimeout(entry.gc);
       entry.listeners.add(listener);
+      ensureOrderEvents();
       if (!entry.timer) {
         const resume = () => {
-          if (document.visibilityState !== "hidden") void load(owner, key, url);
+          if (document.visibilityState !== "hidden" && needsRecovery())
+            void load(owner, key, url, true);
         };
         entry.resume = resume;
         entry.timer = setInterval(resume, intervalMs);
@@ -142,6 +241,7 @@ export function useCustomerResource<T>(
       void load(owner, key, url);
       return () => {
         entry.listeners.delete(listener);
+        if (!hasReaders()) stopEvents?.();
         if (!entry.listeners.size) {
           clearInterval(entry.timer);
           entry.timer = undefined;

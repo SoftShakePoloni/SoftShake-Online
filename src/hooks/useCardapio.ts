@@ -8,7 +8,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { readPublicJson } from "@/lib/public-json.client";
-import { subscribeCatalogUpdates } from "@/lib/catalog-updates";
+import { scheduleCatalogRefresh, subscribeCatalogUpdates } from "@/lib/catalog-updates";
 import { PublicDataContext } from "@/context/PublicDataContext";
 import type { Category, Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
@@ -36,7 +36,7 @@ let menuCacheAt = 0;
 
 function requestMenu() {
   if (!menuRequest) {
-    menuRequest = readPublicJson<{ categorias: Category[] }>("/api/cardapio").then(({categorias}) => { menuCacheAt = Date.now(); return categorias; })
+    menuRequest = readPublicJson<{ categorias: Category[]; nextRefreshAt?: number }>("/api/cardapio").then(({categorias, nextRefreshAt}) => { scheduleCatalogRefresh(nextRefreshAt); menuCacheAt = Date.now(); return categorias; })
       .finally(() => {
         menuRequest = null;
       });
@@ -132,6 +132,7 @@ export function useMenu() {
   const primeInitialMenu = useCallback(() => {
     if (initial?.categories && initial.generatedAt > menuCacheAt) {
       menuCacheAt = initial.generatedAt;
+      scheduleCatalogRefresh(initial.nextRefreshAt);
       store = {
         ...store,
         categories: initial.categories,

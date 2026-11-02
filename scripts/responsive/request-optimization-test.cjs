@@ -13,7 +13,8 @@ function load(file, mocks = {}, globals = {}) {
     ...Object.keys(globals),
     ts.transpileModule(fs.readFileSync(file, "utf8"), {
       compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
+          module: ts.ModuleKind.CommonJS,
         target: ts.ScriptTarget.ES2022,
         esModuleInterop: true,
       },
@@ -358,22 +359,452 @@ test("admin recovery replays concurrent events, duplicate inserts notify once an
   assert.equal(removed, 1);
   assert.equal(timers.size, 0);
 });
-test('a private response from a different cookie identity is discarded before rendering', async () => {
-  let finish, snapshot, eventCount = 0;
-  const target = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {}, dispatchEvent() { eventCount++; } };
-  const api = load('src/lib/customer-resource.ts', { react: { useCallback: f => f, useSyncExternalStore: (subscribe, get) => { subscribe(() => {}); snapshot = get; return get(); } } }, { document: target, window: target, fetch: () => new Promise(resolve => finish = resolve), setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {} });
-  api.setCustomerResourceIdentity('A'); api.useCustomerResource('A', '/api/pedidos/listar');
-  finish(Response.json({ pedidos: ['B private data'] }, { headers: { 'X-Customer-Id': 'B' } }));
-  await tick(); assert.equal(snapshot().data, null); assert.equal(eventCount, 1);
+test("a private response from a different cookie identity is discarded before rendering", async () => {
+  let finish,
+    snapshot,
+    eventCount = 0;
+  const target = {
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {
+      eventCount++;
+    },
+  };
+  const api = load(
+    "src/lib/customer-resource.ts",
+    {
+      react: {
+        useCallback: (f) => f,
+        useSyncExternalStore: (subscribe, get) => {
+          subscribe(() => {});
+          snapshot = get;
+          return get();
+        },
+      },
+    },
+    {
+      document: target,
+      window: target,
+      fetch: () => new Promise((resolve) => (finish = resolve)),
+      setInterval: () => 1,
+      clearInterval() {},
+      setTimeout: () => 1,
+      clearTimeout() {},
+    },
+  );
+  api.setCustomerResourceIdentity("A");
+  api.useCustomerResource("A", "/api/pedidos/listar");
+  finish(
+    Response.json(
+      { pedidos: ["B private data"] },
+      { headers: { "X-Customer-Id": "B" } },
+    ),
+  );
+  await tick();
+  assert.equal(snapshot().data, null);
+  assert.equal(eventCount, 1);
 });
-test('an updated list invalidates an older cached detail but preserves a matching detail', async () => {
-  const requests = []; let snapshot;
-  const target = { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} };
-  const api = load('src/lib/customer-resource.ts', { react: { useCallback: f => f, useSyncExternalStore: (subscribe, get) => { subscribe(() => {}); snapshot = get; return get(); } } }, { document: target, window: target, fetch: () => new Promise(resolve => requests.push(resolve)), setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {} });
-  api.setCustomerResourceIdentity('A'); api.useCustomerResource('A', '/api/pedidos/detalhe?id=order');
-  requests[0](Response.json({ pedido: { status: 'pendente', updated_at: 'v1' } })); await tick();
-  api.invalidateCustomerOrderDetail('A', 'order', 'pendente:v1'); assert.equal(requests.length, 1);
-  api.invalidateCustomerOrderDetail('A', 'order', 'preparando:v2'); assert.equal(requests.length, 2); assert.equal(snapshot().data, null);
-  requests[1](Response.json({ pedido: { status: 'preparando', updated_at: 'v2' } })); await tick(); assert.equal(snapshot().data.pedido.status, 'preparando');
+test("an updated list invalidates an older cached detail but preserves a matching detail", async () => {
+  const requests = [];
+  let snapshot;
+  const target = {
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const api = load(
+    "src/lib/customer-resource.ts",
+    {
+      react: {
+        useCallback: (f) => f,
+        useSyncExternalStore: (subscribe, get) => {
+          subscribe(() => {});
+          snapshot = get;
+          return get();
+        },
+      },
+    },
+    {
+      document: target,
+      window: target,
+      fetch: () => new Promise((resolve) => requests.push(resolve)),
+      setInterval: () => 1,
+      clearInterval() {},
+      setTimeout: () => 1,
+      clearTimeout() {},
+    },
+  );
+  api.setCustomerResourceIdentity("A");
+  api.useCustomerResource("A", "/api/pedidos/detalhe?id=order");
+  requests[0](
+    Response.json({ pedido: { status: "pendente", updated_at: "v1" } }),
+  );
+  await tick();
+  api.invalidateCustomerOrderDetail("A", "order", "pendente:v1");
+  assert.equal(requests.length, 1);
+  api.invalidateCustomerOrderDetail("A", "order", "preparando:v2");
+  assert.equal(requests.length, 2);
+  assert.equal(snapshot().data, null);
+  requests[1](
+    Response.json({ pedido: { status: "preparando", updated_at: "v2" } }),
+  );
+  await tick();
+  assert.equal(snapshot().data.pedido.status, "preparando");
   api.setCustomerResourceIdentity(null);
+});
+test("healthy public realtime suppresses idle HTTP refreshes and retains recovery and campaign clocks", async () => {
+  const timers = new Map(),
+    intervals = new Map();
+  let next = 0,
+    status,
+    broadcast,
+    hits = 0;
+  const target = {
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const channel = {
+    on(_type, _filter, callback) {
+      broadcast = callback;
+      return this;
+    },
+    subscribe(callback) {
+      status = callback;
+      return this;
+    },
+  };
+  const api = load(
+    "src/lib/catalog-updates.ts",
+    {
+      "@/lib/supabase/client": {
+        createClient: () => ({
+          channel: () => channel,
+          removeChannel: async () => {},
+        }),
+      },
+    },
+    {
+      document: target,
+      window: target,
+      setTimeout: (fn) => (timers.set(++next, fn), next),
+      clearTimeout: (id) => timers.delete(id),
+      setInterval: (fn) => (intervals.set(++next, fn), next),
+      clearInterval: (id) => intervals.delete(id),
+    },
+  );
+  const flush = () => {
+    for (const [id, fn] of [...timers]) {
+      timers.delete(id);
+      fn();
+    }
+  };
+  const stop = api.subscribeCatalogUpdates(() => hits++);
+  await tick();
+  status("SUBSCRIBED");
+  flush();
+  const initial = hits;
+  for (let i = 0; i < 20; i++) {
+    for (const fn of intervals.values()) fn();
+    flush();
+  }
+  assert.equal(
+    hits,
+    initial,
+    "ten virtual minutes connected must not reload menu/store",
+  );
+  broadcast();
+  broadcast();
+  flush();
+  assert.equal(hits, initial + 1);
+  status("CHANNEL_ERROR");
+  for (const fn of intervals.values()) fn();
+  flush();
+  assert.equal(hits, initial + 2);
+  status("SUBSCRIBED");
+  flush();
+  assert.equal(hits, initial + 3);
+  api.scheduleCatalogRefresh(Date.now() + 1000);
+  flush();
+  flush();
+  assert.equal(
+    hits,
+    initial + 4,
+    "campaign boundary must refresh without idle polling",
+  );
+  stop();
+  assert.equal(timers.size, 0);
+});
+test("private event connection shares readers, stays idle, refetches on change and falls back on failure", async () => {
+  let now = Date.now(),
+    calls = 0,
+    source,
+    subscription;
+  const intervals = new Map(),
+    timers = new Map();
+  let next = 0;
+  const target = {
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  class FakeSource {
+    constructor() {
+      source = this;
+      this.events = {};
+    }
+    addEventListener(name, fn) {
+      this.events[name] = fn;
+    }
+    close() {
+      this.closed = true;
+    }
+  }
+  const api = load(
+    "src/lib/customer-resource.ts",
+    {
+      react: {
+        useCallback: (f) => f,
+        useSyncExternalStore: (subscribe, get) => {
+          subscription = subscribe(() => {});
+          return get();
+        },
+      },
+    },
+    {
+      document: target,
+      window: target,
+      EventSource: FakeSource,
+      Date: class extends Date {
+        static now() {
+          return now;
+        }
+      },
+      fetch: async () => {
+        calls++;
+        return Response.json({ pedidos: [] });
+      },
+      setTimeout: (fn) => (timers.set(++next, fn), next),
+      clearTimeout: (id) => timers.delete(id),
+      setInterval: (fn) => (intervals.set(++next, fn), next),
+      clearInterval: (id) => intervals.delete(id),
+    },
+  );
+  api.setCustomerResourceIdentity("A");
+  api.useCustomerResource("A", "/api/pedidos/detalhe?id=one");
+  await tick();
+  source.events.ready({
+    data: JSON.stringify({ owner: "A" }),
+    lastEventId: "v1",
+  });
+  for (let i = 0; i < 20; i++) {
+    now += 30_000;
+    for (const fn of intervals.values()) fn();
+    await tick();
+  }
+  assert.equal(calls, 1);
+  source.events.changed({ lastEventId: "v2" });
+  source.events.changed({ lastEventId: "v2" });
+  for (const [id, fn] of [...timers]) {
+    timers.delete(id);
+    fn();
+  }
+  await tick();
+  assert.equal(calls, 2);
+  source.onerror();
+  now += 30_000;
+  for (const fn of intervals.values()) fn();
+  await tick();
+  assert.equal(calls, 3);
+  subscription();
+  assert.equal(source.closed, true);
+  api.setCustomerResourceIdentity(null);
+});
+test("server order stream scopes reads/subscription to verified owner, emits no rows and resumes unchanged revisions", async () => {
+  const timers = new Map(),
+    intervals = new Map(),
+    queries = [],
+    filters = [];
+  let next = 0,
+    status,
+    changed,
+    removed = 0;
+  const channel = {
+    on(_type, filter, callback) {
+      filters.push(filter);
+      changed = callback;
+      return this;
+    },
+    subscribe(callback) {
+      status = callback;
+      return this;
+    },
+  };
+  const db = {
+    channel: () => channel,
+    realtime: { disconnect() {} },
+    removeChannel: async () => removed++,
+    from(table) {
+      const query = { table };
+      queries.push(query);
+      const chain = {
+        select() {
+          return this;
+        },
+        eq(key, value) {
+          query[key] = value;
+          return this;
+        },
+        order() {
+          return this;
+        },
+        limit() {
+          return Promise.resolve({
+            count: 1,
+            data: [
+              {
+                id: "private-id",
+                status: "preparando",
+                updated_at: "v1",
+                cliente_nome: "Never serialize",
+              },
+            ],
+            error: null,
+          });
+        },
+      };
+      return chain;
+    },
+  };
+  const api = load(
+    "src/lib/customer-order-events.server.ts",
+    { "server-only": {} },
+    {
+      crypto: require("crypto").webcrypto,
+      setInterval: (fn) => (intervals.set(++next, fn), next),
+      clearInterval: (id) => intervals.delete(id),
+      setTimeout: (fn) => (timers.set(++next, fn), next),
+      clearTimeout: (id) => timers.delete(id),
+    },
+  );
+  const controller = new AbortController(),
+    response = api.customerOrderEvents(
+      db,
+      "verified-owner",
+      "",
+      controller.signal,
+    ),
+    reader = response.body.getReader(),
+    decode = new TextDecoder();
+  status("SUBSCRIBED");
+  await tick();
+  const first = decode.decode((await reader.read()).value),
+    ready = decode.decode((await reader.read()).value);
+  assert.match(first, /event: changed/);
+  assert.match(ready, /event: ready/);
+  assert.ok(
+    !first.includes("private-id") && !ready.includes("Never serialize"),
+  );
+  assert.equal(queries[0].cliente_id, "verified-owner");
+  assert.equal(filters[0].filter, "cliente_id=eq.verified-owner");
+  changed({
+    eventType: "UPDATE",
+    new: { cliente_id: "someone-else", id: "secret" },
+  });
+  changed({
+    eventType: "UPDATE",
+    new: { cliente_id: "verified-owner", id: "secret" },
+  });
+  const event = decode.decode((await reader.read()).value);
+  assert.match(event, /event: changed/);
+  assert.ok(!event.includes("secret"));
+  const revision = ready.match(/id: (.+)\n/)[1];
+  await reader.cancel();
+  await tick();
+  assert.equal(removed, 1);
+  assert.equal(timers.size, 0);
+  assert.equal(intervals.size, 0);
+  const secondResponse = api.customerOrderEvents(
+      db,
+      "verified-owner",
+      revision,
+      new AbortController().signal,
+    ),
+    secondReader = secondResponse.body.getReader();
+  status("SUBSCRIBED");
+  await tick();
+  const resumed = decode.decode((await secondReader.read()).value);
+  assert.match(resumed, /event: ready/);
+  assert.ok(!resumed.includes("event: changed"));
+  await secondReader.cancel();
+});
+test("freight clock schedules start/end and midnight without waiting for a database write", () => {
+  const { nextFreteRefresh } = load("src/lib/promocoes/frete.ts");
+  const campaign = {
+    data_inicio: "2026-11-02",
+    data_fim: "2026-11-02",
+    hora_inicio: "13:00",
+    hora_fim: "14:00",
+  };
+  assert.equal(
+    nextFreteRefresh([campaign], Date.parse("2026-11-02T12:00:00-03:00")),
+    Date.parse("2026-11-02T13:00:00-03:00"),
+  );
+  assert.equal(
+    nextFreteRefresh([campaign], Date.parse("2026-11-02T13:30:00-03:00")),
+    Date.parse("2026-11-02T14:01:00-03:00"),
+  );
+  assert.equal(
+    nextFreteRefresh([], Date.parse("2026-11-02T23:59:00-03:00")),
+    Date.parse("2026-11-03T00:00:00-03:00"),
+  );
+});
+test("order events reject missing sessions and never trust a client-supplied customer ID", async () => {
+  let session = null,
+    clients = 0,
+    scoped;
+  const api = load("src/app/api/pedidos/eventos/route.ts", {
+    "@/lib/auth": { obterSessao: async () => session },
+    "@/integrations/supabase/client.server": {
+      createServiceRoleClient: () => {
+        clients++;
+        return {};
+      },
+    },
+    "@/lib/customer-order-events.server": {
+      customerOrderEvents: (_db, owner) => {
+        scoped = owner;
+        return Response.json({});
+      },
+    },
+    "@/lib/security/api-response": load("src/lib/security/api-response.ts"),
+    "@/lib/security/rate-limit": { RATE_LIMITS: { apiStrict: {} } },
+    "@/lib/security/with-api-guard": {
+      withApiGuard: (_options, handler) => handler,
+    },
+  });
+  const request = new Request(
+    "http://localhost/api/pedidos/eventos?cliente_id=attacker",
+  );
+  assert.equal((await api.GET(request)).status, 401);
+  assert.equal(clients, 0);
+  session = { id: "verified-owner" };
+  assert.equal((await api.GET(request)).status, 200);
+  assert.equal(scoped, "verified-owner");
+});
+test('automatic printing stops idle checks while connected, coalesces work and cleans up both channels', async () => {
+  const effects = [], intervals = new Map(), handlers = {}, statuses = {}, events = new Map(); let reads = 0, removed = 0, next = 0;
+  const api = load('src/components/admin/pedidos/AutomaticOrderPrint.tsx', {
+    react: { useState: () => [true, () => {}], useEffect: fn => effects.push(fn) },
+    'react-dom': { createPortal: () => null },
+    '@/lib/supabase/client': { createClient: () => ({ channel: name => { const key = name.startsWith('auto-print-config') ? 'config' : 'orders'; return { on(_type, _filter, fn) { handlers[key] = fn; return this; }, subscribe(fn) { statuses[key] = fn; return this; } }; }, removeChannel: async () => removed++ }) },
+    '@/actions/admin/automatic-print': { getAutomaticPrintOrders: async () => { reads++; return { enabled: true, orders: [], serverTime: new Date().toISOString() }; }, prepareOrderForAutomaticPrint: async () => null },
+    '@/lib/admin/automatic-print': { withPrintLock: async fn => fn(), getSentOrders: () => ({}), AUTOMATIC_PRINT_TYPE: 'completo' },
+    './OrderPrint': { OrderPrint: () => null }, sonner: { toast: { error() {} } },
+  }, { document: { querySelector: () => null }, window: { addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) }, crypto: require('crypto').webcrypto, setInterval: fn => (intervals.set(++next, fn), next), clearInterval: id => intervals.delete(id) });
+  api.AutomaticOrderPrint(); const cleanup = effects[1](); await tick(); statuses.orders('SUBSCRIBED'); statuses.config('SUBSCRIBED'); await tick(); const initial = reads;
+  for (let i = 0; i < 60; i++) for (const fn of intervals.values()) fn(); await tick(); assert.equal(reads, initial);
+  handlers.orders(); handlers.orders(); await tick(); await tick(); assert.ok(reads <= initial + 2, 'burst shares running work and queues one recovery');
+  cleanup(); assert.equal(intervals.size, 0); assert.equal(removed, 2); assert.equal(events.size, 0);
 });
