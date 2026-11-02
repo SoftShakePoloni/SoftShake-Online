@@ -9,6 +9,7 @@ type Entry = {
   at: number;
   timer?: ReturnType<typeof setInterval>;
   gc?: ReturnType<typeof setTimeout>;
+  detach?: ReturnType<typeof setTimeout>;
   resume?: () => void;
 };
 const entries = new Map<string, Entry>();
@@ -101,6 +102,7 @@ export function setCustomerResourceIdentity(next: string | null) {
     entry.controller?.abort();
     clearInterval(entry.timer);
     clearTimeout(entry.gc);
+    clearTimeout(entry.detach);
     if (entry.resume) {
       document.removeEventListener("visibilitychange", entry.resume);
       window.removeEventListener("online", entry.resume);
@@ -226,6 +228,7 @@ export function useCustomerResource<T>(
       if (!owner || identity !== owner) return () => {};
       const entry = entryFor(key);
       clearTimeout(entry.gc);
+      clearTimeout(entry.detach);
       entry.listeners.add(listener);
       ensureOrderEvents();
       if (!entry.timer) {
@@ -241,7 +244,7 @@ export function useCustomerResource<T>(
       void load(owner, key, url);
       return () => {
         entry.listeners.delete(listener);
-        if (!hasReaders()) stopEvents?.();
+
         if (!entry.listeners.size) {
           clearInterval(entry.timer);
           entry.timer = undefined;
@@ -249,8 +252,14 @@ export function useCustomerResource<T>(
             document.removeEventListener("visibilitychange", entry.resume);
             window.removeEventListener("online", entry.resume);
           }
-          entry.controller?.abort();
-          entry.request = undefined;
+          // Strict Mode detaches and reattaches in the same turn. Keep the
+          // in-flight request/stream until that remount can reclaim them.
+          entry.detach = setTimeout(() => {
+            if (entry.listeners.size || entries.get(key) !== entry) return;
+            entry.controller?.abort();
+            entry.request = undefined;
+            if (!hasReaders()) stopEvents?.();
+          }, 0);
           entry.gc = setTimeout(() => {
             if (entries.get(key) === entry && !entry.listeners.size)
               entries.delete(key);
