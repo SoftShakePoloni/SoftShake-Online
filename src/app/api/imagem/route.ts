@@ -2,13 +2,9 @@ import { NextRequest } from "next/server";
 import { getSignedUrl } from "@/integrations/supabase/client.server";
 import { withApiGuard } from "@/lib/security/with-api-guard";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import { apiError, apiOk, apiValidation } from "@/lib/security/api-response";
 import {
-  apiError,
-  apiOk,
-  apiValidation,
-} from "@/lib/security/api-response";
-import {
-  isAllowedImagePath,
+  isPublicCatalogImagePath,
   sanitizeStoragePath,
 } from "@/lib/security/sanitize";
 
@@ -26,7 +22,7 @@ export const GET = withApiGuard(
     const raw = request.nextUrl.searchParams.get("path");
     const path = sanitizeStoragePath(raw);
 
-    if (!path || !isAllowedImagePath(path)) {
+    if (!path || !isPublicCatalogImagePath(path)) {
       return apiValidation("Path inválido.");
     }
 
@@ -35,12 +31,8 @@ export const GET = withApiGuard(
       return apiError("Imagem não encontrada.", 404, { codigo: "NOT_FOUND" });
     }
 
-    return apiOk(
-      { url: signedUrl },
-      200,
-      {
-        "Cache-Control": "private, max-age=3300",
-      }
-    );
-  }
+    return apiOk({ url: signedUrl }, 200, {
+      "Cache-Control": "private, max-age=3300",
+    });
+  },
 );

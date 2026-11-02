@@ -3,7 +3,7 @@ import { withApiGuard } from "@/lib/security/with-api-guard";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
 import { apiOk } from "@/lib/security/api-response";
 import { securityLog } from "@/lib/security/logger";
-import { obterSessao } from "@/lib/auth";
+import { obterSessao, revogarToken } from "@/lib/auth";
 
 export const POST = withApiGuard(
   {
@@ -14,6 +14,8 @@ export const POST = withApiGuard(
   async (_request, { ip }) => {
     const sessao = await obterSessao();
     const cookieStore = await cookies();
+    const token = cookieStore.get("session")?.value;
+    if (token) await revogarToken(token);
     cookieStore.set("session", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -31,5 +33,5 @@ export const POST = withApiGuard(
     });
 
     return apiOk({ mensagem: "Sessão encerrada" });
-  }
+  },
 );

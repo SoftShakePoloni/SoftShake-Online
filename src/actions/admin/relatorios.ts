@@ -20,7 +20,7 @@ import {
   isValid,
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 import type {
   RelatorioData,
@@ -552,7 +552,7 @@ function mapPayLabel(s: string): string {
 export async function getRelatorios(
   filtros: RelatorioFiltros
 ): Promise<RelatorioData> {
-  await requireAdmin();
+  await requirePermission("relatorio:read");
 
   const { from, to, label } = resolveRange(filtros);
   const prev = previousRange(from, to);

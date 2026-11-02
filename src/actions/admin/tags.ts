@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 export type TagRow = {
@@ -29,7 +29,7 @@ async function getNextTagId(supabase: ServiceClient): Promise<number> {
 }
 
 export async function listTags(): Promise<TagRow[]> {
-  await requireAdmin();
+  await requirePermission("catalogo:read");
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("tags")
@@ -48,7 +48,7 @@ export async function createTag(input: {
   cor_fundo?: string;
   cor_texto?: string | null;
 }): Promise<TagRow> {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const nome = input.nome.trim();
   if (!nome) throw new Error("Nome da tag é obrigatório");
@@ -79,7 +79,7 @@ export async function createTag(input: {
 
   if (error || !data) {
     console.error("createTag", error);
-    throw new Error(error?.message || "Não foi possível criar a tag");
+    throw new Error("Não foi possível criar a tag");
   }
   return data as TagRow;
 }
@@ -92,7 +92,7 @@ export async function updateTag(
     cor_texto?: string | null;
   }
 ): Promise<TagRow> {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const payload: Record<string, unknown> = {};
   if (updates.nome !== undefined) payload.nome = updates.nome.trim();
@@ -111,13 +111,13 @@ export async function updateTag(
     .maybeSingle();
 
   if (error || !data) {
-    throw new Error(error?.message || "Não foi possível atualizar a tag");
+    throw new Error("Não foi possível atualizar a tag");
   }
   return data as TagRow;
 }
 
 export async function deleteTag(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const tagId = toId(id);
 
@@ -129,7 +129,7 @@ export async function deleteTag(id: string | number) {
 
   const { error } = await supabase.from("tags").delete().eq("id", tagId);
   if (error) {
-    throw new Error(error.message || "Não foi possível excluir a tag");
+    throw new Error("Não foi possível excluir a tag");
   }
   return { success: true };
 }

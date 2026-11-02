@@ -36,9 +36,9 @@ const schema = z
   .object({
     nome: z.string().min(1, "Nome é obrigatório"),
     descricao: z.string().optional(),
-    preco_base: z.coerce.number().min(0, "Preço inválido"),
+    preco_base: z.coerce.number<number>().min(0, "Preço inválido"),
     /** string vazia = sem promoção */
-    preco_promocional: z.union([z.coerce.number().min(0), z.literal("")]).optional(),
+    preco_promocional: z.union([z.coerce.number<number>().min(0), z.literal("")]).optional(),
     categoria_id: z.string().optional(),
     esta_disponivel: z.boolean(),
     imagem_url: z.string().optional(),

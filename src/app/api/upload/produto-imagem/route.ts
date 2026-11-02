@@ -13,7 +13,7 @@ import { NextRequest } from "next/server";
 import { withApiGuard } from "@/lib/security/with-api-guard";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
 import { apiError, apiOk, apiValidation } from "@/lib/security/api-response";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermissionApi } from "@/lib/admin/auth";
 import {
   processImage,
   isValidImageMimeType,
@@ -26,31 +26,32 @@ const MAX_FILE_SIZE_MB = 10;
 export const POST = withApiGuard(
   {
     methods: ["POST"],
+    maxBodyBytes: 11 * 1024 * 1024,
     rateLimit: RATE_LIMITS.mutation,
   },
   async (request: NextRequest) => {
     try {
       // Verifica se é admin
-      await requireAdmin();
+      await requirePermissionApi("catalogo:write");
 
       // Parse do FormData
       const formData = await request.formData();
       const file = formData.get("image") as File | null;
 
-      if (!file) {
+      if (!(file instanceof File)) {
         return apiValidation("Nenhuma imagem enviada");
       }
 
       // Validações básicas
       if (!isValidImageMimeType(file.type)) {
         return apiValidation(
-          "Tipo de arquivo inválido. Envie apenas imagens (JPEG, PNG, WebP, GIF)"
+          "Tipo de arquivo inválido. Envie apenas imagens (JPEG, PNG, WebP, GIF)",
         );
       }
 
       if (!isValidImageSize(file.size, MAX_FILE_SIZE_MB)) {
         return apiValidation(
-          `Arquivo muito grande. Tamanho máximo: ${MAX_FILE_SIZE_MB}MB`
+          `Arquivo muito grande. Tamanho máximo: ${MAX_FILE_SIZE_MB}MB`,
         );
       }
 
@@ -68,7 +69,7 @@ export const POST = withApiGuard(
       // Faz upload para o Supabase Storage
       const uploadResult = await uploadImageToStorage(
         processed.buffer,
-        processed.filename
+        processed.filename,
       );
 
       // Retorna informações do upload
@@ -85,21 +86,21 @@ export const POST = withApiGuard(
             100
           ).toFixed(1),
         },
-        201
+        201,
       );
     } catch (error) {
       console.error("Erro no upload de imagem:", error);
 
       if (error instanceof Error) {
-        if (error.message.includes("não é admin")) {
+        if (["UNAUTHORIZED", "FORBIDDEN"].includes(error.message)) {
           return apiError("Acesso negado", 403, { codigo: "FORBIDDEN" });
         }
-        return apiError(error.message, 500, { codigo: "UPLOAD_ERROR" });
+        return apiError("Não foi possível enviar a imagem. Verifique o arquivo e tente novamente.", 500, { codigo: "UPLOAD_ERROR" });
       }
 
       return apiError("Erro ao processar upload", 500, {
         codigo: "UPLOAD_ERROR",
       });
     }
-  }
+  },
 );

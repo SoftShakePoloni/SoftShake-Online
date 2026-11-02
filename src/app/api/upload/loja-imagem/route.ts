@@ -11,7 +11,11 @@ import {
 import { uploadImageToStorage } from "@/lib/image/upload";
 
 export const POST = withApiGuard(
-  { methods: ["POST"], rateLimit: RATE_LIMITS.mutation },
+  {
+    methods: ["POST"],
+    maxBodyBytes: 11 * 1024 * 1024,
+    rateLimit: RATE_LIMITS.mutation,
+  },
   async (request: NextRequest) => {
     try {
       await requirePermissionApi("config:write");

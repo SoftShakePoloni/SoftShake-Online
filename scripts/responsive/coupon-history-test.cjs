@@ -47,12 +47,13 @@ const { validarCupom } = load('src/lib/cupons.ts', {
     const query = {
       select() { return this; }, order() { return this; }, limit() { return this; }, eq() { return this; }, lte() { return this; }, gte() { return this; },
       maybeSingle: async () => ({ data: { esta_aberto: true, aceitando_pedidos: true, taxa_entrega: 3, aceitar_pedidos_automaticamente: false, imprimir_aceitar_automaticamente: true } }),
-      then(resolve) { return Promise.resolve({ data: [] }).then(resolve); },
+      in() { return this; },
+      then(resolve) { return Promise.resolve({ data: table === "produtos" ? [{ id: 1, nome: "Produto fictício", descricao: "", preco_base: 50, preco_promocional: null, esta_disponivel: true, imagem_url: null }] : [] }).then(resolve); },
       insert(value) { inserted = value; return this; },
       // Emulates the existing database trigger's confirmed result, not a live DB test.
       single: async () => ({ data: { id: 'mock-order', ...inserted, total: 48, desconto_cupom: 5 } }),
     };
-    assert.ok(['configuracoes_loja', 'promocoes_frete_gratis', 'opcoes', 'grupos_opcoes', 'pedidos'].includes(table));
+    assert.ok(['configuracoes_loja', 'promocoes_frete_gratis', 'opcoes', 'grupos_opcoes', 'pedidos', 'produtos'].includes(table));
     return query;
   } };
   const { POST } = load('src/app/api/pedidos/criar/route.ts', {
@@ -60,13 +61,13 @@ const { validarCupom } = load('src/lib/cupons.ts', {
     '@/integrations/supabase/client.server': { createServerClient: () => db },
     '@/lib/utils/pedido': { enrichPedidoItens: itens => itens },
     '@/lib/security/with-api-guard': { withApiGuard: (_, handler) => handler },
-    '@/lib/security/rate-limit': { RATE_LIMITS: { checkout: {} } },
+    '@/lib/security/rate-limit': { RATE_LIMITS: { checkout: {} }, rateLimitCheck: async()=>({success:true}), rateLimitHeaders: ()=>({}) },
     '@/lib/security/api-response': { apiOk: (data, status) => ({ data, status }), apiError: (message, status) => ({ message, status }), apiServerError: error => { throw error; }, apiUnauthorized: () => ({ status: 401 }), apiValidation: message => ({ message, status: 400 }) },
     '@/lib/security/sanitize': { sanitizeText: value => value, sanitizePhone: value => value },
     '@/lib/security/logger': { securityLog() {} },
     '@/lib/promocoes/frete': { getSaoPauloDateTime: () => ({ date: '2026-10-30' }), isFreteCampaignActive: () => false },
     '@/lib/cupons': { validarCupom },
-    '@/lib/combos/options': {},
+    '@/lib/combos/options': { loadComboOptionGroups: async()=>[], resolveComboChoices: ()=>({ resolved: [], extras: 0 }) },
   });
   const body = { cliente_nome: 'Teste', cliente_telefone: '17900000000', tipo_entrega: 'entrega', endereco_completo: 'Rua Teste, 10', meio_pagamento: 'pix', subtotal: 50, taxa_entrega: 3, total: 1, cupom_codigo: 'TESTE', itens: [{ produto: { id: '1' }, qty: 1, total: 50 }] };
   // Coupon was deactivated after the bag validation: checkout must reject before insert.

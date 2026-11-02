@@ -20,10 +20,7 @@ export function stripHtml(input: string): string {
 }
 
 /** Texto de usuário (nome, observação, etc.) */
-export function sanitizeText(
-  input: unknown,
-  maxLen = 500
-): string {
+export function sanitizeText(input: unknown, maxLen = 500): string {
   if (input == null) return "";
   const s = stripHtml(String(input));
   return s.slice(0, maxLen);
@@ -31,7 +28,9 @@ export function sanitizeText(
 
 /** Telefone: só dígitos */
 export function sanitizePhone(input: unknown): string {
-  return String(input ?? "").replace(/\D/g, "").slice(0, 15);
+  return String(input ?? "")
+    .replace(/\D/g, "")
+    .slice(0, 15);
 }
 
 /** Path de storage: bloqueia traversal e caracteres estranhos */
@@ -57,4 +56,12 @@ export const ALLOWED_IMAGE_EXT = new Set([
 export function isAllowedImagePath(path: string): boolean {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   return ALLOWED_IMAGE_EXT.has(ext);
+}
+
+/** Only catalog namespaces may be served publicly, even when Storage is private. */
+export function isPublicCatalogImagePath(path: string): boolean {
+  return (
+    /^(Produtos|Sorveteria|configuracoes)\//.test(path) &&
+    isAllowedImagePath(path)
+  );
 }

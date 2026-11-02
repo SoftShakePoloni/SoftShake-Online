@@ -36,7 +36,7 @@ export async function writeAudit(input: AuditInput) {
 
   try {
     const supabase = createServiceRoleClient();
-    await supabase.from("audit_logs" as never).insert({
+    const { error } = await supabase.from("audit_logs" as never).insert({
       actor_id: input.actorId ?? null,
       actor_email: input.actorEmail ?? null,
       action: input.action,
@@ -49,7 +49,14 @@ export async function writeAudit(input: AuditInput) {
       meta: input.meta ?? null,
       created_at: new Date().toISOString(),
     } as never);
+    if (error) throw new Error("Falha ao persistir auditoria");
   } catch {
-    // tabela pode não existir ainda — log já foi emitido
+    securityLog({
+      event: "api.error",
+      level: "error",
+      path: "audit_logs",
+      result: "fail",
+      meta: { reason: "audit_persistence_failed" },
+    });
   }
 }

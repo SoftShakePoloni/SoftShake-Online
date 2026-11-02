@@ -261,6 +261,8 @@ export type Database = {
           created_at: string
           updated_at: string
           cupom_codigo: string | null
+          idempotency_key: string | null
+          idempotency_hash: string | null
           desconto_cupom: number
         }
         Insert: {
@@ -282,6 +284,8 @@ export type Database = {
           created_at?: string
           updated_at?: string
           cupom_codigo?: string | null
+          idempotency_key?: string | null
+          idempotency_hash?: string | null
           desconto_cupom?: number
         }
         Update: {
@@ -303,6 +307,8 @@ export type Database = {
           created_at?: string
           updated_at?: string
           cupom_codigo?: string | null
+          idempotency_key?: string | null
+          idempotency_hash?: string | null
           desconto_cupom?: number
         }
         Relationships: [

@@ -2,25 +2,41 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { obterSessao } from "@/lib/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
-import {
-  enrichPedidoItens,
-  type OpcaoLookup,
-  type GrupoLookup,
-} from "@/lib/utils/pedido";
 import { withApiGuard } from "@/lib/security/with-api-guard";
-import { RATE_LIMITS } from "@/lib/security/rate-limit";
+import {
+  RATE_LIMITS,
+  rateLimitCheck,
+  rateLimitHeaders,
+} from "@/lib/security/rate-limit";
 import {
   apiError,
   apiOk,
   apiServerError,
   apiUnauthorized,
   apiValidation,
+  apiRateLimited,
 } from "@/lib/security/api-response";
 import { sanitizePhone, sanitizeText } from "@/lib/security/sanitize";
 import { securityLog } from "@/lib/security/logger";
-import { getSaoPauloDateTime, isFreteCampaignActive } from "@/lib/promocoes/frete";
+import {
+  getSaoPauloDateTime,
+  isFreteCampaignActive,
+} from "@/lib/promocoes/frete";
 import { validarCupom } from "@/lib/cupons";
-import { loadComboOptionGroups, resolveComboOrder, type ComboOptionsConfig } from "@/lib/combos/options";
+import {
+  loadComboOptionGroups,
+  resolveComboOrder,
+  type ComboOptionsConfig,
+} from "@/lib/combos/options";
+
+import {
+  checkoutItemSchema,
+  resolveProductItem,
+  cents,
+  type CatalogProduct,
+} from "@/lib/checkout/items";
+
+import { checkoutIdentity, previousCheckout } from "@/lib/checkout/idempotency";
 
 const criarPedidoSchema = z.object({
   cliente_nome: z
@@ -46,7 +62,7 @@ const criarPedidoSchema = z.object({
   taxa_entrega: z.number().min(0).max(1_000),
   total: z.number().min(0).max(100_000),
   cupom_codigo: z.string().max(32).optional().nullable(),
-  itens: z.array(z.record(z.string(), z.unknown())).min(1).max(50),
+  itens: z.array(checkoutItemSchema).min(1).max(50),
   observacoes: z
     .string()
     .max(500)
@@ -65,6 +81,12 @@ export const POST = withApiGuard(
     try {
       const sessao = await obterSessao();
       if (!sessao) return apiUnauthorized();
+      const customerLimit = await rateLimitCheck(sessao.id, {
+        ...RATE_LIMITS.checkout,
+        bucket: "api:checkout:customer",
+      });
+      if (!customerLimit.success)
+        return apiRateLimited(rateLimitHeaders(customerLimit));
 
       let body: unknown;
       try {
@@ -79,12 +101,29 @@ export const POST = withApiGuard(
       }
 
       const data = parsed.data;
-
-      if (data.cupom_codigo) {
+      let identity: ReturnType<typeof checkoutIdentity>;
+      try {
+        identity = checkoutIdentity(
+          request.headers?.get("Idempotency-Key") ?? null,
+          data,
+        );
+      } catch {
+        return apiValidation("Atualize o cardápio e confirme o pedido novamente.");
+      }
+      const supabase = createServerClient();
+      if (identity) {
         try {
-          await validarCupom(data.cupom_codigo, data.subtotal);
+          const previous = await previousCheckout(
+            supabase,
+            sessao.id,
+            identity,
+          );
+          if (previous) return apiOk({ pedido: previous, replayed: true }, 200);
         } catch (error) {
-          return apiError(error instanceof Error ? error.message : "Cupom inválido.", 400);
+          return apiError(
+            error instanceof Error ? error.message : "Confira seus pedidos.",
+            409,
+          );
         }
       }
 
@@ -101,8 +140,6 @@ export const POST = withApiGuard(
         enderecoCompleto = sanitizeText(enderecoCompleto, 500);
       }
 
-      const supabase = createServerClient();
-
       type ConfigRow = {
         esta_aberto?: boolean | null;
         aceitar_pedidos_automaticamente?: boolean | null;
@@ -116,7 +153,7 @@ export const POST = withApiGuard(
         const full = await supabase
           .from("configuracoes_loja")
           .select(
-            "esta_aberto, aceitar_pedidos_automaticamente, imprimir_aceitar_automaticamente, aceitando_pedidos, taxa_entrega"
+            "esta_aberto, aceitar_pedidos_automaticamente, imprimir_aceitar_automaticamente, aceitando_pedidos, taxa_entrega",
           )
           .order("id", { ascending: true })
           .limit(1)
@@ -127,7 +164,9 @@ export const POST = withApiGuard(
         } else {
           const basic = await supabase
             .from("configuracoes_loja")
-            .select("esta_aberto, aceitar_pedidos_automaticamente, taxa_entrega")
+            .select(
+              "esta_aberto, aceitar_pedidos_automaticamente, taxa_entrega",
+            )
             .order("id", { ascending: true })
             .limit(1)
             .maybeSingle();
@@ -137,6 +176,17 @@ export const POST = withApiGuard(
         }
       }
 
+      if (
+        !configLoja ||
+        typeof configLoja.esta_aberto !== "boolean" ||
+        !Number.isFinite(Number(configLoja.taxa_entrega)) ||
+        Number(configLoja.taxa_entrega) < 0
+      )
+        return apiError(
+          "Não foi possível confirmar o funcionamento da loja. Tente novamente.",
+          503,
+          { codigo: "STORE_UNAVAILABLE" },
+        );
       if (configLoja) {
         const lojaAberta = configLoja.esta_aberto !== false;
         const aceitando =
@@ -149,94 +199,236 @@ export const POST = withApiGuard(
           return apiError(
             "A loja está fechada no momento e não está aceitando pedidos.",
             403,
-            { codigo: "STORE_CLOSED" }
+            { codigo: "STORE_CLOSED" },
           );
         }
       }
 
       const getComboId = (raw: Record<string, unknown>) => {
-        const product = raw.produto as {id?: unknown; comboId?: unknown} | undefined;
-        const match = typeof product?.id === 'string' ? /^combo-(\d+)$/.exec(product.id) : null;
+        const product = raw.produto as
+          { id?: unknown; comboId?: unknown } | undefined;
+        const match =
+          typeof product?.id === "string"
+            ? /^combo-(\d+)$/.exec(product.id)
+            : null;
         return match ? Number(match[1]) : Number(product?.comboId) || 0;
       };
-      const comboIds = [...new Set(data.itens.map(getComboId).filter(id => id > 0))];
-      let comboLinks: { combo_id: number; produto_id: number; quantidade: number }[] = [];
+      const comboIds = [
+        ...new Set(data.itens.map(getComboId).filter((id) => id > 0)),
+      ];
+      let comboLinks: {
+        combo_id: number;
+        produto_id: number;
+        quantidade: number;
+      }[] = [];
       if (comboIds.length) {
-        const [{data: activeCombos, error: comboError}, {data: links, error: linksError}] = await Promise.all([
+        const [
+          { data: activeCombos, error: comboError },
+          { data: links, error: linksError },
+        ] = await Promise.all([
           supabase.from("combos").select("*").in("id", comboIds),
-          supabase.from("combo_itens").select("combo_id, produto_id, quantidade").in("combo_id", comboIds),
+          supabase
+            .from("combo_itens")
+            .select("combo_id, produto_id, quantidade")
+            .in("combo_id", comboIds),
         ]);
-        if (comboError || linksError) return apiServerError(comboError || linksError);
-        if ((activeCombos ?? []).length !== comboIds.length || activeCombos?.some(combo => !combo.ativa)) return apiError("Um dos combos não está mais disponível. Atualize a sacola.", 409, {codigo: "COMBO_UNAVAILABLE"});
+        if (comboError || linksError)
+          return apiServerError(comboError || linksError);
+        if (
+          (activeCombos ?? []).length !== comboIds.length ||
+          activeCombos?.some((combo) => !combo.ativa)
+        )
+          return apiError(
+            "Um dos combos não está mais disponível. Atualize a sacola.",
+            409,
+            { codigo: "COMBO_UNAVAILABLE" },
+          );
         comboLinks = links ?? [];
         try {
-          const configurations = new Map(await Promise.all((activeCombos ?? []).map(async combo => {
-            const items = comboLinks.filter(link => link.combo_id === combo.id);
-            if (items.length < 2) throw new Error("Um combo não está mais disponível.");
-            return [combo.id, {combo, groups: await loadComboOptionGroups(supabase, items)}] as const;
-          })));
+          const configurations = new Map(
+            await Promise.all(
+              (activeCombos ?? []).map(async (combo) => {
+                const items = comboLinks.filter(
+                  (link) => link.combo_id === combo.id,
+                );
+                if (items.length < 2)
+                  throw new Error("Um combo não está mais disponível.");
+                return [
+                  combo.id,
+                  {
+                    combo,
+                    groups: await loadComboOptionGroups(supabase, items),
+                  },
+                ] as const;
+              }),
+            ),
+          );
           for (const item of data.itens) {
             const comboId = getComboId(item);
             if (!comboId) continue;
-            const {combo, groups} = configurations.get(comboId)!;
-            const resolved = resolveComboOrder(groups, combo.opcoes_config as ComboOptionsConfig | null, item.selections, item.qty, item.total, Number(combo.preco));
-            Object.assign(item, resolved, {produto: {...(item.produto as object), id: 'combo-' + comboId, comboId, name: combo.nome, price: Number(combo.preco)}});
+            const { combo, groups } = configurations.get(comboId)!;
+            const resolved = resolveComboOrder(
+              groups,
+              combo.opcoes_config as ComboOptionsConfig | null,
+              item.selections,
+              item.qty,
+              item.total,
+              Number(combo.preco),
+            );
+            Object.assign(item, resolved, {
+              produto: {
+                id: "combo-" + comboId,
+                comboId,
+                name: combo.nome,
+                price: Number(combo.preco),
+              },
+            });
           }
-          const itemsTotal = data.itens.reduce((sum, item) => sum + Number(item.total), 0);
-          if (!Number.isFinite(itemsTotal) || Math.abs(itemsTotal - data.subtotal) > 0.01) return apiValidation("Confira o subtotal da sacola.");
+          const itemsTotal = data.itens.reduce(
+            (sum, item) => sum + Number(item.total),
+            0,
+          );
+          if (
+            !Number.isFinite(itemsTotal) ||
+            Math.abs(itemsTotal - data.subtotal) > 0.01
+          )
+            return apiValidation("Confira o subtotal da sacola.");
         } catch (error) {
-          return apiError(error instanceof Error ? error.message : "Confira as opções do combo.", 409, {codigo: "COMBO_UPDATED"});
+          return apiError(
+            error instanceof Error
+              ? error.message
+              : "Confira as opções do combo.",
+            409,
+            { codigo: "COMBO_UPDATED" },
+          );
         }
       }
-      const idsNoCarrinho = new Set(data.itens.flatMap((raw) => {
-        const item = raw as { produto?: { id?: unknown; comboId?: unknown } };
-        return item.produto?.comboId != null || item.produto?.id == null
-          ? []
-          : [String(item.produto.id)];
-      }));
+      const regularItems = data.itens.filter((item) => !getComboId(item));
+      const productIds = [
+        ...new Set(regularItems.map((item) => Number(item.produto.id))),
+      ];
+      if (
+        regularItems.some((item) => !/^[1-9]\d*$/.test(item.produto.id)) ||
+        productIds.some((id) => !Number.isSafeInteger(id) || id <= 0)
+      )
+        return apiValidation("Produto inválido.");
+      let canonicalItems: (
+        ReturnType<typeof resolveProductItem> | (typeof data.itens)[number]
+      )[];
+      try {
+        const { data: products, error: productsError } = productIds.length
+          ? await supabase
+              .from("produtos")
+              .select(
+                "id,nome,descricao,preco_base,preco_promocional,esta_disponivel,imagem_url",
+              )
+              .in("id", productIds)
+          : { data: [], error: null };
+        if (productsError) return apiServerError(productsError);
+        if (products?.length !== productIds.length)
+          return apiError(
+            "Um produto não está disponível. Atualize a sacola.",
+            409,
+          );
+        const groups = await loadComboOptionGroups(
+          supabase,
+          productIds.map((produto_id) => ({ produto_id, quantidade: 1 })),
+        );
+        canonicalItems = data.itens.map((item) => {
+          if (getComboId(item))
+            return {
+              ...item,
+              observacoes: sanitizeText(item.observacoes, 500),
+            };
+          const product = products!.find(
+            (product) => String(product.id) === item.produto.id,
+          )!;
+          const prefix = "p" + product.id + "u0g";
+          const productGroups = groups
+            .filter((group) => group.id.startsWith(prefix))
+            .map((group) => ({
+              ...group,
+              id: group.id.slice(prefix.length),
+              name: group.sourceGroupName ?? group.name,
+            }));
+          return resolveProductItem(
+            item,
+            product as CatalogProduct,
+            productGroups,
+          );
+        });
+      } catch (error) {
+        return apiError(
+          error instanceof Error
+            ? error.message
+            : "Confira os produtos da sacola.",
+          409,
+          { codigo: "CART_UPDATED" },
+        );
+      }
+      const canonicalSubtotal =
+        canonicalItems.reduce(
+          (sum, item) => sum + cents(Number(item.total)),
+          0,
+        ) / 100;
+      if (cents(canonicalSubtotal) !== cents(data.subtotal))
+        return apiError("Confira o subtotal da sacola.", 409, {
+          codigo: "CART_UPDATED",
+        });
+      data.subtotal = canonicalSubtotal;
+      if (data.cupom_codigo) {
+        try {
+          await validarCupom(data.cupom_codigo, data.subtotal);
+        } catch (error) {
+          return apiError(
+            error instanceof Error ? error.message : "Cupom inválido.",
+            400,
+          );
+        }
+      }
+
+      const idsNoCarrinho = new Set(
+        data.itens.flatMap((raw) => {
+          const item = raw as { produto?: { id?: unknown; comboId?: unknown } };
+          return item.produto?.comboId != null || item.produto?.id == null
+            ? []
+            : [String(item.produto.id)];
+        }),
+      );
       for (const link of comboLinks) idsNoCarrinho.add(String(link.produto_id));
       const agoraBrasil = getSaoPauloDateTime();
-      const { data: campanhasFrete } = await supabase
+      const { data: campanhasFrete, error: freightError } = await supabase
         .from("promocoes_frete_gratis")
         .select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim")
         .eq("ativa", true)
         .lte("data_inicio", agoraBrasil.date)
         .gte("data_fim", agoraBrasil.date);
-      const freteElegivel = (campanhasFrete ?? []).some((campaign) =>
-        isFreteCampaignActive(campaign, agoraBrasil) &&
-        (campaign.produto_id == null || idsNoCarrinho.has(String(campaign.produto_id)))
+      if (freightError) return apiServerError(freightError);
+      const freteElegivel = (campanhasFrete ?? []).some(
+        (campaign) =>
+          isFreteCampaignActive(campaign, agoraBrasil) &&
+          (campaign.produto_id == null ||
+            idsNoCarrinho.has(String(campaign.produto_id))),
       );
-      const entrega = data.tipo_entrega === "entrega" || data.tipo_entrega === "delivery";
+      const entrega =
+        data.tipo_entrega === "entrega" || data.tipo_entrega === "delivery";
       const taxaEntregaCalculada = entrega
-        ? freteElegivel ? 0 : Number(configLoja?.taxa_entrega ?? data.taxa_entrega)
+        ? freteElegivel
+          ? 0
+          : Number(configLoja?.taxa_entrega ?? data.taxa_entrega)
         : 0;
       if (Math.abs(data.taxa_entrega - taxaEntregaCalculada) > 0.01) {
         return apiError(
           "O frete foi atualizado. Confira o valor na sacola e tente novamente.",
           409,
-          { codigo: "SHIPPING_UPDATED" }
+          { codigo: "SHIPPING_UPDATED" },
         );
       }
 
-      const [{ data: opcoes }, { data: grupos }] = await Promise.all([
-        supabase
-          .from("opcoes")
-          .select(
-            "id, nome, preco_adicional, grupo_id, grupo:grupos_opcoes(id, nome)"
-          ),
-        supabase.from("grupos_opcoes").select("id, nome"),
-      ]);
-
-      const itensEnriquecidos = enrichPedidoItens(
-        data.itens as never[],
-        (opcoes || []) as OpcaoLookup[],
-        (grupos || []) as GrupoLookup[]
-      ).map((item) => ({
-        ...item,
-        adicionais: item.adicionais || item.selectionsResolved || [],
-      }));
-
-      const autoAceite = Boolean(configLoja?.aceitar_pedidos_automaticamente || configLoja?.imprimir_aceitar_automaticamente);
+      const autoAceite = Boolean(
+        configLoja?.aceitar_pedidos_automaticamente ||
+        configLoja?.imprimir_aceitar_automaticamente,
+      );
       const initialStatus: "pendente" | "preparando" = autoAceite
         ? "preparando"
         : "pendente";
@@ -244,6 +436,9 @@ export const POST = withApiGuard(
       const { data: pedido, error } = await supabase
         .from("pedidos")
         .insert({
+          ...(identity
+            ? { idempotency_key: identity.key, idempotency_hash: identity.hash }
+            : {}),
           cliente_id: sessao.id,
           cliente_nome: data.cliente_nome,
           cliente_telefone: data.cliente_telefone,
@@ -254,9 +449,9 @@ export const POST = withApiGuard(
           troco_para: data.troco_para != null ? String(data.troco_para) : null,
           subtotal: data.subtotal,
           taxa_entrega: taxaEntregaCalculada,
-          total: data.subtotal + taxaEntregaCalculada,
+          total: cents(data.subtotal + taxaEntregaCalculada) / 100,
           cupom_codigo: data.cupom_codigo?.trim().toUpperCase() || null,
-          itens: itensEnriquecidos,
+          itens: canonicalItems,
           status: initialStatus,
           observacoes: data.observacoes,
         })
@@ -264,11 +459,29 @@ export const POST = withApiGuard(
         .single();
 
       if (error || !pedido) {
+        if (error?.code === "23505" && identity) {
+          const previous = await previousCheckout(
+            supabase,
+            sessao.id,
+            identity,
+          );
+          if (previous) return apiOk({ pedido: previous, replayed: true }, 200);
+        }
         const message = error?.message ?? "";
-        if (message.includes("CUPOM_INVALIDO")) return apiError("Esse cupom não é válido.", 400);
-        if (message.includes("CUPOM_FORA_DA_VALIDADE")) return apiError("Esse cupom está fora do período de validade.", 400);
-        if (message.includes("CUPOM_ESGOTADO")) return apiError("Esse cupom acabou de atingir o limite de usos.", 409);
-        if (message.includes("CUPOM_VALOR_MINIMO")) return apiError("O pedido não atingiu o valor mínimo deste cupom.", 400);
+        if (message.includes("CUPOM_INVALIDO"))
+          return apiError("Esse cupom não é válido.", 400);
+        if (message.includes("CUPOM_FORA_DA_VALIDADE"))
+          return apiError("Esse cupom está fora do período de validade.", 400);
+        if (message.includes("CUPOM_ESGOTADO"))
+          return apiError(
+            "Esse cupom acabou de atingir o limite de usos.",
+            409,
+          );
+        if (message.includes("CUPOM_VALOR_MINIMO"))
+          return apiError(
+            "O pedido não atingiu o valor mínimo deste cupom.",
+            400,
+          );
         return apiServerError(error);
       }
 
@@ -287,10 +500,10 @@ export const POST = withApiGuard(
           pedido,
           auto_aceito: autoAceite,
         },
-        201
+        201,
       );
     } catch (erro) {
       return apiServerError(erro);
     }
-  }
+  },
 );

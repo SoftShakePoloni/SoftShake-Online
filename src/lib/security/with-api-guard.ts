@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   RATE_LIMITS,
@@ -8,6 +8,7 @@ import {
   type RateLimitConfig,
 } from "./rate-limit";
 import {
+  apiError,
   apiForbidden,
   apiRateLimited,
   apiServerError,
@@ -21,11 +22,12 @@ type GuardOptions = {
   rateLimit?: RateLimitConfig;
   /** Exige Origin/Referer confiável em mutações */
   checkOrigin?: boolean;
+  maxBodyBytes?: number;
 };
 
 type Handler = (
   request: NextRequest,
-  ctx: { ip: string }
+  ctx: { ip: string },
 ) => Promise<NextResponse> | NextResponse;
 
 /**
@@ -71,6 +73,38 @@ export function withApiGuard(options: GuardOptions, handler: Handler) {
         return apiForbidden("Origem da requisição não permitida");
       }
 
+      if (
+        !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
+        request.body
+      ) {
+        const maximum = options.maxBodyBytes ?? 256 * 1024;
+        if (Number(request.headers.get("content-length")) > maximum)
+          return apiError("Arquivo ou requisição muito grande.", 413);
+        const reader = request.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let length = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          length += value.byteLength;
+          if (length > maximum) {
+            void reader.cancel().catch(() => {});
+            return apiError("Arquivo ou requisição muito grande.", 413);
+          }
+          chunks.push(value);
+        }
+        const buffer = new Uint8Array(length);
+        let offset = 0;
+        for (const chunk of chunks) {
+          buffer.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        request = new NextRequest(request.nextUrl, {
+          method: request.method,
+          headers: request.headers,
+          body: buffer.buffer,
+        });
+      }
       const res = await handler(request, { ip });
 
       // anexa rate limit headers na resposta

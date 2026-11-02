@@ -1,7 +1,7 @@
 "use server";
 
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePageAccess } from "@/lib/admin/auth";
 
 export type DashboardPeriod = "hoje" | "ontem" | "7d" | "30d";
 
@@ -132,7 +132,7 @@ export type DashboardData = {
 export async function getDashboardData(
   period: DashboardPeriod = "hoje"
 ): Promise<DashboardData> {
-  await requireAdmin();
+  await requirePageAccess("dashboard");
   const supabase = createServiceRoleClient();
   const now = new Date();
   const { start, end, prevStart, prevEnd } = periodRange(period, now);

@@ -29,20 +29,25 @@ type LogPayload = {
 
 function redact(meta?: Record<string, unknown>) {
   if (!meta) return undefined;
-  const clone = { ...meta };
-  for (const k of Object.keys(clone)) {
-    const low = k.toLowerCase();
-    if (
-      low.includes("password") ||
-      low.includes("token") ||
-      low.includes("secret") ||
-      low.includes("authorization") ||
-      low.includes("cookie")
-    ) {
-      clone[k] = "[REDACTED]";
-    }
+  const seen = new WeakSet<object>();
+  function visit(value: unknown, depth = 0): unknown {
+    if (value === null || typeof value !== "object") return value;
+    if (depth >= 8 || seen.has(value)) return "[REDACTED]";
+    seen.add(value);
+    if (Array.isArray(value))
+      return value.slice(0, 100).map((item) => visit(item, depth + 1));
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 100)
+        .map(([key, item]) => [
+          key,
+          /password|senha|token|secret|authorization|cookie/i.test(key)
+            ? "[REDACTED]"
+            : visit(item, depth + 1),
+        ]),
+    );
   }
-  return clone;
+  return visit(meta);
 }
 
 export function securityLog(payload: LogPayload) {

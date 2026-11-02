@@ -41,6 +41,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [codigoCupom, setCodigoCupom] = useState("");
   const cupomRequest = useRef(0);
+  const checkoutLock = useRef(false);
+  const checkoutAttempt = useRef<{ body: string; key: string } | null>(null);
   const resumeChecked = useRef(false);
   const [validandoCupom, setValidandoCupom] = useState(false);
   const [erroCupom, setErroCupom] = useState("");
@@ -259,6 +261,8 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       return;
     }
 
+    if (checkoutLock.current) return;
+    checkoutLock.current = true;
     setEnviandoPedido(true);
     
     try {
@@ -300,12 +304,15 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         }),
       };
       
+      const serializedOrder = JSON.stringify(pedidoData);
+      if (checkoutAttempt.current?.body !== serializedOrder) checkoutAttempt.current = { body: serializedOrder, key: crypto.randomUUID() };
       const resposta = await fetch('/api/pedidos/criar', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Idempotency-Key': checkoutAttempt.current.key,
         },
-        body: JSON.stringify(pedidoData),
+        body: serializedOrder,
       });
       
       if (!resposta.ok) {
@@ -315,6 +322,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       }
       
       const { pedido } = await resposta.json();
+      checkoutAttempt.current = null;
       
       toast.success('Pedido realizado com sucesso!', {
         description: `Pedido #${pedido.id.slice(0, 8)} · Total confirmado: ${formatBRL(Number(pedido.total))}`,
@@ -332,6 +340,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     } catch (error) {
       toast.error('Erro ao processar pedido');
     } finally {
+      checkoutLock.current = false;
       setEnviandoPedido(false);
     }
   };

@@ -199,7 +199,7 @@ export async function getConfiguracoesLoja() {
 }
 
 export async function ensureConfiguracoesLoja() {
-  await requireAdmin();
+  await requirePermission("config:write");
   const supabase = createServiceRoleClient();
 
   const existing = await getConfiguracoesLoja();
@@ -231,7 +231,7 @@ export async function updateConfiguracoesLoja(
   id: string | number,
   updates: ConfiguracoesUpdate
 ) {
-  await requireAdmin();
+  await requirePermission("config:write");
   const supabase = createServiceRoleClient();
   const configId = toNumericId(id);
   const payload = sanitizeUpdates(updates);

@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/admin/auth";
+import { requirePermission } from "@/lib/admin/auth";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 
 export type ProdutoUpdate = {
@@ -97,7 +97,7 @@ function sanitizeProdutoUpdate(updates: ProdutoUpdate) {
 }
 
 export async function listProdutosAdmin(limit = 500) {
-  await requireAdmin();
+  await requirePermission("catalogo:read");
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("produtos")
@@ -113,7 +113,7 @@ export async function listProdutosAdmin(limit = 500) {
 }
 
 export async function createProduto(input: ProdutoCreate) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
 
   const nome = input.nome?.trim();
@@ -182,7 +182,7 @@ export async function createProduto(input: ProdutoCreate) {
 
   if (error || !data) {
     console.error("createProduto", error);
-    throw new Error(error?.message || "Não foi possível criar o produto");
+    throw new Error("Não foi possível criar o produto");
   }
   return data;
 }
@@ -191,7 +191,7 @@ export async function updateProduto(
   id: string | number,
   updates: ProdutoUpdate
 ) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const produtoId = toId(id);
   const payload = sanitizeProdutoUpdate(updates);
@@ -250,7 +250,7 @@ export async function updateProduto(
 }
 
 export async function deleteProduto(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const produtoId = toId(id);
 
@@ -288,7 +288,7 @@ export async function deleteProduto(id: string | number) {
 }
 
 export async function duplicateProduto(id: string | number) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
   const produtoId = toId(id);
 
@@ -337,7 +337,7 @@ export async function duplicateProduto(id: string | number) {
 
 /** Reordena produtos (lista ordenada de IDs na categoria) */
 export async function reorderProdutos(orderedIds: (string | number)[]) {
-  await requireAdmin();
+  await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
 
   await Promise.all(

@@ -1,3 +1,8 @@
+import {
+  isRevoked,
+  revokeSession,
+  revocationEnabled,
+} from "@/lib/security/session-revocation";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { createServerClient } from "@/integrations/supabase/client.server";
@@ -8,15 +13,15 @@ function getJwtSecret(): Uint8Array {
   if (!raw || raw.length < 32) {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
-        "AUTH_JWT_SECRET deve ter no mínimo 32 caracteres em produção"
+        "AUTH_JWT_SECRET deve ter no mínimo 32 caracteres em produção",
       );
     }
     // Dev only fallback — nunca usar em produção
     console.warn(
-      "[security] AUTH_JWT_SECRET fraco/ausente — use um secret forte no .env"
+      "[security] AUTH_JWT_SECRET fraco/ausente — use um secret forte no .env",
     );
     return new TextEncoder().encode(
-      raw || "dev-only-softshake-jwt-secret-min-32-chars!!"
+      raw || "dev-only-softshake-jwt-secret-min-32-chars!!",
     );
   }
   return new TextEncoder().encode(raw);
@@ -55,12 +60,19 @@ export async function gerarToken(cliente: ClientePayload): Promise<string> {
  * Verifica e decodifica um token JWT
  */
 export async function verificarToken(
-  token: string
+  token: string,
 ): Promise<ClientePayload | null> {
   try {
     const secret = getJwtSecret();
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, secret, {
+      algorithms: ["HS256"],
+    });
     if (!payload.id || typeof payload.id !== "string") return null;
+    if (
+      revocationEnabled() &&
+      (!payload.jti || (await isRevoked(createServerClient(), payload.jti)))
+    )
+      return null;
     return payload as unknown as ClientePayload;
   } catch {
     return null;
@@ -118,4 +130,19 @@ export async function buscarClientePorTelefone(telefone: string) {
   }
 
   return data;
+}
+
+/** Optional database-backed invalidation; enable only after its migration. */
+export async function revogarToken(token: string): Promise<void> {
+  if (!revocationEnabled()) return;
+  let payload;
+  try {
+    payload = (
+      await jwtVerify(token, getJwtSecret(), { algorithms: ["HS256"] })
+    ).payload;
+  } catch {
+    return;
+  }
+  if (payload.jti && typeof payload.exp === "number")
+    await revokeSession(createServerClient(), payload.jti, payload.exp);
 }

@@ -200,10 +200,10 @@ export function hasPermission(
   // Se o perfil tem permissoes customizadas, usa-as + leituras básicas do role
   if (customPermissoes && customPermissoes.length > 0) {
     const set = new Set(customPermissoes);
-    // Leituras mínimas do role sempre liberadas se a role tiver
+    // Leituras operacionais mínimas; capacidades gerenciáveis respeitam revogação.
     const roleList = ROLE_PERMISSIONS[role] ?? [];
     const readOnly = (roleList as readonly string[]).filter(
-      (p) => p.endsWith(":read") || p.endsWith(":read_own")
+      (p) => (p.endsWith(":read") || p.endsWith(":read_own")) && !isStaffCapability(p)
     );
     if (set.has(permission) || readOnly.includes(permission)) return true;
     // pedido:read acompanha quem tem update_status
@@ -375,7 +375,7 @@ export function buildPermissoesFromCapabilities(
   const base = new Set<string>();
   // Leituras mínimas conforme role
   for (const p of ROLE_PERMISSIONS[role] ?? []) {
-    if (String(p).endsWith(":read") || String(p).endsWith(":read_own")) {
+    if ((String(p).endsWith(":read") || String(p).endsWith(":read_own")) && !isStaffCapability(p)) {
       base.add(p);
     }
   }
