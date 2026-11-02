@@ -7,7 +7,8 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
-import { subscribeCatalogUpdates } from "@/lib/catalog-updates";
+import { readPublicJson } from "@/lib/public-json.client";
+import { scheduleCatalogRefresh, subscribeCatalogUpdates } from "@/lib/catalog-updates";
 import { PublicDataContext } from "@/context/PublicDataContext";
 import type { Category, Product } from "@/data/tipos";
 import { hasProductPromo } from "@/data/tipos";
@@ -35,16 +36,7 @@ let menuCacheAt = 0;
 
 function requestMenu() {
   if (!menuRequest) {
-    menuRequest = fetch("/api/cardapio", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok)
-          throw new Error("Não foi possível carregar o cardápio.");
-        const { categorias } = (await response.json()) as {
-          categorias: Category[];
-        };
-        menuCacheAt = Date.now();
-        return categorias;
-      })
+    menuRequest = readPublicJson<{ categorias: Category[]; nextRefreshAt?: number }>("/api/cardapio").then(({categorias, nextRefreshAt}) => { scheduleCatalogRefresh(nextRefreshAt); menuCacheAt = Date.now(); return categorias; })
       .finally(() => {
         menuRequest = null;
       });
@@ -57,6 +49,7 @@ function emit() {
 }
 
 function setStore(partial: Partial<MenuStore>) {
+  if (Object.entries(partial).every(([key,value]) => store[key as keyof MenuStore] === value)) return;
   store = { ...store, ...partial };
   emit();
 }
@@ -79,7 +72,7 @@ function loadMenu(): Promise<void> {
 }
 
 function ensureMenuLoaded() {
-  if (!stopUpdates) stopUpdates = subscribeCatalogUpdates(() => { void loadMenu(); });
+  if (!stopUpdates) stopUpdates = subscribeCatalogUpdates(reason => { if (reason === "initial" && menuCacheAt && Date.now() - menuCacheAt < 30_000) return; void loadMenu(); });
 }
 
 function subscribe(listener: () => void) {
@@ -139,6 +132,7 @@ export function useMenu() {
   const primeInitialMenu = useCallback(() => {
     if (initial?.categories && initial.generatedAt > menuCacheAt) {
       menuCacheAt = initial.generatedAt;
+      scheduleCatalogRefresh(initial.nextRefreshAt);
       store = {
         ...store,
         categories: initial.categories,

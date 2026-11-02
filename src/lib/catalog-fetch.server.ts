@@ -1,4 +1,5 @@
 import "server-only";
+import { invalidatePublicReads } from "@/lib/public-read.server";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 
@@ -36,6 +37,7 @@ async function notifyCatalogChanged() {
 export const catalogFetch: typeof fetch = async (input, init) => {
   const response = await fetch(input, init);
   if (response.ok && isCatalogMutation(input, init)) {
+    invalidatePublicReads();
     try { after(notifyCatalogChanged); }
     catch { /* Non-request maintenance scripts have no Next.js lifecycle. */ }
   }

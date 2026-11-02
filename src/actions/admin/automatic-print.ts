@@ -14,19 +14,15 @@ export async function getAutomaticPrintOrders(since: string | null) {
   if (error) throw new Error("Não foi possível consultar a impressão automática.");
   const enabled = Boolean(config?.imprimir_aceitar_automaticamente);
   // Starting a station must never print the entire historical order backlog.
-  if (!enabled || !since) return { enabled, serverTime, orders: [] as Pedido[] };
+  if (!enabled || !since) return { enabled, serverTime, orders: [] as Array<{ id: string; created_at: string }> };
   const date = new Date(since);
   if (!Number.isFinite(date.getTime())) throw new Error("Período de impressão inválido.");
   const from = new Date(Math.max(date.getTime() - 5000, Date.now() - 30 * 60_000)).toISOString();
-  const { data, error: ordersError } = await db.from("pedidos").select("*")
+  const { data, error: ordersError } = await db.from("pedidos").select("id, created_at")
     .gte("created_at", from).in("status", ["pendente", "confirmado", "preparando"])
     .order("created_at", { ascending: true }).order("id", { ascending: true }).limit(100);
   if (ordersError) throw new Error("Não foi possível consultar novos pedidos para impressão.");
-  return { enabled, serverTime, orders: (data ?? []).map(row => ({
-    ...row,
-    endereco_completo: formatEndereco(row.endereco_completo as Parameters<typeof formatEndereco>[0]),
-    itens: Array.isArray(row.itens) ? row.itens : [],
-  })) as unknown as Pedido[] };
+  return { enabled, serverTime, orders: (data ?? []) as Array<{ id: string; created_at: string }> };
 }
 
 export async function prepareOrderForAutomaticPrint(id: string): Promise<Pedido | null> {

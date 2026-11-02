@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { createContext, createElement, useContext, useCallback, useEffect, useState, type ReactNode } from "react";
+import { imageProxyUrl } from "@/lib/image/proxy-url";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -10,39 +11,17 @@ import {
 
 export type ConfiguracoesRealtimeStatus = "connecting" | "live" | "error";
 
-async function resolveImageUrl(path: string | null | undefined): Promise<string | null> {
-  if (!path) return null;
-  if (path.startsWith("http")) return path;
-  try {
-    const res = await fetch(`/api/imagem?path=${encodeURIComponent(path)}`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as { url?: string };
-    return data.url ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function hydrateConfig(
-  raw: Record<string, unknown>
-): Promise<ConfiguracaoLoja> {
+function hydrateConfig(raw: Record<string, unknown>): ConfiguracaoLoja {
   const base = normalizeConfiguracao(raw);
-  const [logo, banner] = await Promise.all([
-    resolveImageUrl(base.logo_url),
-    resolveImageUrl(base.banner_url),
-  ]);
-  return {
-    ...base,
-    logo_url: logo,
-    banner_url: banner,
-  };
+  return { ...base, logo_url: imageProxyUrl(base.logo_url), banner_url: imageProxyUrl(base.banner_url) };
 }
 
 /**
  * Snapshot + Realtime da tabela `configuracoes_loja`.
  */
-export function useConfiguracoesLojaRealtime(
-  inicial?: ConfiguracaoLoja | null
+function useConfiguracoesSource(
+  inicial?: ConfiguracaoLoja | null,
+  enabled = true
 ) {
   const [config, setConfig] = useState<ConfiguracaoLoja | null>(
     () => inicial ?? null
@@ -54,7 +33,7 @@ export function useConfiguracoesLojaRealtime(
   const supabase = createClient();
 
   const applyRaw = useCallback(async (raw: Record<string, unknown>) => {
-    const hydrated = await hydrateConfig(raw);
+    const hydrated = hydrateConfig(raw);
     setConfig(hydrated);
   }, []);
 
@@ -68,6 +47,7 @@ export function useConfiguracoesLojaRealtime(
 
   // Fetch inicial se não veio do SSR
   useEffect(() => {
+    if (!enabled) return;
     if (inicial) {
       setLoading(false);
       return;
@@ -88,6 +68,8 @@ export function useConfiguracoesLojaRealtime(
           return;
         }
         await applyRaw(data as Record<string, unknown>);
+      } catch {
+        if (!cancelled) setStatus("error");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -96,10 +78,11 @@ export function useConfiguracoesLojaRealtime(
     return () => {
       cancelled = true;
     };
-  }, [inicial, supabase, applyRaw]);
+  }, [inicial, supabase, applyRaw, enabled]);
 
   // Realtime
   useEffect(() => {
+    if (!enabled) return;
     let channel: RealtimeChannel | null = null;
     // Desktop and mobile sidebars can coexist. Supabase reuses channels by
     // topic, so each effect must own its subscription (including Strict Mode
@@ -135,7 +118,7 @@ export function useConfiguracoesLojaRealtime(
     return () => {
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [supabase, applyRaw]);
+  }, [supabase, applyRaw, enabled]);
 
   return {
     config,
@@ -145,4 +128,17 @@ export function useConfiguracoesLojaRealtime(
     replaceConfig,
     setConfig,
   };
+}
+
+const ConfiguracoesContext = createContext<ReturnType<typeof useConfiguracoesSource> | null>(null);
+
+export function ConfiguracoesLojaProvider({ children }: { children: ReactNode }) {
+  const value = useConfiguracoesSource();
+  return createElement(ConfiguracoesContext.Provider, { value }, children);
+}
+
+export function useConfiguracoesLojaRealtime(inicial?: ConfiguracaoLoja | null) {
+  const shared = useContext(ConfiguracoesContext);
+  const local = useConfiguracoesSource(inicial, !shared);
+  return shared ?? local;
 }

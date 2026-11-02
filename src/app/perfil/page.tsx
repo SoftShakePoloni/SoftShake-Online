@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { MeuPerfilView } from "@/components/cliente/perfil/MeuPerfilView";
@@ -19,8 +19,6 @@ type ClienteFull = {
 export default function PaginaPerfil() {
   const { cliente, loading, refreshCliente, signOut } = useAuth();
   const router = useRouter();
-  const [fullCliente, setFullCliente] = useState<ClienteFull | null>(null);
-  const [loadingFull, setLoadingFull] = useState(true);
 
   useEffect(() => {
     if (!loading && !cliente) {
@@ -28,35 +26,7 @@ export default function PaginaPerfil() {
     }
   }, [loading, cliente, router]);
 
-  useEffect(() => {
-    if (!cliente) {
-      setLoadingFull(false);
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/sessao");
-        if (res.ok) {
-          const data = (await res.json()) as { cliente?: ClienteFull };
-          if (!cancelled) setFullCliente(data.cliente || (cliente as ClienteFull));
-        } else if (!cancelled) {
-          setFullCliente(cliente as ClienteFull);
-        }
-      } catch {
-        if (!cancelled) setFullCliente(cliente as ClienteFull);
-      } finally {
-        if (!cancelled) setLoadingFull(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cliente]);
-
-  if (loading || loadingFull) {
+  if (loading) {
     return (
       <div className="min-h-[70vh] bg-background">
         <div className="mx-auto max-w-lg px-4 py-8 space-y-6 animate-pulse">
@@ -72,19 +42,12 @@ export default function PaginaPerfil() {
     );
   }
 
-  if (!cliente || !fullCliente) return null;
+  if (!cliente) return null;
 
   return (
     <MeuPerfilView
-      cliente={fullCliente}
-      onRefresh={async () => {
-        await refreshCliente();
-        const res = await fetch("/api/auth/sessao");
-        if (res.ok) {
-          const data = (await res.json()) as { cliente?: ClienteFull };
-          setFullCliente(data.cliente || (cliente as ClienteFull));
-        }
-      }}
+      cliente={cliente as ClienteFull}
+      onRefresh={refreshCliente}
       onSignOut={signOut}
     />
   );

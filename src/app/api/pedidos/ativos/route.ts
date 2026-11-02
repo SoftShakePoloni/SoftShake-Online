@@ -9,7 +9,7 @@ export const GET = withApiGuard(
   async () => {
     try {
       const sessao = await obterSessao();
-      if (!sessao) return apiOk({ count: 0 });
+      if (!sessao) return apiOk({ count: 0 }, 200, { "Cache-Control": "private, no-store", "X-Customer-Id": "anonymous" });
 
       const { count, error } = await createServerClient()
         .from("pedidos")
@@ -18,7 +18,7 @@ export const GET = withApiGuard(
         .not("status", "in", "(entregue,cancelado)");
       if (error) throw error;
 
-      return apiOk({ count: count ?? 0 });
+      return apiOk({ count: count ?? 0 }, 200, { "Cache-Control": "private, no-store", "X-Customer-Id": sessao.id });
     } catch (error) {
       return apiServerError(error);
     }

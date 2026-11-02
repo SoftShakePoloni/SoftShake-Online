@@ -17,7 +17,7 @@ import { ptBR } from "date-fns/locale";
 import { formatBRL } from "@/data/tipos";
 import { extractComplementos, groupComplementos } from "@/lib/utils/pedido";
 import {
-  useClientePedidos,
+  useClientePedido,
   type ClientePedido,
 } from "@/hooks/useClientePedidos";
 
@@ -59,8 +59,7 @@ export function DetalhePedidoView({
   clienteId: string;
   pedidoId: string;
 }) {
-  const { pedidos, loading, error } = useClientePedidos(clienteId);
-  const pedido = pedidos.find((item) => item.id === pedidoId);
+  const { pedido, loading, error } = useClientePedido(clienteId, pedidoId);
 
   if (loading) {
     return (

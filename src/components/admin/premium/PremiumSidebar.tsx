@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -236,37 +236,6 @@ export function PremiumSidebar({
     [allowedItems],
   );
   const canOpenConfig = acessos.includes("configuracoes");
-
-  const prefetchMenu = useCallback(() => {
-    for (const item of allowedItems) {
-      try {
-        router.prefetch(item.href);
-      } catch {
-        // ignore
-      }
-    }
-  }, [router, allowedItems]);
-
-  useEffect(() => {
-    prefetchMenu();
-    const ric = (
-      window as Window & {
-        requestIdleCallback?: (
-          cb: () => void,
-          opts?: { timeout: number },
-        ) => number;
-      }
-    ).requestIdleCallback;
-    if (typeof ric === "function") {
-      const id = ric(() => prefetchMenu(), { timeout: 2000 });
-      return () => {
-        const cic = (
-          window as Window & { cancelIdleCallback?: (id: number) => void }
-        ).cancelIdleCallback;
-        cic?.(id);
-      };
-    }
-  }, [prefetchMenu]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

@@ -22,8 +22,9 @@ export function ClientesManager({ clientesIniciais }: ClientesManagerProps) {
 
   // Setup Realtime
   useEffect(() => {
+    let active = true;
     const channel = supabase
-      .channel("clientes-changes")
+      .channel("clientes-changes-" + crypto.randomUUID())
       .on(
         "postgres_changes",
         {
@@ -31,26 +32,23 @@ export function ClientesManager({ clientesIniciais }: ClientesManagerProps) {
           schema: "public",
           table: "clientes",
         },
-        async (payload) => {
+        (payload) => {
+          if (!active) return;
           if (payload.eventType === "INSERT") {
             const novoCliente = payload.new as Cliente;
-            setClientes((prev) => [novoCliente, ...prev]);
+            setClientes((prev) => [novoCliente, ...prev.filter(c => c.id !== novoCliente.id)]);
             toast.success("Novo cliente cadastrado");
           } else if (payload.eventType === "UPDATE") {
             const clienteAtualizado = payload.new as Cliente;
             setClientes((prev) =>
               prev.map((c) => (c.id === clienteAtualizado.id ? clienteAtualizado : c))
             );
-            if (selectedCliente?.id === clienteAtualizado.id) {
-              setSelectedCliente(clienteAtualizado);
-            }
+            setSelectedCliente(current => current?.id === clienteAtualizado.id ? clienteAtualizado : current);
             toast.success("Cliente atualizado");
           } else if (payload.eventType === "DELETE") {
             const clienteRemovido = payload.old as Cliente;
             setClientes((prev) => prev.filter((c) => c.id !== clienteRemovido.id));
-            if (selectedCliente?.id === clienteRemovido.id) {
-              setSelectedCliente(null);
-            }
+            setSelectedCliente(current => current?.id === clienteRemovido.id ? null : current);
             toast.success("Cliente removido");
           }
         }
@@ -58,9 +56,10 @@ export function ClientesManager({ clientesIniciais }: ClientesManagerProps) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      active = false;
+      void supabase.removeChannel(channel);
     };
-  }, [supabase, selectedCliente]);
+  }, [supabase]);
 
   const handleSelect = (cliente: Cliente) => {
     setIsTransitioning(true);

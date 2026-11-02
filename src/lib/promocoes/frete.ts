@@ -47,3 +47,14 @@ export function getFreteDeadlineLabel(
   const [year, month, day] = dataFim.split("-");
   return `Até ${day}/${month}, ${time}`;
 }
+
+/** Refresh only at a campaign boundary or local midnight (deadline labels change then). */
+export function nextFreteRefresh(campaigns: FreteCampaignWindow[], now = Date.now()) {
+  const today = getSaoPauloDateTime(new Date(now)).date;
+  const candidates = [Date.parse(today + "T00:00:00-03:00") + 86_400_000];
+  for (const campaign of campaigns) {
+    candidates.push(Date.parse(campaign.data_inicio + "T" + (campaign.hora_inicio?.slice(0, 5) ?? "00:00") + ":00-03:00"));
+    candidates.push(Date.parse(campaign.data_fim + "T" + (campaign.hora_fim?.slice(0, 5) ?? "23:59") + ":00-03:00") + 60_000);
+  }
+  return Math.min(...candidates.filter(value => Number.isFinite(value) && value > now));
+}

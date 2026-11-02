@@ -7,6 +7,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
+import { readPublicJson } from "@/lib/public-json.client";
 import { subscribeCatalogUpdates } from "@/lib/catalog-updates";
 import { PublicDataContext } from "@/context/PublicDataContext";
 
@@ -54,6 +55,7 @@ function emit() {
 }
 
 function setStore(partial: Partial<LojaStore>) {
+  if (Object.entries(partial).every(([key,value]) => store[key as keyof LojaStore] === value)) return;
   store = { ...store, ...partial };
   emit();
 }
@@ -65,12 +67,7 @@ async function loadLoja() {
   }
   inFlight = (async () => {
     try {
-      const response = await fetch("/api/loja", { cache: "no-store" });
-      if (!response.ok)
-        throw new Error("Não foi possível carregar as informações da loja.");
-      const { loja } = (await response.json()) as {
-        loja: ConfiguracoesLoja | null;
-      };
+      const { loja } = await readPublicJson<{ loja: ConfiguracoesLoja | null }>("/api/loja");
       initialAt = Date.now();
       setStore({
         loja,
@@ -98,7 +95,8 @@ async function loadLoja() {
 function subscribe(listener: () => void) {
   listeners.add(listener);
   if (!stopUpdates)
-    stopUpdates = subscribeCatalogUpdates(() => {
+    stopUpdates = subscribeCatalogUpdates(reason => {
+      if (reason === "initial" && initialAt && Date.now() - initialAt < 30_000) return;
       void loadLoja();
     });
   return () => {

@@ -8,6 +8,7 @@ export type InitialPublicData = {
   categories?: Category[];
   loja?: ConfiguracoesLoja | null;
   generatedAt: number;
+  nextRefreshAt?: number;
 };
 export const PublicDataContext = createContext<InitialPublicData | null>(null);
 

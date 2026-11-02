@@ -24,9 +24,12 @@ export function AutomaticOrderPrint() {
 
   useEffect(() => {
     if (!device) return;
+    let ordersLive = false, configLive = false, lastCheckAt = 0, queued = false;
     let stopped = false, busy = false, since: string | null = null, enabledAt: string | null = null, warned = false;
-    const check = async () => {
-      if (stopped || busy) return;
+    const check = async (force = false) => {
+      if (busy && force) queued = true;
+      if (stopped || busy || (!force && Date.now() - lastCheckAt < 10_000)) return;
+      lastCheckAt = Date.now();
       busy = true;
       try {
         await withPrintLock(async () => {
@@ -52,16 +55,20 @@ export function AutomaticOrderPrint() {
       } catch (error) {
         if (!stopped && !warned) toast.error(error instanceof Error ? error.message : "Falha na impressão automática.", { description: "O painel tentará novamente. A impressão manual continua disponível." });
         warned = true;
-      } finally { busy = false; }
+      } finally { busy = false; if (queued && !stopped) { queued = false; void check(true); } }
     };
     const db = createClient();
     const channel = db.channel(`auto-print-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, () => { void check(); })
-      .subscribe(status => { if (status === "SUBSCRIBED") void check(); });
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, () => { void check(true); })
+      .subscribe(status => { const wasLive = ordersLive; ordersLive = status === "SUBSCRIBED"; if (ordersLive && !wasLive) void check(true); });
+    const configChannel = db.channel("auto-print-config-" + crypto.randomUUID())
+      .on("postgres_changes", { event: "*", schema: "public", table: "configuracoes_loja" }, () => { void check(true); })
+      .subscribe(status => { configLive = status === "SUBSCRIBED"; });
     void check();
-    const timer = setInterval(() => { void check(); }, 10_000);
-    window.addEventListener("focus", check);
-    return () => { stopped = true; clearInterval(timer); window.removeEventListener("focus", check); void db.removeChannel(channel); };
+    const timer = setInterval(() => { if (!ordersLive || !configLive) void check(); }, 10_000);
+    const resume = () => { if (!ordersLive || !configLive) void check(); };
+    window.addEventListener("focus", resume);
+    return () => { stopped = true; clearInterval(timer); window.removeEventListener("focus", resume); void db.removeChannel(channel); void db.removeChannel(configChannel); };
   }, [device]);
 
   useEffect(() => {
