@@ -153,7 +153,7 @@ function SidebarLink({
   const link = (
     <Link
       href={href}
-      prefetch
+      prefetch={false}
       scroll={false}
       title={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
