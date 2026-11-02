@@ -14,7 +14,7 @@ function load(file, mocks = {}, globals = {}) {
     ts.transpileModule(fs.readFileSync(file, "utf8"), {
       compilerOptions: {
         jsx: ts.JsxEmit.ReactJSX,
-          module: ts.ModuleKind.CommonJS,
+        module: ts.ModuleKind.CommonJS,
         target: ts.ScriptTarget.ES2022,
         esModuleInterop: true,
       },
@@ -618,6 +618,10 @@ test("private event connection shares readers, stays idle, refetches on change a
   await tick();
   assert.equal(calls, 3);
   subscription();
+  for (const [id, fn] of [...timers]) {
+    timers.delete(id);
+    fn();
+  }
   assert.equal(source.closed, true);
   api.setCustomerResourceIdentity(null);
 });
@@ -793,18 +797,150 @@ test("order events reject missing sessions and never trust a client-supplied cus
   assert.equal((await api.GET(request)).status, 200);
   assert.equal(scoped, "verified-owner");
 });
-test('automatic printing stops idle checks while connected, coalesces work and cleans up both channels', async () => {
-  const effects = [], intervals = new Map(), handlers = {}, statuses = {}, events = new Map(); let reads = 0, removed = 0, next = 0;
-  const api = load('src/components/admin/pedidos/AutomaticOrderPrint.tsx', {
-    react: { useState: () => [true, () => {}], useEffect: fn => effects.push(fn) },
-    'react-dom': { createPortal: () => null },
-    '@/lib/supabase/client': { createClient: () => ({ channel: name => { const key = name.startsWith('auto-print-config') ? 'config' : 'orders'; return { on(_type, _filter, fn) { handlers[key] = fn; return this; }, subscribe(fn) { statuses[key] = fn; return this; } }; }, removeChannel: async () => removed++ }) },
-    '@/actions/admin/automatic-print': { getAutomaticPrintOrders: async () => { reads++; return { enabled: true, orders: [], serverTime: new Date().toISOString() }; }, prepareOrderForAutomaticPrint: async () => null },
-    '@/lib/admin/automatic-print': { withPrintLock: async fn => fn(), getSentOrders: () => ({}), AUTOMATIC_PRINT_TYPE: 'completo' },
-    './OrderPrint': { OrderPrint: () => null }, sonner: { toast: { error() {} } },
-  }, { document: { querySelector: () => null }, window: { addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) }, crypto: require('crypto').webcrypto, setInterval: fn => (intervals.set(++next, fn), next), clearInterval: id => intervals.delete(id) });
-  api.AutomaticOrderPrint(); const cleanup = effects[1](); await tick(); statuses.orders('SUBSCRIBED'); statuses.config('SUBSCRIBED'); await tick(); const initial = reads;
-  for (let i = 0; i < 60; i++) for (const fn of intervals.values()) fn(); await tick(); assert.equal(reads, initial);
-  handlers.orders(); handlers.orders(); await tick(); await tick(); assert.ok(reads <= initial + 2, 'burst shares running work and queues one recovery');
-  cleanup(); assert.equal(intervals.size, 0); assert.equal(removed, 2); assert.equal(events.size, 0);
+test("automatic printing stops idle checks while connected, coalesces work and cleans up both channels", async () => {
+  const effects = [],
+    intervals = new Map(),
+    handlers = {},
+    statuses = {},
+    events = new Map();
+  let reads = 0,
+    removed = 0,
+    next = 0;
+  const api = load(
+    "src/components/admin/pedidos/AutomaticOrderPrint.tsx",
+    {
+      react: {
+        useState: () => [true, () => {}],
+        useEffect: (fn) => effects.push(fn),
+      },
+      "react-dom": { createPortal: () => null },
+      "@/lib/supabase/client": {
+        createClient: () => ({
+          channel: (name) => {
+            const key = name.startsWith("auto-print-config")
+              ? "config"
+              : "orders";
+            return {
+              on(_type, _filter, fn) {
+                handlers[key] = fn;
+                return this;
+              },
+              subscribe(fn) {
+                statuses[key] = fn;
+                return this;
+              },
+            };
+          },
+          removeChannel: async () => removed++,
+        }),
+      },
+      "@/actions/admin/automatic-print": {
+        getAutomaticPrintOrders: async () => {
+          reads++;
+          return {
+            enabled: true,
+            orders: [],
+            serverTime: new Date().toISOString(),
+          };
+        },
+        prepareOrderForAutomaticPrint: async () => null,
+      },
+      "@/lib/admin/automatic-print": {
+        withPrintLock: async (fn) => fn(),
+        getSentOrders: () => ({}),
+        AUTOMATIC_PRINT_TYPE: "completo",
+      },
+      "./OrderPrint": { OrderPrint: () => null },
+      sonner: { toast: { error() {} } },
+    },
+    {
+      document: { querySelector: () => null },
+      window: {
+        addEventListener: (name, fn) => events.set(name, fn),
+        removeEventListener: (name) => events.delete(name),
+      },
+      crypto: require("crypto").webcrypto,
+      setInterval: (fn) => (intervals.set(++next, fn), next),
+      clearInterval: (id) => intervals.delete(id),
+    },
+  );
+  api.AutomaticOrderPrint();
+  const cleanup = effects[1]();
+  await tick();
+  statuses.orders("SUBSCRIBED");
+  statuses.config("SUBSCRIBED");
+  await tick();
+  const initial = reads;
+  for (let i = 0; i < 60; i++) for (const fn of intervals.values()) fn();
+  await tick();
+  assert.equal(reads, initial);
+  handlers.orders();
+  handlers.orders();
+  await tick();
+  await tick();
+  assert.ok(
+    reads <= initial + 2,
+    "burst shares running work and queues one recovery",
+  );
+  cleanup();
+  assert.equal(intervals.size, 0);
+  assert.equal(removed, 2);
+  assert.equal(events.size, 0);
+});
+test("Strict Mode detach/remount reuses the request and event stream; logout still aborts immediately", async () => {
+  const timers = new Map(),
+    requests = [],
+    subscriptions = [];
+  let next = 0,
+    streams = 0;
+  const target = {
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  class Source {
+    constructor() {
+      streams++;
+    }
+    addEventListener() {}
+    close() {}
+  }
+  const api = load(
+    "src/lib/customer-resource.ts",
+    {
+      react: {
+        useCallback: (fn) => fn,
+        useSyncExternalStore: (subscribe, get) => {
+          subscriptions.push(subscribe(() => {}));
+          return get();
+        },
+      },
+    },
+    {
+      document: target,
+      window: target,
+      EventSource: Source,
+      fetch: (_url, options) =>
+        new Promise((resolve) => requests.push({ options, resolve })),
+      setInterval: () => 1,
+      clearInterval() {},
+      setTimeout: (fn) => (timers.set(++next, fn), next),
+      clearTimeout: (id) => timers.delete(id),
+    },
+  );
+  api.setCustomerResourceIdentity("A");
+  api.useCustomerResource("A", "/api/pedidos/listar?page=0");
+  subscriptions[0]();
+  api.useCustomerResource("A", "/api/pedidos/listar?page=0");
+  for (const [id, fn] of [...timers]) {
+    timers.delete(id);
+    fn();
+  }
+  assert.equal(requests.length, 1);
+  assert.equal(streams, 1);
+  assert.equal(requests[0].options.signal.aborted, false);
+  api.setCustomerResourceIdentity(null);
+  assert.equal(requests[0].options.signal.aborted, true);
+  requests[0].resolve(Response.json({ pedidos: ["old"] }));
+  await tick();
 });
