@@ -1,11 +1,12 @@
 import "server-only";
+import { publicRead } from "@/lib/public-read.server";
 import { createServerClient } from "@/integrations/supabase/client.server";
 import { notesOptionGroup, type Category, type Product, type Tag, type OptionGroup } from "./tipos";
 import { getFreteDeadlineLabel, getSaoPauloDateTime, isFreteCampaignActive } from "@/lib/promocoes/frete";
 import { imageProxyUrl } from "@/lib/image/proxy-url";
 import { loadComboOptionGroups, resolveComboChoices, type ComboOptionsConfig } from "@/lib/combos/options";
 
-export async function fetchMenu(): Promise<Category[]> {
+async function readData(): Promise<Category[]> {
   const supabase = createServerClient();
   const agoraBrasil = getSaoPauloDateTime();
   const [categoriesResult,productsResult,combosResult,freightResult,tagsResult] = await Promise.all([
@@ -120,3 +121,5 @@ export async function fetchMenu(): Promise<Category[]> {
     ? [...menuCategories, { id: "combos", name: "Combos", products: comboProducts }]
     : menuCategories;
 }
+
+export function fetchMenu() { return publicRead("menu", readData); }

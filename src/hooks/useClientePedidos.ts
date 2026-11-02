@@ -1,8 +1,7 @@
 "use client";
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { invalidateCustomerOrderDetail, useCustomerResource } from "@/lib/customer-resource";
 export type ClientePedidoItem = {
   uid?: string;
   qty: number;
@@ -19,7 +18,8 @@ export type ClientePedidoItem = {
     price: number;
     groupName?: string;
   }>;
-  selections?: Record<string, string[]> | Array<{ name: string; price: number }>;
+  selections?:
+    Record<string, string[]> | Array<{ name: string; price: number }>;
 };
 
 export type ClientePedido = {
@@ -39,92 +39,111 @@ export type ClientePedido = {
   updated_at?: string;
 };
 
+export type ClientePedidoResumo = Pick<
+  ClientePedido,
+  "id" | "status" | "created_at" | "updated_at" | "total"
+> & { itens: Array<{ produto: { name: string; image?: string } }> };
 export function useClientePedidos(clienteId: string | null | undefined) {
-  const [pedidos, setPedidos] = useState<ClientePedido[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [history, setHistory] = useState<{
+    owner: typeof clienteId;
+    pedidos: ClientePedidoResumo[];
+  }>({ owner: clienteId, pedidos: [] });
+  const first = useCustomerResource<{
+    pedidos: ClientePedidoResumo[];
+    hasMore: boolean;
+  }>(clienteId, "/api/pedidos/listar?page=0");
+  const older = useCustomerResource<{
+    pedidos: ClientePedidoResumo[];
+    hasMore: boolean;
+  }>(page > 0 ? clienteId : null, "/api/pedidos/listar?page=" + page);
+  const result = page > 0 ? older : first;
+  const previous = useRef<{
+    owner: typeof clienteId;
+    rows: ClientePedidoResumo[];
+  }>({ owner: clienteId, rows: [] });
   const [flashIds, setFlashIds] = useState<Set<string>>(new Set());
-  const flashTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
-    new Map()
+  useEffect(() => {
+    setPage(0);
+    setHistory({ owner: clienteId, pedidos: [] });
+    previous.current = { owner: clienteId, rows: [] };
+    setFlashIds(new Set());
+  }, [clienteId]);
+  useEffect(() => {
+    if (!first.data) return;
+    const incoming = first.data.pedidos;
+    const old =
+      previous.current.owner === clienteId ? previous.current.rows : [];
+    const changed = new Set<string>();
+    for (const pedido of incoming) {
+      if (clienteId) invalidateCustomerOrderDetail(clienteId, pedido.id, pedido.status + ":" + (pedido.updated_at ?? ""));
+      const before = old.find((p) => p.id === pedido.id);
+      if (before && before.status !== pedido.status) {
+        changed.add(pedido.id);
+        toast.message("Status atualizado", {
+          description:
+            "#" + pedido.id.slice(0, 8).toUpperCase() + " · " + pedido.status,
+        });
+      } else if (old.length && !before) {
+        changed.add(pedido.id);
+        toast.success("Novo pedido registrado!");
+      }
+    }
+    previous.current = { owner: clienteId, rows: incoming };
+    setFlashIds(changed);
+    setHistory((current) => {
+      const rows =
+        current.owner !== clienteId
+          ? incoming
+          : [...current.pedidos, ...incoming];
+      return {
+        owner: clienteId,
+        pedidos: [...new Map(rows.map((row) => [row.id, row])).values()],
+      };
+    });
+    const timer = setTimeout(() => setFlashIds(new Set()), 2500);
+    return () => clearTimeout(timer);
+  }, [first.data, clienteId]);
+  useEffect(() => {
+    if (!older.data || page === 0) return;
+    setHistory((current) => ({
+      owner: clienteId,
+      pedidos: [
+        ...new Map(
+          [
+            ...(current.owner === clienteId ? current.pedidos : []),
+            ...older.data!.pedidos,
+          ].map((row) => [row.id, row]),
+        ).values(),
+      ],
+    }));
+  }, [older.data, clienteId, page]);
+  return {
+    pedidos: history.owner === clienteId ? history.pedidos : [],
+    loading: first.loading,
+    loadingMore: result.loading,
+    error: result.error || first.error,
+    flashIds,
+    reload: first.reload,
+    hasMore: result.data?.hasMore ?? false,
+    loadMore: () => setPage((p) => p + 1),
+  };
+}
+export function useClientePedido(clienteId: string, id: string) {
+  const result = useCustomerResource<{ pedido: ClientePedido }>(
+    clienteId,
+    "/api/pedidos/detalhe?id=" + encodeURIComponent(id),
   );
-  const previousPedidos = useRef<ClientePedido[]>([]);
-
-  const flash = useCallback((id: string) => {
-    setFlashIds((prev) => new Set(prev).add(id));
-    const prevT = flashTimers.current.get(id);
-    if (prevT) clearTimeout(prevT);
-    const t = setTimeout(() => {
-      setFlashIds((prev) => {
-        const n = new Set(prev);
-        n.delete(id);
-        return n;
-      });
-      flashTimers.current.delete(id);
-    }, 2500);
-    flashTimers.current.set(id, t);
-  }, []);
-
-  const load = useCallback(async () => {
-    if (!clienteId) {
-      setPedidos([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      setError(null);
-      const res = await fetch("/api/pedidos/listar", { cache: "no-store" });
-      if (!res.ok) {
-        setPedidos([]);
-        setError("Não foi possível carregar seus pedidos");
-        return;
-      }
-      const dados = (await res.json()) as { pedidos?: ClientePedido[] };
-      const incoming = dados.pedidos || [];
-      const previous = new Map(previousPedidos.current.map((pedido) => [pedido.id, pedido]));
-      for (const pedido of incoming) {
-        const old = previous.get(pedido.id);
-        if (!old && previousPedidos.current.length > 0) {
-          flash(pedido.id);
-          toast.success("Novo pedido registrado!", { description: `#${pedido.id.slice(0, 8).toUpperCase()}` });
-        } else if (old && old.status !== pedido.status) {
-          flash(pedido.id);
-          toast.message("Status atualizado", { description: `#${pedido.id.slice(0, 8).toUpperCase()} · ${pedido.status}` });
-        }
-      }
-      previousPedidos.current = incoming;
-      setPedidos(incoming);
-    } catch {
-      setError("Erro de conexão ao carregar pedidos");
-      setPedidos([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [clienteId, flash]);
-
-  useEffect(() => {
-    setLoading(true);
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!clienteId) return;
-    // Polling reduzido de 15 segundos para 30 segundos
-    // Reduz requests de ~240 por hora para ~120 por hora
-    const refresh = window.setInterval(() => void load(), 30_000);
-    return () => {
-      window.clearInterval(refresh);
-      flashTimers.current.forEach((t) => clearTimeout(t));
-      flashTimers.current.clear();
-    };
-  }, [clienteId, load]);
-
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible") void load();
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [load]);
-
-  return { pedidos, loading, error, flashIds, reload: load };
+  return {
+    pedido: result.data?.pedido,
+    loading: result.loading,
+    error: result.error,
+  };
+}
+export function useClientePedidosCount(clienteId: string) {
+  const result = useCustomerResource<{ count: number }>(
+    clienteId,
+    "/api/pedidos/contagem",
+  );
+  return { count: result.data?.count ?? 0, loading: result.loading };
 }

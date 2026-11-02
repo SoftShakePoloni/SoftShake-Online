@@ -1,5 +1,6 @@
 "use client";
 
+import { getCatalogVersion, subscribeCatalogUpdates } from "@/lib/catalog-updates";
 import { useEffect, useRef, useState } from "react";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 import { usePathname } from "next/navigation";
@@ -20,6 +21,8 @@ import { useLoja } from "@/hooks/useLoja";
 import { toast } from "sonner";
 import { comboGroupLimit, isSharedComboAddon, resolveComboChoices } from "@/lib/combos/options";
 
+const optionCache = new Map<string, { at: number; version: number; groups: OptionGroup[] }>();
+
 type Props = {
   product: Product | null;
   open: boolean;
@@ -37,26 +40,35 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const [optionsLoading, setOptionsLoading] = useState(false);
   const groups = loadedOptionGroups ?? product?.optionGroups ?? [notesOptionGroup];
 
+  const productId = product?.id;
+  const needsOptions = Boolean(product && !product.comboId && /^\d+$/.test(product.id) && !(product.optionGroups ?? []).some(group => group.id !== "obs"));
   useEffect(() => {
-    setLoadedOptionGroups(null);
-    if (!open || !product || product.comboId || !/^\d+$/.test(product.id)) return;
-    if ((product.optionGroups ?? []).some((group) => group.id !== "obs")) return;
-
-    let cancelled = false;
-    setOptionsLoading(true);
-    fetch(`/api/cardapio/produto/${product.id}/opcoes`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Não foi possível carregar as opções do produto.");
-        return response.json() as Promise<{ optionGroups: OptionGroup[] }>;
-      })
-      .then((data) => { if (!cancelled) setLoadedOptionGroups(data.optionGroups); })
-      .catch((error: unknown) => {
-        if (!cancelled) toast.error(error instanceof Error ? error.message : "Falha ao carregar opções.");
-      })
-      .finally(() => { if (!cancelled) setOptionsLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [open, product]);
+    setLoadedOptionGroups(null); setOptionsLoading(false);
+    if (!open || !productId || !needsOptions) return;
+    let controller: AbortController | undefined;
+    const load = (force = false) => {
+      const cached = optionCache.get(productId);
+      if (!force && cached && cached.version === getCatalogVersion() && Date.now() - cached.at < 30_000) {
+        setLoadedOptionGroups(cached.groups); return;
+      }
+      controller?.abort(); controller = new AbortController();
+      const signal = controller.signal, version = getCatalogVersion();
+      setOptionsLoading(true);
+      void fetch("/api/cardapio/produto/" + productId + "/opcoes", { cache: "no-store", signal })
+        .then(async response => { if (!response.ok) throw new Error("Não foi possível carregar as opções do produto."); return response.json() as Promise<{ optionGroups: OptionGroup[] }>; })
+        .then(data => {
+          if (signal.aborted) return;
+          if (optionCache.size >= 100) optionCache.clear();
+          optionCache.set(productId, { at: Date.now(), version, groups: data.optionGroups });
+          setLoadedOptionGroups(data.optionGroups);
+        })
+        .catch((error: unknown) => { if (!signal.aborted) toast.error(error instanceof Error ? error.message : "Falha ao carregar opções."); })
+        .finally(() => { if (!signal.aborted) setOptionsLoading(false); });
+    };
+    load();
+    const unsubscribe = subscribeCatalogUpdates(reason => { if (reason !== "initial") load(true); });
+    return () => { controller?.abort(); unsubscribe(); };
+  }, [open, productId, needsOptions]);
 
   // Fecha ao trocar de aba na bottom nav
   useEffect(() => {

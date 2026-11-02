@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { formatBRL } from "@/data/tipos";
 import {
   useClientePedidos,
-  type ClientePedido,
+  type ClientePedidoResumo,
 } from "@/hooks/useClientePedidos";
 
 function SkeletonCards() {
@@ -33,7 +33,7 @@ function PedidoCard({
   isFlash,
   active,
 }: {
-  pedido: ClientePedido;
+  pedido: ClientePedidoResumo;
   isFlash: boolean;
   active: boolean;
 }) {
@@ -102,7 +102,7 @@ function PedidoCard({
 
 export function MeusPedidosView({ clienteId }: { clienteId: string }) {
   const reduceMotion = useReducedMotion();
-  const { pedidos, loading, error, flashIds } = useClientePedidos(clienteId);
+  const { pedidos, loading, error, flashIds, hasMore, loadMore, loadingMore } = useClientePedidos(clienteId);
   const ordenados = useMemo(
     () =>
       [...pedidos].sort(
@@ -234,6 +234,7 @@ export function MeusPedidosView({ clienteId }: { clienteId: string }) {
               )}
             </div>
           )}
+          {hasMore && <button type="button" onClick={loadMore} disabled={loadingMore} className="mt-6 w-full rounded-xl border border-[#E7E1EB] py-3 text-sm text-[#432078] disabled:opacity-50">{loadingMore ? "Carregando…" : "Carregar mais pedidos"}</button>}
         </div>
       </main>
     </>

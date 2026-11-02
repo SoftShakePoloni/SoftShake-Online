@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Tag, ShoppingBag, User } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCustomerResource } from "@/lib/customer-resource";
 import type { ComponentType } from "react";
 import { usePromocoesCount } from "@/hooks/useCardapio";
 import { useAuth } from "@/context/AuthContext";
@@ -27,36 +27,12 @@ function isActivePath(pathname: string, to: string) {
 
 export function BottomNav() {
   const pathname = usePathname();
-  const [pedidosAtivos, setPedidosAtivos] = useState(0);
+
   const { count: promosCount } = usePromocoesCount();
-  const { cliente, loading } = useAuth();
+  const { cliente } = useAuth();
 
-  useEffect(() => {
-    if (loading) return;
-    if (!cliente) {
-      setPedidosAtivos(0);
-      return;
-    }
-
-    const carregarPedidosAtivos = async () => {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const resposta = await fetch("/api/pedidos/ativos", {
-          cache: "no-store",
-        });
-        if (resposta.ok) {
-          const dados = await resposta.json();
-          setPedidosAtivos(Number(dados.count) || 0);
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    void carregarPedidosAtivos();
-    const interval = setInterval(carregarPedidosAtivos, 60000);
-    return () => clearInterval(interval);
-  }, [cliente, loading]);
+  const activeOrders = useCustomerResource<{ count: number }>(cliente?.id, "/api/pedidos/ativos", 60_000);
+  const pedidosAtivos = activeOrders.data?.count ?? 0;
 
   return (
     <nav
