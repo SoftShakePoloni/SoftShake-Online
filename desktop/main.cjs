@@ -51,11 +51,12 @@ ipcMain.handle('softshake:print', async event => {
 });
 
 async function createWindow() {
-  mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false, fullscreen: true,
+  mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false, fullscreen: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, backgroundThrottling: false, partition: 'persist:softshake-admin' } });
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  // Janela normal maximizada: mantém a barra do Windows com minimizar, restaurar e fechar.
+  mainWindow.once('ready-to-show', () => { mainWindow.maximize(); mainWindow.show(); });
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'F11' && !input.isAutoRepeat) {
       event.preventDefault();
