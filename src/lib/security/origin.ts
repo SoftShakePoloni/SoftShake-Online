@@ -38,8 +38,14 @@ export function isTrustedOrigin(request: NextRequest): boolean {
   return false;
 }
 
+/** Domínio oficial em produção — aceito mesmo sem NEXT_PUBLIC_APP_URL configurado. */
+const PRODUCTION_ORIGINS = [
+  "https://softshake.com.br",
+  "https://www.softshake.com.br",
+];
+
 function getAllowedOrigins(host: string | null): string[] {
-  const list = new Set<string>();
+  const list = new Set<string>(PRODUCTION_ORIGINS);
 
   if (process.env.NEXT_PUBLIC_APP_URL) {
     try {
