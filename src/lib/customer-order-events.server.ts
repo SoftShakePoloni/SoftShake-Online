@@ -1,11 +1,12 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
-import type { createServiceRoleClient } from "@/integrations/supabase/client.server";
-
-/** The privileged subscription stays on the server. No order rows leave this stream. */
+import type {
+  OrderEventHub,
+  OrderChange,
+} from "@/lib/customer-order-hub.server";
+/** Each SSE owns a subscriber, never the shared Supabase connection. */
 export function customerOrderEvents(
-  db: ReturnType<typeof createServiceRoleClient>,
+  hub: OrderEventHub,
   owner: string,
   previousVersion: string,
   signal: AbortSignal,
@@ -16,16 +17,22 @@ export function customerOrderEvents(
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
       let stopped = false,
-        sequence = 0;
-      let heartbeat: ReturnType<typeof setInterval> | undefined = undefined;
-      let lifetime: ReturnType<typeof setTimeout> | undefined = undefined;
-      const channel = db.channel("customer-orders-" + crypto.randomUUID());
+        initializing = false,
+        initialized = false,
+        revisionSeen = previousVersion;
+      let pending: OrderChange | undefined;
+      let unsubscribe = () => {};
+      let heartbeat: ReturnType<typeof setInterval> | undefined = undefined,
+        lifetime: ReturnType<typeof setTimeout> | undefined = undefined;
+      const debug = (reason: string) => {
+        if (process.env.NODE_ENV !== "production")
+          console.debug("[order-sse]", { owner, reason, ...hub.stats() });
+      };
       const send = (event: string, data: unknown, id?: string) => {
         if (!stopped)
           controller.enqueue(
             encoder.encode(
-              "retry: 10000\n" +
-                (id ? "id: " + id + "\n" : "") +
+              (id ? "id: " + id + "\n" : "") +
                 "event: " +
                 event +
                 "\ndata: " +
@@ -37,97 +44,80 @@ export function customerOrderEvents(
       finish = () => {
         if (stopped) return;
         stopped = true;
-        sequence++;
         clearInterval(heartbeat);
         clearTimeout(lifetime);
         signal.removeEventListener("abort", finish);
-        void db
-          .removeChannel(channel)
-          .catch(() => {})
-          .finally(() => db.realtime.disconnect());
+        unsubscribe();
         if (!cancelled) controller.close();
+        debug("close");
       };
-      let revisionSeen = previousVersion;
-      const snapshot = async (ids?: string[]) => {
-        const version = ++sequence;
-        try {
-          // One compact revision per connection, not a repeated full history.
-          const { data, count, error } = await db
-            .from("pedidos")
-            .select("id, status, updated_at", { count: "exact" })
-            .eq("cliente_id", owner)
-            .order("updated_at", { ascending: false, nullsFirst: false })
-            .order("id", { ascending: false })
-            .limit(1);
-          if (stopped || version !== sequence) return;
-          if (error) throw error;
-          const revision = createHash("sha256")
-            .update(JSON.stringify([count, data]))
-            .digest("hex");
-          if (ids?.length || (revisionSeen && revisionSeen !== revision))
-            send(
-              "changed",
-              {
-                scope: "pedido",
-                ...(ids?.length ? { ids } : { catchup: true }),
-              },
-              revision,
-            );
-          revisionSeen = revision;
-          send("ready", { owner }, revision);
-        } catch {
+      const change = (event: OrderChange) => {
+        if (stopped) return;
+        if (!initialized) {
+          pending = {
+            ...event,
+            ids: [...new Set([...(pending?.ids ?? []), ...event.ids])],
+          };
+          return;
+        }
+        if (event.version === revisionSeen) return;
+        revisionSeen = event.version;
+        send("changed", { scope: "pedido", ids: event.ids }, event.version);
+      };
+      controller.enqueue(encoder.encode("retry: 1000\n\n"));
+      unsubscribe = hub.subscribe(owner, {
+        ready: () => {
+          if (stopped || initialized || initializing) return;
+          initializing = true;
+          void hub
+            .revision(owner)
+            .then((version) => {
+              if (stopped) return;
+              const catchup =
+                previousVersion && previousVersion.split("-")[0] !== version;
+              revisionSeen = version;
+              if (catchup)
+                send("changed", { scope: "pedido", catchup: true }, version);
+              if (pending && !catchup) {
+                const event = pending;
+                revisionSeen = event.version;
+                send(
+                  "changed",
+                  { scope: "pedido", ids: event.ids },
+                  event.version,
+                );
+              }
+              pending = undefined;
+              initialized = true;
+              send("ready", { owner }, revisionSeen);
+              debug("ready");
+            })
+            .catch(() => {
+              if (!stopped) {
+                send("unavailable", {});
+                finish();
+              }
+            });
+        },
+        changed: change,
+        unavailable: () => {
           if (!stopped) {
             send("unavailable", {});
             finish();
           }
-        }
-      };
-      let changeTimer: ReturnType<typeof setTimeout> | undefined;
-      const changedIds = new Set<string>();
-      const release = finish;
-      finish = () => {
-        clearTimeout(changeTimer);
-        release();
-      };
-      channel
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "pedidos",
-            filter: "cliente_id=eq." + owner,
-          },
-          (payload) => {
-            // Unscoped DELETE payloads are recovered by the revision on reconnect.
-            // Do not leak even a notification about another customer's activity.
-            const row =
-              payload.eventType === "DELETE" ? payload.old : payload.new;
-            if ((row as { cliente_id?: string }).cliente_id !== owner) return;
-            changedIds.add((row as { id: string }).id);
-            clearTimeout(changeTimer);
-            changeTimer = setTimeout(() => {
-              const ids = [...changedIds];
-              changedIds.clear();
-              void snapshot(ids);
-            }, 100);
-          },
-        )
-        .subscribe((status) => {
-          if (stopped) return;
-          if (status === "SUBSCRIBED") void snapshot();
-          else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
-            send("unavailable", {});
-            finish();
-          }
-        });
-      // Bound the stream to a serverless request; EventSource resumes using Last-Event-ID.
+        },
+      });
       heartbeat = setInterval(() => {
         if (!stopped) controller.enqueue(encoder.encode(": keepalive\n\n"));
       }, 15_000);
-      lifetime = setTimeout(() => finish(), 50_000);
+      lifetime = setTimeout(() => {
+        send("rotate", {});
+        debug("rotate");
+        finish();
+      }, 50_000);
       signal.addEventListener("abort", finish, { once: true });
       if (signal.aborted) finish();
+      debug("open");
     },
     cancel() {
       cancelled = true;

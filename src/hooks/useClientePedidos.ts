@@ -61,6 +61,23 @@ export function useClientePedidos(clienteId: string | null | undefined) {
     hasMore: boolean;
   }>(page > 0 ? clienteId : null, "/api/pedidos/listar?page=" + page);
   const result = page > 0 ? older : first;
+  const summary = useCustomerResource<{
+    updates?: Array<{ id: string; status: string; updated_at?: string }>;
+  }>(clienteId, "/api/cliente/resumo");
+  useEffect(() => {
+    if (!summary.data?.updates?.length) return;
+    const updates = new Map(summary.data.updates.map((row) => [row.id, row]));
+    setHistory((current) =>
+      current.owner === clienteId
+        ? {
+            ...current,
+            pedidos: current.pedidos.map((row) =>
+              updates.has(row.id) ? { ...row, ...updates.get(row.id) } : row,
+            ),
+          }
+        : current,
+    );
+  }, [summary.data, clienteId]);
   const previous = useRef<{
     owner: typeof clienteId;
     rows: ClientePedidoResumo[];

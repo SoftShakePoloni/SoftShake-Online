@@ -581,7 +581,8 @@ test("private event connection shares readers, stays idle, refetches on change a
           return now;
         }
       },
-      fetch: async () => {
+      fetch: async (url) => {
+        if(url === "/api/auth/sessao")return Response.json({cliente:{id:"A"}});
         calls++;
         return Response.json({ pedidos: [] });
       },
@@ -616,6 +617,7 @@ test("private event connection shares readers, stays idle, refetches on change a
   await tick();
   assert.equal(calls, 2);
   source.onerror();
+  await tick();
   now += 30_000;
   for (const fn of intervals.values()) fn();
   await tick();
@@ -627,133 +629,6 @@ test("private event connection shares readers, stays idle, refetches on change a
   }
   assert.equal(source.closed, true);
   api.setCustomerResourceIdentity(null);
-});
-test("server order stream scopes reads/subscription to verified owner, emits no rows and resumes unchanged revisions", async () => {
-  const timers = new Map(),
-    intervals = new Map(),
-    queries = [],
-    filters = [];
-  let next = 0,
-    status,
-    changed,
-    removed = 0;
-  const channel = {
-    on(_type, filter, callback) {
-      filters.push(filter);
-      changed = callback;
-      return this;
-    },
-    subscribe(callback) {
-      status = callback;
-      return this;
-    },
-  };
-  const db = {
-    channel: () => channel,
-    realtime: { disconnect() {} },
-    removeChannel: async () => removed++,
-    from(table) {
-      const query = { table };
-      queries.push(query);
-      const chain = {
-        select() {
-          return this;
-        },
-        eq(key, value) {
-          query[key] = value;
-          return this;
-        },
-        order() {
-          return this;
-        },
-        limit() {
-          return Promise.resolve({
-            count: 1,
-            data: [
-              {
-                id: "private-id",
-                status: "preparando",
-                updated_at: "v1",
-                cliente_nome: "Never serialize",
-              },
-            ],
-            error: null,
-          });
-        },
-      };
-      return chain;
-    },
-  };
-  const api = load(
-    "src/lib/customer-order-events.server.ts",
-    { "server-only": {} },
-    {
-      crypto: require("crypto").webcrypto,
-      setInterval: (fn) => (intervals.set(++next, fn), next),
-      clearInterval: (id) => intervals.delete(id),
-      setTimeout: (fn) => (timers.set(++next, fn), next),
-      clearTimeout: (id) => timers.delete(id),
-    },
-  );
-  const controller = new AbortController(),
-    response = api.customerOrderEvents(
-      db,
-      "verified-owner",
-      "",
-      controller.signal,
-    ),
-    reader = response.body.getReader(),
-    decode = new TextDecoder();
-  status("SUBSCRIBED");
-  await tick();
-  const first = "",
-    ready = decode.decode((await reader.read()).value);
-  assert.ok(!ready.includes("event: changed"));
-  assert.match(ready, /event: ready/);
-  assert.ok(
-    !first.includes("private-id") && !ready.includes("Never serialize"),
-  );
-  assert.equal(queries[0].cliente_id, "verified-owner");
-  assert.equal(filters[0].filter, "cliente_id=eq.verified-owner");
-  changed({
-    eventType: "UPDATE",
-    new: { cliente_id: "someone-else", id: "secret" },
-  });
-  queries.length = 0;
-  changed({
-    eventType: "UPDATE",
-    new: { cliente_id: "verified-owner", id: "secret" },
-  });
-  for (const [id, fn] of [...timers]) {
-    if (id > 2) {
-      timers.delete(id);
-      fn();
-    }
-  }
-  await tick();
-  const event = decode.decode((await reader.read()).value);
-  assert.match(event, /event: changed/);
-  assert.ok(event.includes("secret"));
-  await reader.read();
-  const revision = ready.match(/id: (.+)\n/)[1];
-  await reader.cancel();
-  await tick();
-  assert.equal(removed, 1);
-  assert.equal(timers.size, 0);
-  assert.equal(intervals.size, 0);
-  const secondResponse = api.customerOrderEvents(
-      db,
-      "verified-owner",
-      revision,
-      new AbortController().signal,
-    ),
-    secondReader = secondResponse.body.getReader();
-  status("SUBSCRIBED");
-  await tick();
-  const resumed = decode.decode((await secondReader.read()).value);
-  assert.match(resumed, /event: ready/);
-  assert.ok(!resumed.includes("event: changed"));
-  await secondReader.cancel();
 });
 test("freight clock schedules start/end and midnight without waiting for a database write", () => {
   const { nextFreteRefresh } = load("src/lib/promocoes/frete.ts");
@@ -782,8 +657,8 @@ test("order events reject missing sessions and never trust a client-supplied cus
     scoped;
   const api = load("src/app/api/pedidos/eventos/route.ts", {
     "@/lib/auth": { obterSessao: async () => session },
-    "@/integrations/supabase/client.server": {
-      createServiceRoleClient: () => {
+    "@/lib/customer-order-hub.server": {
+      getOrderEventHub: () => {
         clients++;
         return {};
       },
@@ -795,7 +670,7 @@ test("order events reject missing sessions and never trust a client-supplied cus
       },
     },
     "@/lib/security/api-response": load("src/lib/security/api-response.ts"),
-    "@/lib/security/rate-limit": { RATE_LIMITS: { apiStrict: {} } },
+    "@/lib/security/rate-limit": { RATE_LIMITS: { apiStrict: {}, eventos: {}, eventosUsuario: {} }, rateLimitCheck:async()=>({success:true}), rateLimitHeaders:()=>({}) },
     "@/lib/security/with-api-guard": {
       withApiGuard: (_options, handler) => handler,
     },

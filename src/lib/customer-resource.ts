@@ -11,6 +11,7 @@ type Scope = {
   ids?: string[];
   version?: string;
   catchup?: boolean;
+  scope?: string;
 };
 type Reason = "mount" | "stale" | "invalidate" | "recovery" | "manual";
 type Entry = {
@@ -42,6 +43,12 @@ let recovery: ReturnType<typeof setInterval> | undefined;
 let debounce: ReturnType<typeof setTimeout> | undefined;
 let pendingScope: Scope | undefined;
 let eventsAttached = false;
+let sessionProbe: Promise<void> | undefined;
+function debugConnection(reason: string) {
+  if (process.env.NODE_ENV !== "production")
+    console.debug("[order-stream]", { reason, owner: identity });
+}
+const summaryChanges = new Set<string>();
 const debugCounts = new Map<string, number>();
 function debug(url: string, reason: Reason) {
   if (process.env.NODE_ENV === "production") return;
@@ -124,7 +131,7 @@ function visibility() {
     stopRecovery();
   } else {
     failedAt = Date.now();
-    connect();
+    connect("visibility");
     startRecovery();
   }
 }
@@ -132,15 +139,18 @@ function online() {
   if (!liveSince) {
     clearTimeout(retry);
     retry = undefined;
-    connect();
+    connect("online");
   }
 }
 function scheduleRetry() {
   if (retry || !identity || document.visibilityState === "hidden") return;
-  retry = setTimeout(() => {
-    retry = undefined;
-    connect();
-  }, retryDelay);
+  retry = setTimeout(
+    () => {
+      retry = undefined;
+      connect("error-retry");
+    },
+    Math.min(30_000, Math.round(retryDelay * (0.8 + Math.random() * 0.4))),
+  );
   retryDelay = Math.min(30_000, retryDelay * 2);
 }
 function loseConnection() {
@@ -149,9 +159,10 @@ function loseConnection() {
   startRecovery();
   scheduleRetry();
 }
-function connect() {
+function connect(reason = "mount") {
   if (
     source ||
+    sessionProbe ||
     !identity ||
     document.visibilityState === "hidden" ||
     typeof EventSource === "undefined"
@@ -159,6 +170,7 @@ function connect() {
     return;
   const owner = identity,
     connectedAt = Date.now();
+  debugConnection(reason);
   const current = new EventSource(
     "/api/pedidos/eventos?version=" + encodeURIComponent(lastEventVersion),
   );
@@ -172,6 +184,7 @@ function connect() {
         return;
       }
       const initial = !lastEventVersion;
+      const previousLease = lastEventVersion;
       lastEventVersion = message.lastEventId;
       liveSince = Date.now();
       failedAt = 0;
@@ -182,6 +195,7 @@ function connect() {
         if (
           entry.at > 0 &&
           (entry.version === lastEventVersion ||
+            entry.version === previousLease ||
             (initial && entry.at >= connectedAt))
         ) {
           entry.at = liveSince;
@@ -195,12 +209,21 @@ function connect() {
   current.addEventListener("changed", (event) => {
     if (source !== current || identity !== owner) return;
     const message = event as MessageEvent<string>;
-    if (message.lastEventId && message.lastEventId === lastEventVersion) return;
+
     let scope: Scope;
     try {
-      scope = JSON.parse(message.data) as Scope;
+      const raw: unknown = JSON.parse(message.data);
+      const valid = raw && typeof raw === "object" ? (raw as Scope) : {};
+      const ids = Array.isArray(valid.ids)
+        ? valid.ids.filter((id): id is string => typeof id === "string")
+        : [];
+      scope =
+        valid.scope === "pedido" && ids.length
+          ? { scope: "pedido", ids }
+          : { catchup: true };
+      if (valid.catchup) scope.catchup = true;
     } catch {
-      return;
+      scope = { catchup: true };
     }
     scope.version = message.lastEventId;
     lastEventVersion = message.lastEventId;
@@ -223,11 +246,58 @@ function connect() {
       if (identity === owner) invalidateCustomerResources(affected);
     }, 300);
   });
+  current.addEventListener("rotate", () => {
+    if (source !== current || identity !== owner) return;
+    // Planned handover preserves the live lease. It never starts fallback fetches.
+    current.close();
+    source = undefined;
+    clearTimeout(retry);
+    retry = undefined;
+    connect("rotate");
+  });
   current.addEventListener("unavailable", () => {
-    if (source === current) loseConnection();
+    if (source === current) {
+      debugConnection("unavailable");
+      loseConnection();
+    }
   });
   current.onerror = () => {
-    if (source === current) loseConnection();
+    if (source !== current) return;
+    // EventSource does not expose HTTP status; verify the cookie once before retry.
+    debugConnection(
+      current.readyState === EventSource.CLOSED ? "closed" : "error",
+    );
+    closeSource();
+    if (!failedAt) failedAt = Date.now();
+    startRecovery();
+    if (!sessionProbe) {
+      const probe: Promise<void> = fetch("/api/auth/sessao", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      })
+        .then(async (response) => {
+          if (identity !== owner) return;
+          if (response.status === 401) {
+            expireIdentity();
+            return;
+          }
+          if (response.ok) {
+            const data = (await response.json()) as {
+              cliente?: { id?: string } | null;
+            };
+            if (!data.cliente || data.cliente.id !== owner) {
+              expireIdentity();
+              return;
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (sessionProbe === probe) sessionProbe = undefined;
+          if (identity === owner) scheduleRetry();
+        });
+      sessionProbe = probe;
+    }
   };
 }
 function ensureEvents() {
@@ -240,7 +310,7 @@ function ensureEvents() {
     eventsAttached = true;
   }
   if (!failedAt && !liveSince) failedAt = Date.now();
-  if (!retry) connect();
+  if (!retry && !sessionProbe) connect();
   startRecovery();
 }
 function releaseEvents() {
@@ -255,6 +325,7 @@ function releaseEvents() {
 export function setCustomerResourceIdentity(next: string | null) {
   if (identity === next) return;
   stopEvents();
+  sessionProbe = undefined;
   identity = next;
   lastEventVersion = "";
   failedAt = 0;
@@ -265,6 +336,7 @@ export function setCustomerResourceIdentity(next: string | null) {
     clearTimeout(entry.detach);
   }
   entries.clear();
+  summaryChanges.clear();
   debugCounts.clear();
   identityListeners.forEach((fn) => fn());
 }
@@ -286,9 +358,20 @@ export function invalidateCustomerResources(scope?: Scope) {
     ...(scope?.ids ?? []),
     ...(scope?.id ? [scope.id] : []),
   ]);
+  for (const id of ids) summaryChanges.add(id);
   for (const [key, entry] of entries) {
     const [, url] = JSON.parse(key) as [string, string];
     const parsed = new URL(url, "http://store.local");
+    if (
+      scope &&
+      ids.size &&
+      !scope.catchup &&
+      parsed.pathname === "/api/pedidos/listar"
+    ) {
+      entry.at = 0;
+      entry.revision++;
+      continue;
+    }
     if (
       parsed.pathname === "/api/pedidos/detalhe" &&
       ids.size &&
@@ -310,7 +393,7 @@ export function invalidateCustomerOrderDetail(
       "/api/pedidos/detalhe?id=" + encodeURIComponent(id),
     ]),
     entry = entries.get(key);
-  if (!entry) return;
+  if (!entry || entry.at === 0) return;
   const data = entry.snapshot.data as {
     pedido?: { status?: string; updated_at?: string };
   } | null;
@@ -350,7 +433,12 @@ async function load(
     entries.get(key) === entry;
   entry.request = (async () => {
     try {
-      const response = await fetch(url, {
+      const summaryIds =
+        url === "/api/cliente/resumo" ? [...summaryChanges].slice(0, 100) : [];
+      const requestUrl = summaryIds.length
+        ? url + "?" + new URLSearchParams({ ids: summaryIds.join(",") })
+        : url;
+      const response = await fetch(requestUrl, {
         cache: "no-store",
         signal: controller.signal,
       });
@@ -382,6 +470,8 @@ async function load(
       }
       const data: unknown = await response.json();
       if (!current()) return;
+      if (entry.revision === revision)
+        for (const id of summaryIds) summaryChanges.delete(id);
       entry.at = entry.revision === revision ? Date.now() : 0;
       entry.version = version || lastEventVersion;
       entry.snapshot = { data, loading: false, error: null };
