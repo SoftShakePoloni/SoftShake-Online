@@ -68,7 +68,7 @@ function harness() {
       },
     },
     {
-      console: { debug: (_tag, payload) => logs.push(payload) },
+      console: { debug: (_tag, payload) => { if(payload.url) logs.push(payload); } },
       document: doc,
       window: doc,
       EventSource: Source,
@@ -147,8 +147,8 @@ test("scoped bursts revalidate one order while preserving old content and coales
   await h.resolve(0, { pedido: { status: "pendente" } });
   await h.resolve(1, { pedido: { status: "pendente" } });
   const source = h.sources[0];
-  source.events.changed({ data: '{"id":"one"}', lastEventId: "v2" });
-  source.events.changed({ data: '{"id":"one"}', lastEventId: "v2" });
+  source.events.changed({ data: '{"scope":"pedido","ids":["one"]}', lastEventId: "v2" });
+  source.events.changed({ data: '{"scope":"pedido","ids":["one"]}', lastEventId: "v2" });
   h.advance(300);
   assert.equal(h.requests.length, 3);
   assert.equal(h.bindings[0].get().data.pedido.status, "pendente");
@@ -292,8 +292,8 @@ test("summary validates identity once and scopes both counts to that identity", 
     "@/lib/security/with-api-guard": { withApiGuard: (_o, f) => f },
     "@/lib/security/rate-limit": { RATE_LIMITS: { apiStrict: {} } },
   });
-  const res = await api.GET();
-  assert.deepEqual(await res.json(), { count: 8, ativos: 2 });
+  const res = await api.GET(new Request("http://localhost/api/cliente/resumo"));
+  assert.deepEqual(await res.json(), { count: 8, ativos: 2, updates: [] });
   assert.equal(sessions, 1);
   assert.deepEqual(filters, [
     ["cliente_id", "verified"],
@@ -367,7 +367,7 @@ test("ProductImage generates identical responsive candidates for product and com
 
 test('unchanged stream renewal preserves freshness and backoff is not bypassed by remounts',async()=>{
  const h=harness();h.api.setCustomerResourceIdentity('A');h.api.useCustomerResource('A','/api/cliente/resumo');h.ready();await h.resolve(0,{count:1,ativos:1});
- h.advance(60000);h.sources[0].onerror();h.advance(1000);assert.equal(h.sources.length,2);h.ready();h.advance(60000);h.bindings[0].stop();h.api.useCustomerResource('A','/api/cliente/resumo');assert.equal(h.requests.length,1);
+ h.advance(60000);h.sources[0].events.rotate();h.advance(1000);assert.equal(h.sources.length,2);h.ready();h.advance(60000);h.bindings[0].stop();h.api.useCustomerResource('A','/api/cliente/resumo');assert.equal(h.requests.length,1);
  h.sources[1].onerror();h.bindings[1].stop();h.api.useCustomerResource('A','/api/cliente/resumo');assert.equal(h.sources.length,2,'remount must not skip scheduled backoff');h.api.setCustomerResourceIdentity(null);
 });
 
