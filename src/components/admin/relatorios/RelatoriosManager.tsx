@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { Download, Loader2, SlidersHorizontal } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +17,7 @@ import type {
   RelatorioFiltros,
   RelatorioPeriodoPreset,
 } from "@/types/relatorios";
-import { RelatorioKpiCards } from "./RelatorioKpiCards";
+import { RelatorioDestaques, RelatorioKpiCards } from "./RelatorioKpiCards";
 import {
   ChartFaturamento,
   ChartHoras,
@@ -222,72 +222,58 @@ export function RelatoriosManager() {
   return (
     <div className="report-page">
       <header className="report-header">
-        <div>
-          <h1>Relatórios</h1>
-          <p>Acompanhe o desempenho do seu negócio.</p>
-        </div>
+        <h1>Relatórios</h1>
         <div className="report-header-actions">
-          <label className="sr-only" htmlFor="report-period">
-            Período
-          </label>
-          <select
-            id="report-period"
-            name="periodo"
-            value={customOpen ? "custom" : filters.preset}
-            onChange={(e) => {
-              const preset = e.target.value as RelatorioPeriodoPreset;
-              if (preset === "custom") {
-                setDates({
-                  from:
-                    filters.from?.slice(0, 10) ||
-                    (data ? reportDateKey(data.range.from) : "") ||
-                    "",
-                  to:
-                    filters.to?.slice(0, 10) ||
-                    (data ? reportDateKey(data.range.to) : "") ||
-                    "",
-                });
-                setCustomOpen(true);
-              } else {
-                setCustomOpen(false);
-                apply({ ...filters, preset, from: undefined, to: undefined });
-              }
-            }}
-          >
-            {PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={exportDisabled}>
-                {exporting ? (
-                  <Loader2
-                    aria-hidden="true"
-                    className="h-4 w-4 animate-spin"
-                  />
-                ) : (
-                  <Download aria-hidden="true" className="h-4 w-4" />
+              <Button className="report-export" disabled={exportDisabled}>
+                {exporting && (
+                  <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                 )}
                 {exporting ? "Gerando…" : "Exportar"}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => void exportReport("pdf")}>
-                Exportar PDF
+                PDF
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void exportReport("excel")}>
-                Exportar Excel
+                Excel
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void exportReport("csv")}>
-                Exportar CSV
+                CSV
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
+      <div className="report-presets" role="group" aria-label="Período">
+        {PRESETS.map((p) => {
+          const selected = p.id === "custom" ? customSelected : !customOpen && filters.preset === p.id;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={selected}
+              className={selected ? "is-active" : undefined}
+              onClick={() => {
+                if (p.id === "custom") {
+                  setDates({
+                    from: filters.from?.slice(0, 10) || (data ? reportDateKey(data.range.from) : "") || "",
+                    to: filters.to?.slice(0, 10) || (data ? reportDateKey(data.range.to) : "") || "",
+                  });
+                  setCustomOpen(true);
+                } else {
+                  setCustomOpen(false);
+                  apply({ ...filters, preset: p.id, from: undefined, to: undefined });
+                }
+              }}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
       {customSelected && (
         <form
           className="report-custom"
@@ -337,12 +323,9 @@ export function RelatoriosManager() {
       <div className="report-toolbar">
         <div className="report-period-summary" aria-live="polite">
           {data ? (
-            <>
-              <strong>{data.range.label}</strong>
-              <span>
-                {reportDate(data.range.from)} a {reportDate(data.range.to)}
-              </span>
-            </>
+            <span>
+              {reportDate(data.range.from)} – {reportDate(data.range.to)}
+            </span>
           ) : (
             <span>Preparando relatório…</span>
           )}
@@ -355,7 +338,6 @@ export function RelatoriosManager() {
           aria-controls="report-filters"
           onClick={() => setFiltersOpen((open) => !open)}
         >
-          <SlidersHorizontal aria-hidden="true" className="h-4 w-4" />
           Filtros{active.length > 0 ? ` (${active.length})` : ""}
         </Button>
       </div>
@@ -364,7 +346,7 @@ export function RelatoriosManager() {
         className={`report-filters ${filtersOpen ? "is-open" : ""}`}
       >
         <label>
-          Status
+          <span className="sr-only">Status</span>
           <select
             aria-label="Status"
             name="status"
@@ -386,7 +368,7 @@ export function RelatoriosManager() {
           </select>
         </label>
         <label>
-          Pagamento
+          <span className="sr-only">Pagamento</span>
           <select
             aria-label="Pagamento"
             name="pagamento"
@@ -411,7 +393,7 @@ export function RelatoriosManager() {
           </select>
         </label>
         <label>
-          Canal
+          <span className="sr-only">Canal</span>
           <select
             aria-label="Canal"
             name="canal"
@@ -463,6 +445,7 @@ export function RelatoriosManager() {
       ) : (
         <div className="report-content" aria-busy={isPending}>
           <RelatorioKpiCards kpis={data.kpis} previousRange={data.prevRange} />
+          <RelatorioDestaques data={data} />
           <Tabs defaultValue="geral" className="report-tabs">
             <TabsList aria-label="Análises do relatório">
               <TabsTrigger value="geral">Visão geral</TabsTrigger>

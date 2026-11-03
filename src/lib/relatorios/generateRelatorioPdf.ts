@@ -13,13 +13,20 @@ import {
   validReportTrend,
 } from "./presentation";
 
-const INK: [number, number, number] = [41, 35, 47],
-  MUTED: [number, number, number] = [112, 104, 121],
-  PURPLE: [number, number, number] = [76, 37, 140],
-  BORDER: [number, number, number] = [231, 227, 234];
+type RGB = [number, number, number];
+const INK: RGB = [31, 26, 38],
+  MUTED: RGB = [111, 104, 120],
+  SUBTLE: RGB = [154, 147, 163],
+  PURPLE: RGB = [76, 37, 140],
+  PURPLE_SOFT: RGB = [243, 239, 250],
+  BORDER: RGB = [233, 229, 239],
+  STRIPE: RGB = [250, 249, 252],
+  GREEN: RGB = [15, 138, 95],
+  RED: RGB = [180, 35, 50];
 const M = 16,
   W = 178,
-  BOTTOM = 274;
+  TOP = 24,
+  BOTTOM = 272;
 type PdfDoc = jsPDF & { lastAutoTable?: { finalY: number } };
 export type GeneratePdfOptions = {
   data: RelatorioData;
@@ -33,25 +40,23 @@ export async function generateRelatorioPdf({
   emitidoPor,
   filtros,
 }: GeneratePdfOptions): Promise<{ blob: Blob; filename: string }> {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-    compress: true,
-  }) as PdfDoc;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true }) as PdfDoc;
+  const empresa = data.empresa.nome || "SoftShake";
   doc.setProperties({
     title: "Relatório de desempenho",
     subject: data.range.label,
-    author: data.empresa.nome || "SoftShake",
+    author: empresa,
     creator: "SoftShake",
   });
+  const periodo = `${reportDate(data.range.from)} – ${reportDate(data.range.to)}`;
   let y = 20;
+
   const text = (
     value: string,
     x: number,
     at: number,
     size = 9,
-    color = INK,
+    color: RGB = INK,
     bold = false,
     align: "left" | "right" | "center" = "left",
   ) => {
@@ -60,251 +65,281 @@ export async function generateRelatorioPdf({
     doc.setTextColor(...color);
     doc.text(value, x, at, { align });
   };
+  /** Trunca para caber na largura (jsPDF não faz ellipsis). */
+  const fit = (value: string, width: number, size: number, bold = false) => {
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setFontSize(size);
+    if (doc.getTextWidth(value) <= width) return value;
+    let out = value;
+    while (out.length > 1 && doc.getTextWidth(out + "…") > width) out = out.slice(0, -1);
+    return out.trimEnd() + "…";
+  };
   const ensure = (height: number) => {
     if (y + height > BOTTOM) {
       doc.addPage();
-      y = 24;
+      y = TOP + 6;
     }
   };
-  const paragraph = (value: string, size = 8, color = MUTED) => {
+  const paragraph = (value: string, size = 8, color: RGB = MUTED) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(size);
     const lines: string[] = doc.splitTextToSize(value, W);
     for (const line of lines) {
       ensure(5);
       text(line, M, y, size, color);
-      y += 4.5;
+      y += size * 0.5;
     }
     y += 2;
   };
-  const title = (value: string, room = 26) => {
+  const section = (value: string, room = 26) => {
     ensure(room);
-    text(value, M, y, 12, INK, true);
-    doc.setDrawColor(...BORDER);
-    doc.setLineWidth(0.2);
-    doc.line(M, y + 3, M + W, y + 3);
-    y += 10;
+    doc.setFillColor(...PURPLE);
+    doc.roundedRect(M, y - 3.6, 1.2, 4.6, 0.6, 0.6, "F");
+    text(value, M + 4, y, 11.5, INK, true);
+    y += 7;
   };
+  const box = (x: number, top: number, w: number, h: number, fill?: RGB) => {
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.25);
+    if (fill) doc.setFillColor(...fill);
+    doc.roundedRect(x, top, w, h, 2, 2, fill ? "FD" : "S");
+  };
+
+  /** Tabela padrão; `shareColumn` desenha uma barra de participação (0–100) na coluna. */
   const table = (
     heading: string,
     head: string[],
     body: RowInput[],
-    rightColumns: number[] = [],
+    opts: {
+      right?: number[];
+      shareColumn?: number;
+      shares?: number[];
+      foot?: RowInput;
+      widths?: Record<number, number>;
+    } = {},
   ) => {
-    title(heading, body.length ? 34 : 20);
+    const right = opts.right ?? [];
+    // Reserva espaço para título + cabeçalho + algumas linhas, evitando tabelas curtas partidas.
+    section(heading, body.length ? 18 + Math.min(body.length + (opts.foot ? 1 : 0), 6) * 8 : 20);
     if (!body.length) {
       paragraph("Sem registros neste período.");
-      y += 3;
+      y += 4;
       return;
     }
     autoTable(doc, {
       startY: y,
-      margin: { left: M, right: M, top: 24, bottom: 24 },
+      margin: { left: M, right: M, top: TOP + 4, bottom: 300 - BOTTOM },
       tableWidth: W,
       head: [head],
       body,
+      foot: opts.foot ? [opts.foot] : undefined,
       theme: "plain",
       showHead: "everyPage",
+      showFoot: "lastPage",
       rowPageBreak: "avoid",
       styles: {
         font: "helvetica",
-        fontSize: 8,
-        cellPadding: 2.5,
+        fontSize: 8.2,
+        cellPadding: { top: 2.6, bottom: 2.6, left: 2.5, right: 2.5 },
         textColor: INK,
-        lineColor: BORDER,
-        lineWidth: 0,
         overflow: "linebreak",
-        valign: "top",
+        valign: "middle",
       },
       headStyles: {
-        fillColor: [246, 244, 249],
-        textColor: INK,
+        textColor: MUTED,
         fontStyle: "bold",
-        fontSize: 7.5,
+        fontSize: 7.2,
         lineColor: BORDER,
-        lineWidth: { bottom: 0.2 },
+        lineWidth: { bottom: 0.3 },
       },
-      bodyStyles: { lineColor: BORDER, lineWidth: { bottom: 0.1 } },
-      columnStyles: Object.fromEntries(
-        rightColumns.map((index) => [index, { halign: "right" }]),
-      ),
+      footStyles: {
+        fontStyle: "bold",
+        textColor: INK,
+        lineColor: BORDER,
+        lineWidth: { top: 0.3 },
+      },
+      alternateRowStyles: { fillColor: STRIPE },
+      columnStyles: Object.fromEntries([
+        ...right.map((index) => [index, { halign: "right" as const }]),
+        ...Object.entries(opts.widths ?? {}).map(([index, cellWidth]) => [
+          Number(index),
+          { cellWidth, ...(right.includes(Number(index)) ? { halign: "right" as const } : {}) },
+        ]),
+      ]),
       didParseCell: (hook) => {
-        if (hook.section === "head" && rightColumns.includes(hook.column.index))
-          hook.cell.styles.halign = "right";
+        if (hook.section !== "body" && right.includes(hook.column.index)) hook.cell.styles.halign = "right";
+      },
+      didDrawCell: (hook) => {
+        if (hook.section !== "body" || opts.shareColumn !== hook.column.index || !opts.shares) return;
+        const share = Math.max(0, Math.min(100, opts.shares[hook.row.index] ?? 0));
+        const barW = Math.max(8, hook.cell.width - 22);
+        const bx = hook.cell.x + 2.5,
+          by = hook.cell.y + hook.cell.height / 2 - 0.9;
+        doc.setFillColor(...PURPLE_SOFT);
+        doc.roundedRect(bx, by, barW, 1.8, 0.9, 0.9, "F");
+        if (share > 0) {
+          doc.setFillColor(...PURPLE);
+          doc.roundedRect(bx, by, Math.max(1.8, (barW * share) / 100), 1.8, 0.9, 0.9, "F");
+        }
       },
     });
-    y = (doc.lastAutoTable?.finalY ?? y) + 12;
+    y = (doc.lastAutoTable?.finalY ?? y) + 11;
   };
-  // Optional original logo; preserve its native aspect ratio.
+
+  // ───────────── Capa ─────────────
+  doc.setFillColor(...PURPLE);
+  doc.rect(0, 0, 210, 3, "F");
   let logoWidth = 0;
   if (data.empresa.logoUrl) {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 4000);
       try {
-        const res = await fetch(data.empresa.logoUrl, {
-          signal: controller.signal,
-        });
+        const res = await fetch(data.empresa.logoUrl, { signal: controller.signal });
         if (res.ok) {
           const bytes = new Uint8Array(await res.arrayBuffer());
           const image = doc.getImageProperties(bytes);
-          const scale = Math.min(18 / image.width, 16 / image.height);
+          const scale = Math.min(14 / image.width, 12 / image.height);
           logoWidth = image.width * scale;
-          doc.addImage(
-            bytes,
-            image.fileType,
-            M,
-            13,
-            logoWidth,
-            image.height * scale,
-          );
+          doc.addImage(bytes, image.fileType, M, 11, logoWidth, image.height * scale);
         }
       } finally {
         clearTimeout(timer);
       }
     } catch {
-      /* The report remains usable if the optional logo cannot be fetched. */
+      /* O relatório continua utilizável sem o logo opcional. */
     }
   }
-  text(
-    data.empresa.nome || "SoftShake",
-    M + (logoWidth ? logoWidth + 5 : 0),
-    19,
-    11,
-    PURPLE,
-    true,
-  );
-  text("Relatório de desempenho", M, 36, 22, INK, true);
-  text(
-    `${reportDate(data.range.from)} a ${reportDate(data.range.to)}`,
-    M,
-    44,
-    10,
-  );
+  text(empresa, M + (logoWidth ? logoWidth + 4 : 0), 18.5, 11, PURPLE, true);
   const emitted = new Date().toLocaleString("pt-BR", {
     timeZone: "America/Sao_Paulo",
     dateStyle: "short",
     timeStyle: "short",
   });
-  text(`Emitido em ${emitted}`, M + W, 19, 8, MUTED, false, "right");
-  y = 51;
-  paragraph(`Período: ${data.range.label}`);
+  text(`Emitido em ${emitted}`, M + W, 18.5, 8, MUTED, false, "right");
+
+  text("Relatório de desempenho", M, 37, 22, INK, true);
+  text(`${periodo}  ·  ${data.range.label}`, M, 45, 10.5, MUTED);
+
+  // Quadro de informações
   const selectedFilters = reportFilterLabels(filtros);
-  paragraph(
-    selectedFilters.length
-      ? `Filtros: ${selectedFilters.join(" | ")}`
-      : "Filtros: todos os status, pagamentos e canais.",
-  );
-  if (emitidoPor) paragraph(`Emitido por: ${emitidoPor}`);
-  y += 4;
-  title("Resumo executivo", 42);
+  const meta: [string, string][] = [
+    ["Comparado com", `${reportDate(data.prevRange.from)} – ${reportDate(data.prevRange.to)}`],
+    ["Filtros", selectedFilters.length ? selectedFilters.join(", ") : "Todos os pedidos"],
+    ["Emitido por", emitidoPor || "—"],
+  ];
+  const metaW = W / 3;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const metaLines = meta.map(([, value]) => (doc.splitTextToSize(value, metaW - 9) as string[]).slice(0, 2));
+  const metaH = metaLines.some((lines) => lines.length > 1) ? 19 : 15;
+  box(M, 51, W, metaH, STRIPE);
+  meta.forEach(([label], i) => {
+    const x = M + 5 + i * metaW;
+    text(label.toUpperCase(), x, 56.5, 6.5, SUBTLE, true);
+    metaLines[i].forEach((line, li) => text(li === 1 ? fit(line, metaW - 9, 8.5) : line, x, 61.5 + li * 4, 8.5, INK));
+  });
+  y = 51 + metaH + 9;
+
+  // Indicadores
   const kpis = primaryReportKpis(data.kpis);
-  const cellWidth = W / 4;
+  const gap = 4,
+    cardW = (W - gap * 3) / 4,
+    cardH = 25;
   kpis.forEach((kpi, index) => {
-    const x = M + index * cellWidth;
-    text(kpi.label, x, y, 8, MUTED);
-    doc.setFontSize(17);
-    const size = Math.min(
-      17,
-      (17 * (cellWidth - 4)) /
-        Math.max(doc.getTextWidth(kpi.value), cellWidth - 4),
-    );
-    text(kpi.value, x, y + 9, size, INK, true);
+    const x = M + index * (cardW + gap);
+    box(x, y, cardW, cardH);
+    text(fit(kpi.label, cardW - 8, 7.8), x + 4, y + 7, 7.8, MUTED);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    const size = Math.min(15, (15 * (cardW - 8)) / Math.max(doc.getTextWidth(kpi.value), cardW - 8));
+    text(kpi.value, x + 4, y + 15, size, INK, true);
     const trend = validReportTrend(kpi);
     text(
-      trend == null
-        ? "Sem base comparável"
-        : `${trend > 0 ? "+" : ""}${reportNumber(trend, 1)}% vs. anterior`,
-      x,
-      y + 16,
+      trend == null ? "Sem comparação" : `${trend > 0 ? "+" : ""}${reportNumber(trend, 1)}% vs. anterior`,
+      x + 4,
+      y + 21,
       7,
-      MUTED,
+      trend == null || trend === 0 ? SUBTLE : trend > 0 ? GREEN : RED,
+      trend != null && trend !== 0,
     );
   });
-  y += 25;
-  paragraph(
-    `Comparação: ${reportDate(data.prevRange.from)} a ${reportDate(data.prevRange.to)}. Percentuais apresentados somente com base anterior maior que zero.`,
-    7,
-  );
-  y += 3;
-  title("Evolução das vendas", 84);
+  y += cardH + 10;
+
+  // Destaques
+  if (data.totalPedidosPeriodo > 0) {
+    section("Destaques do período", 40);
+    const highlights: [string, string][] = [
+      ["Maior venda", reportMoney(data.destaques.maiorVenda)],
+      ["Menor venda", reportMoney(data.destaques.menorVenda)],
+      ["Horário de pico", data.destaques.horarioPico || "—"],
+      ["Dia com mais pedidos", data.destaques.diaMaisPedidos || "—"],
+      ["Produto mais vendido", data.destaques.produtoCampeao || "—"],
+      ["Cliente que mais comprou", data.destaques.clienteTop || "—"],
+    ];
+    const colW = W / 3,
+      rowH = 12;
+    box(M, y - 1, W, rowH * 2 + 2);
+    highlights.forEach(([label, value], i) => {
+      const col = i % 3,
+        row = Math.floor(i / 3);
+      const x = M + 5 + col * colW,
+        top = y + row * rowH;
+      text(label, x, top + 4.5, 7.2, MUTED);
+      text(fit(value, colW - 9, 9.5, true), x, top + 9.5, 9.5, INK, true);
+    });
+    doc.setDrawColor(...BORDER);
+    doc.setLineWidth(0.2);
+    doc.line(M + 4, y + rowH, M + W - 4, y + rowH);
+    y += rowH * 2 + 12;
+  }
+
+  // Gráfico de faturamento diário (barras)
+  section("Faturamento por dia", 78);
   const series = data.faturamentoDiario;
   const valid = series.filter((row) => Number.isFinite(row.faturamento));
   if (!valid.length) {
     paragraph("Sem informações de vendas para o período.");
   } else if (!valid.some((row) => row.faturamento > 0)) {
-    paragraph(
-      `Nenhuma venda registrada no período. Faturamento: ${reportMoney(0)}.`,
-    );
+    paragraph(`Nenhuma venda registrada no período. Faturamento: ${reportMoney(0)}.`);
   } else {
-    const x = M + 20,
-      chartW = W - 24,
-      top = y + 3,
-      h = 42,
+    const x = M + 16,
+      chartW = W - 18,
+      top = y + 2,
+      h = 46,
       max = Math.max(...valid.map((row) => row.faturamento), 1);
-    for (let tick = 0; tick <= 3; tick++) {
-      const cy = top + h - (tick * h) / 3;
+    const compact = new Intl.NumberFormat("pt-BR", { notation: "compact", maximumFractionDigits: 1 });
+    for (let tick = 0; tick <= 4; tick++) {
+      const cy = top + h - (tick * h) / 4;
       doc.setDrawColor(...BORDER);
-      doc.setLineWidth(0.15);
+      doc.setLineWidth(tick === 0 ? 0.3 : 0.15);
       doc.line(x, cy, x + chartW, cy);
-      text(
-        new Intl.NumberFormat("pt-BR", {
-          notation: "compact",
-          maximumFractionDigits: 1,
-        }).format((max * tick) / 3),
-        x - 3,
-        cy + 1,
-        7,
-        MUTED,
-        false,
-        "right",
-      );
+      text(compact.format((max * tick) / 4), x - 2.5, cy + 1, 6.8, SUBTLE, false, "right");
     }
-    text("R$", M, top - 2, 7, MUTED);
-    const px = (index: number) =>
-      x +
-      (series.length === 1
-        ? chartW / 2
-        : (index * chartW) / (series.length - 1));
-    doc.setDrawColor(...PURPLE);
-    doc.setLineWidth(0.6);
+    const slot = chartW / series.length;
+    const barW = Math.min(9, Math.max(0.8, slot * 0.62));
+    doc.setFillColor(...PURPLE);
     series.forEach((row, index) => {
-      if (!Number.isFinite(row.faturamento)) return;
-      const cy = top + h - (row.faturamento / max) * h;
-      const previous = series[index - 1];
-      if (previous && Number.isFinite(previous.faturamento))
-        doc.line(
-          px(index - 1),
-          top + h - (previous.faturamento / max) * h,
-          px(index),
-          cy,
-        );
-      if (series.length <= 7) {
-        doc.setFillColor(...PURPLE);
-        doc.circle(px(index), cy, 0.8, "F");
-        text(
-          reportMoney(row.faturamento),
-          px(index),
-          cy - 3,
-          6.5,
-          MUTED,
-          false,
-          "center",
-        );
-      }
+      if (!Number.isFinite(row.faturamento) || row.faturamento <= 0) return;
+      const bh = Math.max(0.4, (row.faturamento / max) * h);
+      const bx = x + index * slot + (slot - barW) / 2;
+      doc.rect(bx, top + h - bh, barW, bh, "F");
+      if (series.length <= 10)
+        text(reportMoney(row.faturamento), bx + barW / 2, top + h - bh - 1.8, 6.3, MUTED, false, "center");
     });
-    const step = Math.max(1, Math.ceil(series.length / 6));
+    const step = Math.max(1, Math.ceil(series.length / 8));
+    const last = series.length - 1;
     series.forEach((row, index) => {
-      if (index % step === 0 || index === series.length - 1)
-        text(row.label, px(index), top + h + 5, 7, MUTED, false, "center");
+      const regular = index % step === 0 && (index === last || last - index >= step / 2);
+      if (regular || index === last)
+        text(row.label, x + index * slot + slot / 2, top + h + 4.5, 6.8, SUBTLE, false, "center");
     });
-    y = top + h + 13;
-    paragraph(
-      `Valores diários em reais. Linhas retas entre os registros, com escala iniciando em zero. Maior valor diário: ${reportMoney(max)}.`,
-      7,
-    );
+    y = top + h + 9;
+    paragraph(`Valores em reais. Maior faturamento em um dia: ${reportMoney(max)}.`, 7, SUBTLE);
+    y += 4;
   }
-  y += 3;
+
+  // Financeiro
   table(
     "Resumo financeiro",
     ["Indicador", "Valor"],
@@ -312,32 +347,58 @@ export async function generateRelatorioPdf({
       ["Faturamento bruto", reportMoney(data.financeiro.faturamentoBruto)],
       ["Descontos", reportMoney(data.financeiro.descontos)],
       ["Taxas de entrega", reportMoney(data.financeiro.taxaEntrega)],
-      ["Total líquido", reportMoney(data.financeiro.totalLiquido)],
       ["Pagamento mais usado", data.financeiro.pagamentoMaisUsado],
     ],
-    [1],
+    { right: [1], foot: ["Total líquido", reportMoney(data.financeiro.totalLiquido)] },
   );
-  const distribution = (rows: { name: string; value: number }[]) => {
+
+  // Produtos
+  const produtoQtd = data.produtos.reduce((sum, row) => sum + row.quantidade, 0);
+  const produtoReceita = data.produtos.reduce((sum, row) => sum + row.faturamento, 0);
+  table(
+    "Produtos mais vendidos",
+    ["#", "Produto", "Qtd.", "Receita", "Participação"],
+    data.produtos.map((row, index) => [
+      String(index + 1),
+      row.nome,
+      reportNumber(row.quantidade),
+      reportMoney(row.faturamento),
+      `${reportNumber(row.participacao, 1)}%`,
+    ]),
+    {
+      right: [2, 3, 4],
+      shareColumn: 4,
+      shares: data.produtos.map((row) => row.participacao),
+      widths: { 0: 9, 2: 16, 3: 26, 4: 40 },
+      foot: data.produtos.length
+        ? ["", "Total", reportNumber(produtoQtd), reportMoney(produtoReceita), ""]
+        : undefined,
+    },
+  );
+
+  const distribution = (heading: string, label: string, rows: { name: string; value: number }[]) => {
     const total = rows.reduce((sum, row) => sum + row.value, 0);
-    return rows.map((row) => [
-      row.name,
-      reportNumber(row.value),
-      total > 0 ? `${reportNumber((row.value / total) * 100, 1)}%` : "Sem base",
-    ]);
+    table(
+      heading,
+      [label, "Pedidos", "Participação"],
+      rows.map((row) => [
+        row.name,
+        reportNumber(row.value),
+        total > 0 ? `${reportNumber((row.value / total) * 100, 1)}%` : "Sem base",
+      ]),
+      {
+        right: [1, 2],
+        shareColumn: 2,
+        shares: rows.map((row) => (total > 0 ? (row.value / total) * 100 : 0)),
+        widths: { 1: 22, 2: 56 },
+      },
+    );
   };
-  table(
-    "Análise operacional · Status",
-    ["Status", "Pedidos", "Participação"],
-    distribution(data.status),
-    [1, 2],
-  );
-  table(
-    "Canais e tipos de pedido",
-    ["Canal", "Pedidos", "Participação"],
-    distribution(data.entregaVsRetirada),
-    [1, 2],
-  );
-  // Preserve all hourly intervals; split across columns without removing zero counts.
+  distribution("Formas de pagamento", "Pagamento", data.pagamentos);
+  distribution("Pedidos por status", "Status", data.status);
+  distribution("Canais", "Canal", data.entregaVsRetirada);
+
+  // Todos os intervalos de hora são preservados, inclusive os zerados, em duas colunas.
   const hours = data.porHora,
     mid = Math.ceil(hours.length / 2);
   table(
@@ -351,47 +412,39 @@ export async function generateRelatorioPdf({
         hours[index + mid]?.hora ?? "",
         hours[index + mid] ? reportNumber(hours[index + mid].pedidos) : "",
       ]),
-    [1, 3],
+    { right: [1, 3] },
   );
-  table(
-    "Análise comercial · Produtos mais vendidos",
-    ["Produto", "Quantidade", "Receita", "Participação"],
-    data.produtos.map((row) => [
-      row.nome,
-      reportNumber(row.quantidade),
-      reportMoney(row.faturamento),
-      `${reportNumber(row.participacao, 1)}%`,
-    ]),
-    [1, 2, 3],
-  );
-  table(
-    "Formas de pagamento",
-    ["Pagamento", "Pedidos", "Participação"],
-    distribution(data.pagamentos),
-    [1, 2],
-  );
-  title("Indicadores de clientes", 48);
-  if (!data.clientes.length)
+
+  // Clientes
+  section("Clientes", 40);
+  if (!data.clientes.length) {
     paragraph("Nenhum cliente identificado no período.");
-  else {
+    y += 4;
+  } else {
     const stats = reportClientStats(data.clientes);
+    const items: [string, string][] = [
+      ["Uma compra", reportNumber(stats.single)],
+      ["Duas ou mais", reportNumber(stats.repeat)],
+      ["Frequência média", `${reportNumber(stats.frequency, 1)} pedidos`],
+      ["Ticket médio por cliente", reportMoney(stats.ticket)],
+    ];
+    const colW = W / 4;
+    box(M, y - 1, W, 14);
+    items.forEach(([label, value], i) => {
+      const x = M + 5 + i * colW;
+      text(label, x, y + 4, 7.2, MUTED);
+      text(fit(value, colW - 9, 10, true), x, y + 9.5, 10, INK, true);
+    });
+    y += 18;
     paragraph(
-      `Base: ${data.clientes.length} clientes do ranking disponível. Não representa necessariamente toda a base de clientes. Uma compra no período não significa cliente novo.`,
-      8,
+      `Base: ${data.clientes.length} clientes do ranking. Uma compra no período não indica, por si só, cliente novo.`,
+      7,
+      SUBTLE,
     );
-    paragraph(
-      `Uma compra: ${reportNumber(stats.single)} | Duas ou mais: ${reportNumber(stats.repeat)} | Frequência média: ${reportNumber(stats.frequency, 1)} pedidos`,
-      9,
-      INK,
-    );
-    paragraph(
-      `Média dos tickets por cliente: ${reportMoney(stats.ticket)}`,
-      9,
-      INK,
-    );
+    y += 2;
   }
   table(
-    "Clientes do período",
+    "Ranking de clientes",
     ["Cliente", "Pedidos", "Total gasto", "Ticket médio", "Última compra"],
     data.clientes.map((row) => [
       row.nome,
@@ -400,29 +453,21 @@ export async function generateRelatorioPdf({
       reportMoney(row.ticketMedio),
       reportDate(row.ultimaCompra),
     ]),
-    [1, 2, 3],
+    { right: [1, 2, 3, 4] },
   );
   if (data.sabores.length)
     table(
       "Sabores mais vendidos",
-      ["Sabor", "Quantidade", "Receita"],
-      data.sabores.map((row) => [
-        row.nome,
-        reportNumber(row.quantidade),
-        reportMoney(row.faturamento),
-      ]),
-      [1, 2],
+      ["Sabor", "Qtd.", "Receita"],
+      data.sabores.map((row) => [row.nome, reportNumber(row.quantidade), reportMoney(row.faturamento)]),
+      { right: [1, 2] },
     );
   if (data.adicionais.length)
     table(
       "Adicionais mais vendidos",
-      ["Adicional", "Quantidade", "Receita"],
-      data.adicionais.map((row) => [
-        row.nome,
-        reportNumber(row.quantidade),
-        reportMoney(row.faturamento),
-      ]),
-      [1, 2],
+      ["Adicional", "Qtd.", "Receita"],
+      data.adicionais.map((row) => [row.nome, reportNumber(row.quantidade), reportMoney(row.faturamento)]),
+      { right: [1, 2] },
     );
   table(
     "Pedidos do período",
@@ -435,54 +480,37 @@ export async function generateRelatorioPdf({
       reportValueLabel(row.pagamento),
       reportMoney(row.total),
     ]),
-    [5],
+    { right: [5], widths: { 0: 22, 2: 22, 5: 24 } },
   );
-  table(
-    "Destaques do período",
-    ["Indicador", "Resultado"],
-    [
-      ["Maior venda", reportMoney(data.destaques.maiorVenda)],
-      ["Menor venda", reportMoney(data.destaques.menorVenda)],
-      ["Horário de maior movimento", data.destaques.horarioPico],
-      ["Dia com mais pedidos", data.destaques.diaMaisPedidos],
-      ["Produto mais vendido", data.destaques.produtoCampeao],
-      ["Cliente que mais comprou", data.destaques.clienteTop],
-      [
-        "Tempo médio até conclusão",
-        data.tempoMedioMinutos != null
-          ? `${reportNumber(data.tempoMedioMinutos)} min`
-          : "Sem informação",
-      ],
-    ],
-  );
+  if (data.tempoMedioMinutos != null)
+    paragraph(`Tempo médio até a conclusão dos pedidos: ${reportNumber(data.tempoMedioMinutos)} min.`, 8, MUTED);
   if (data.observacoes?.trim()) {
-    title("Observações");
-    paragraph(data.observacoes.trim());
+    section("Observações");
+    paragraph(data.observacoes.trim(), 8.5, INK);
   }
+
+  // ───────────── Cabeçalho e rodapé de todas as páginas ─────────────
   const pages = doc.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
     doc.setPage(page);
     if (page > 1) {
-      text("Relatório de desempenho", M, 14, 8, PURPLE, true);
-      text(data.range.label, M + W, 14, 8, MUTED, false, "right");
+      doc.setFillColor(...PURPLE);
+      doc.rect(0, 0, 210, 1.5, "F");
+      text(empresa, M, 13, 8, PURPLE, true);
+      text(`Relatório de desempenho · ${periodo}`, M + W, 13, 7.5, MUTED, false, "right");
       doc.setDrawColor(...BORDER);
       doc.setLineWidth(0.2);
-      doc.line(M, 18, M + W, 18);
+      doc.line(M, 17, M + W, 17);
     }
     doc.setDrawColor(...BORDER);
-    doc.line(M, 280, M + W, 280);
-    text(
-      `SoftShake | ${reportDate(data.range.from)} a ${reportDate(data.range.to)}`,
-      M,
-      286,
-      7,
-      MUTED,
-    );
-    text(`Página ${page} de ${pages}`, M + W, 286, 7, MUTED, false, "right");
+    doc.setLineWidth(0.2);
+    doc.line(M, 281, M + W, 281);
+    text(`${empresa} · ${periodo}`, M, 286.5, 7, SUBTLE);
+    text(`Página ${page} de ${pages}`, M + W, 286.5, 7, SUBTLE, false, "right");
   }
   return {
     blob: doc.output("blob"),
     filename: `SoftShake_Relatorio_${reportDateKey(data.range.from)}_a_${reportDateKey(data.range.to)}.pdf`,
   };
 }
-export {downloadPdfBlob} from "./download";
+export { downloadPdfBlob } from "./download";

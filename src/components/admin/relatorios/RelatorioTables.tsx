@@ -28,21 +28,29 @@ export function TabelaProdutos({
               <thead>
                 <tr>
                   <th>Produto</th>
-                  <th>Quantidade</th>
+                  <th>Qtd.</th>
                   <th>Receita</th>
                   <th>Participação</th>
                 </tr>
               </thead>
               <tbody>
-                {list.map((row) => (
+                {list.map((row, index) => (
                   <tr key={row.nome}>
-                    <td>{row.nome}</td>
+                    <td>
+                      <span className="report-rank">{index + 1}</span>
+                      {row.nome}
+                    </td>
                     <td data-label="Quantidade">
                       {reportNumber(row.quantidade)}
                     </td>
                     <td data-label="Receita">{reportMoney(row.faturamento)}</td>
                     <td data-label="Participação">
-                      {reportNumber(row.participacao, 1)}%
+                      <span className="report-share">
+                        <span className="report-bar" aria-hidden="true">
+                          <span style={{ width: `${Math.min(100, row.participacao)}%`, backgroundColor: "#4C258C" }} />
+                        </span>
+                        {reportNumber(row.participacao, 1)}%
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -73,10 +81,6 @@ export function TabelaClientes({ data }: { data: ClienteRank[] }) {
         <ReportEmpty>Nenhum cliente identificado no período.</ReportEmpty>
       ) : (
         <>
-          <p className="report-panel-note">
-            Entre os {data.length} clientes do ranking disponível. Uma compra no
-            período não identifica, por si só, um cliente novo.
-          </p>
           <dl className="report-client-stats">
             <div>
               <dt>Uma compra no período</dt>
