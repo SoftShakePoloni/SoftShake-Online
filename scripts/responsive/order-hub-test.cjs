@@ -230,9 +230,14 @@ test("SSE sends retry once, ready once, scoped changes then rotate; warm hub kee
     );
     version = changed.match(/id: (.+)\n/)[1];
   }
-  h.c.advance(50000);
-  for (const r of streams) {
-    assert.match(decode.decode((await r.read()).value), /event: rotate/);
+  h.c.advance(279000);
+  // Not rotated yet: no chunk may be pending before the lifetime elapses.
+  const pending = streams.map((r) => r.read());
+  for (const p of pending)
+    assert.equal(await Promise.race([p.then(() => "chunk"), new Promise((ok) => setImmediate(() => ok("idle")))]), "idle");
+  h.c.advance(1000);
+  for (const [i, r] of streams.entries()) {
+    assert.match(decode.decode((await pending[i]).value), /event: rotate/);
     assert.equal((await r.read()).done, true);
   }
   assert.equal(h.stats().removed, 0);
