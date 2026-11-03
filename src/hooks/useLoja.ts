@@ -92,8 +92,14 @@ async function loadLoja() {
   return inFlight;
 }
 
+/** Keeps the realtime channel through short navigations (e.g. /entrar → /). */
+const LOJA_DETACH_MS = 60_000;
+let detachTimer: ReturnType<typeof setTimeout> | undefined;
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
+  clearTimeout(detachTimer);
+  detachTimer = undefined;
   if (!stopUpdates)
     stopUpdates = subscribeCatalogUpdates(reason => {
       if (reason === "initial" && initialAt && Date.now() - initialAt < 30_000) return;
@@ -101,10 +107,14 @@ function subscribe(listener: () => void) {
     });
   return () => {
     listeners.delete(listener);
-    if (!listeners.size) {
+    if (listeners.size) return;
+    clearTimeout(detachTimer);
+    detachTimer = setTimeout(() => {
+      detachTimer = undefined;
+      if (listeners.size) return;
       stopUpdates?.();
       stopUpdates = undefined;
-    }
+    }, LOJA_DETACH_MS);
   };
 }
 
