@@ -165,7 +165,7 @@ export function MeuPerfilView({
               if (item.href) {
                 return (
                   <li key={item.label}>
-                    <Link href={item.href} className={className}>
+                    <Link prefetch={false} href={item.href} className={className}>
                       {content}
                     </Link>
                   </li>

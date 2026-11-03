@@ -40,7 +40,7 @@ export function PreferenciasView() {
     <div className="min-h-[70vh] bg-gradient-to-b from-primary/[0.04] via-background to-background">
       <div className="mx-auto max-w-lg px-4 py-6 pb-28 space-y-6">
         <div className="flex items-center gap-3">
-          <Link
+          <Link prefetch={false}
             href="/perfil"
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
             aria-label="Voltar ao perfil"

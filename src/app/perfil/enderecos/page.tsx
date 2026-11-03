@@ -130,7 +130,7 @@ export default function PaginaEnderecos() {
   return (
     <main className="mx-auto min-h-[70vh] max-w-lg px-5 pb-28 pt-5 sm:pt-8">
       <header className="mb-6 flex items-center gap-2">
-        <Link
+        <Link prefetch={false}
           href="/perfil"
           aria-label="Voltar para o perfil"
           className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-muted"
@@ -140,7 +140,7 @@ export default function PaginaEnderecos() {
         <h1 className="min-w-0 flex-1 text-xl font-semibold tracking-tight">
           Meus endereços
         </h1>
-        <Link
+        <Link prefetch={false}
           href="/perfil/enderecos/novo"
           className="inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md px-1 text-sm font-medium text-primary hover:bg-primary/5"
         >
@@ -154,7 +154,7 @@ export default function PaginaEnderecos() {
             Você ainda não cadastrou um endereço.
           </p>
           <Button asChild className="min-h-11 rounded-lg">
-            <Link href="/perfil/enderecos/novo">Adicionar endereço</Link>
+            <Link prefetch={false} href="/perfil/enderecos/novo">Adicionar endereço</Link>
           </Button>
         </div>
       ) : (
@@ -188,7 +188,7 @@ export default function PaginaEnderecos() {
                     <DropdownMenuContent align="end">
                       {endereco.id !== "endereco-legado" && (
                         <DropdownMenuItem asChild>
-                          <Link
+                          <Link prefetch={false}
                             href={`/perfil/enderecos/${endereco.id}/editar`}
                           >
                             Editar endereço
