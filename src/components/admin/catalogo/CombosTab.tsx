@@ -298,7 +298,7 @@ function NovoComboSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="catalog-sheet flex w-full flex-col gap-0 p-0 sm:max-w-xl">
+      <SheetContent side="left" className="catalog-sheet flex w-[88vw] max-w-[520px] flex-col gap-0 p-0 sm:max-w-[520px]">
         <SheetHeader className="catalog-sheet-header">
           <SheetTitle>Novo combo</SheetTitle>
           <SheetDescription className="sr-only">
