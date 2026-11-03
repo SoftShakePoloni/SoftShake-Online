@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useModalHistory } from "@/hooks/useModalHistory";
-import { StorageImage as Image } from "@/components/ui/storage-image";
+import { ProductImage as Image } from "@/components/ui/product-image";
 import dynamic from "next/dynamic";
 import { BadgePercent, Gift } from "lucide-react";
 import type { Product } from "@/data/tipos";
@@ -104,13 +104,8 @@ export function ProductCard({ product }: { product: Product }) {
           {product.image ? (
             <div className="relative">
               <Image
-                preset="productCard"
                 src={product.image}
                 alt={product.name}
-                width={320}
-                height={192}
-                quality={90}
-                sizes="(max-width: 639px) 160px, 187px"
                 className="h-24 w-24 rounded-lg object-cover sm:h-28 sm:w-28"
               />
             </div>

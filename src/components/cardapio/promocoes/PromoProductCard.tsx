@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useModalHistory } from "@/hooks/useModalHistory";
-import { StorageImage as Image } from "@/components/ui/storage-image";
+import { ProductImage as Image } from "@/components/ui/product-image";
 import { Gift, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { Product } from "@/data/tipos";
@@ -90,13 +90,8 @@ export function PromoProductCard({
         >
           {product.image && failedImage !== product.image ? (
             <Image
-              preset="offer"
               src={product.image}
               alt=""
-              width={1200}
-              height={1200}
-              sizes="(max-width: 359px) 88px, 108px"
-              quality={90}
               className="h-auto w-full object-contain"
               onError={() => setFailedImage(product.image ?? null)}
             />
