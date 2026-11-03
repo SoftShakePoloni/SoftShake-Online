@@ -284,7 +284,7 @@ function NovaCampanhaSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="catalog-sheet flex w-full flex-col gap-0 p-0 sm:max-w-md">
+      <SheetContent side="left" className="catalog-sheet flex w-[88vw] max-w-[440px] flex-col gap-0 p-0 sm:max-w-[440px]">
         <SheetHeader className="catalog-sheet-header">
           <SheetTitle>Nova campanha de frete grátis</SheetTitle>
           <SheetDescription className="sr-only">
