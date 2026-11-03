@@ -7,6 +7,24 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import type { CatalogTab } from "./types";
+
+const COPY: Record<CatalogTab, { title: string; description: string }> = {
+  produtos: {
+    title: "Produtos",
+    description: "Preços, fotos e disponibilidade de tudo o que aparece no cardápio.",
+  },
+  complementos: {
+    title: "Complementos",
+    description: "Extras pagos ou gratuitos que o cliente adiciona ao pedido.",
+  },
+  opcoes: {
+    title: "Opções",
+    description: "Sabores, tamanhos e escolhas obrigatórias de cada produto.",
+  },
+  combos: { title: "Combos", description: "Junte produtos em uma oferta com preço especial." },
+  promocoes: { title: "Promoções", description: "Campanhas de frete grátis e descontos." },
+};
+
 export function CatalogoHeader({
   activeTab,
   onNovoProduto,
@@ -18,24 +36,12 @@ export function CatalogoHeader({
   onImport?: () => void;
   onExport?: () => void;
 }) {
-  const copy: Record<CatalogTab, { title: string; description: string }> = {
-    produtos: { title: "Produtos", description: "Gerencie seu catálogo" },
-    complementos: {
-      title: "Complementos",
-      description: "Organize os extras do seu cardápio",
-    },
-    opcoes: {
-      title: "Opções",
-      description: "Gerencie sabores, tamanhos e escolhas",
-    },
-    combos: { title: "Combos", description: "Combine produtos em uma oferta" },
-    promocoes: { title: "Promoções", description: "Gerencie suas campanhas" },
-  };
   return (
     <header className="catalog-heading">
-      <div>
-        <h1>{copy[activeTab].title}</h1>
-        <p>{copy[activeTab].description}</p>
+      <div className="catalog-heading-text">
+        <p className="catalog-eyebrow">Cardápio</p>
+        <h1>{COPY[activeTab].title}</h1>
+        <p className="catalog-heading-description">{COPY[activeTab].description}</p>
       </div>
       {activeTab === "produtos" && (
         <div className="catalog-heading-actions">
@@ -46,7 +52,7 @@ export function CatalogoHeader({
                 className="catalog-secondary-action"
                 aria-label="Mais ações do catálogo"
               >
-                <MoreHorizontal size={19} aria-hidden="true" />
+                <MoreHorizontal size={18} aria-hidden="true" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -60,13 +66,10 @@ export function CatalogoHeader({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <button
-            type="button"
-            onClick={onNovoProduto}
-            className="catalog-primary-action"
-          >
+          <button type="button" onClick={onNovoProduto} className="catalog-primary-action">
             <Plus size={16} aria-hidden="true" />
             Novo produto
+            <kbd className="catalog-kbd is-inverse" aria-hidden="true">N</kbd>
           </button>
         </div>
       )}

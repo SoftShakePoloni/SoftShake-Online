@@ -389,7 +389,7 @@ export function CatalogoManager({
   };
 
   return (
-    <div className="catalog-page flex flex-col bg-[#F7F8FC]">
+    <div className="catalog-page">
       <CatalogoHeader
         activeTab={tab}
         onNovoProduto={openNovo}
@@ -420,7 +420,7 @@ export function CatalogoManager({
               }
             >
               <option value="__all__">
-                Todas as categorias ({produtos.length})
+                Todos os produtos ({produtos.length})
               </option>
               {categorias.map((c) => (
                 <option key={c.id} value={String(c.id)}>
@@ -440,7 +440,7 @@ export function CatalogoManager({
               aria-expanded={manageCategories}
               onClick={() => setManageCategories((v) => !v)}
             >
-              Gerenciar
+              {manageCategories ? "Fechar" : "Categorias"}
             </button>
           </div>
           <div

@@ -26,6 +26,8 @@ import {
   Copy,
   EyeOff,
   Trash2,
+  LayoutGrid,
+  FolderX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -152,55 +154,40 @@ function CategoriaItemInner({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative flex items-center gap-0.5 rounded-lg transition-colors",
-        isDragging && "z-20 border border-[#E5E7EB] bg-white opacity-80",
-        selected
-          ? "bg-[#F1ECF7] text-[#3F1E76]"
-          : "text-[#514B59] hover:bg-[#F8F7FA]"
+        "catalog-category-item group",
+        isDragging && "is-dragging",
+        selected && "is-active"
       )}
     >
       {dragHandleProps ? (
         <button
           type="button"
-          className="p-1 pl-1.5 text-[#D1D5DB] opacity-100 cursor-grab active:cursor-grabbing touch-none"
+          className="catalog-category-drag"
           aria-label="Arrastar categoria"
           {...dragHandleProps}
         >
           <GripVertical className="w-3.5 h-3.5" />
         </button>
       ) : (
-        <span className="w-5 shrink-0" aria-hidden />
+        <span className="catalog-category-drag-spacer" aria-hidden />
       )}
 
       <button
         type="button"
         onClick={onSelect}
-        className="flex-1 min-w-0 flex items-center gap-1.5 py-2 pr-1 text-left"
+        aria-current={selected ? "true" : undefined}
+        className="catalog-category-select"
       >
-        <span
-          className={cn(
-            "truncate text-[13px]",
-            selected ? "font-semibold" : "font-medium"
-          )}
-        >
-          {cat.nome}
-        </span>
-        <span
-          className={cn(
-            "ml-auto text-[12px] tabular-nums shrink-0",
-            selected ? "text-[#755F91]" : "text-[#96919B]"
-          )}
-        >
-          ({count})
-        </span>
+        <span className="truncate">{cat.nome}</span>
+        <span className="catalog-count">{count}</span>
       </button>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="p-1 mr-1 rounded-md opacity-100 hover:bg-white text-[#6B7280]"
-            aria-label="Menu da categoria"
+            className="catalog-category-menu"
+            aria-label={`Menu da categoria ${cat.nome}`}
           >
             <MoreVertical className="w-3.5 h-3.5" />
           </button>
@@ -327,16 +314,15 @@ export function CategoriasSidebar({
 
   return (
     <aside className="catalog-categories-panel flex w-full flex-col">
-      <div className="flex items-center justify-between border-b border-[#EEEAF1] px-4 py-3">
-        <div>
-          <h2 className="text-[13px] font-semibold text-[#25212A]">Categorias</h2>
-
-        </div>
+      <div className="catalog-categories-head">
+        <h2>
+          Categorias <span className="catalog-count">{categorias.length}</span>
+        </h2>
         <Button
           type="button"
           size="icon"
           variant="ghost"
-          className="h-8 w-8 rounded-lg text-[#655D6E] hover:bg-[#F5F2F8] hover:text-[#4C258C]"
+          className="h-8 w-8 rounded-lg text-[#655D6E] hover:bg-[#F2ECFA] hover:text-[#4C258C]"
           onClick={() => {
             setCreating(true);
             setNewName("");
@@ -347,22 +333,18 @@ export function CategoriasSidebar({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
+      <div className="catalog-categories-list">
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className={cn(
-            "w-full flex items-center gap-2 rounded-lg px-3 py-2.5 text-[13px] transition-colors",
-            selectedId == null
-              ? "bg-[#F1ECF7] font-semibold text-[#3F1E76]"
-              : "font-medium text-[#514B59] hover:bg-[#F8F7FA]"
-          )}
+          aria-current={selectedId == null ? "true" : undefined}
+          className={cn("catalog-category-fixed", selectedId == null && "is-active")}
         >
-          <span className="truncate">Todas</span>
-          <span className="ml-auto rounded-full bg-black/[0.04] px-2 py-0.5 text-[11px] tabular-nums text-[#77717D]">
-            {produtos.length}
-          </span>
+          <LayoutGrid className="h-4 w-4" aria-hidden="true" />
+          <span className="truncate">Todos os produtos</span>
+          <span className="catalog-count">{produtos.length}</span>
         </button>
+        <div className="catalog-categories-divider" role="presentation" />
 
         {creating && (
           <div className="flex gap-1 p-1">
@@ -379,7 +361,7 @@ export function CategoriasSidebar({
             />
             <Button
               size="sm"
-              className="h-9 bg-[#4C258C] hover:bg-[#5E35B1]"
+              className="h-9 bg-[#4C258C] hover:bg-[#3F1E76]"
               disabled={busy}
               onClick={() => void submitCreate()}
             >
@@ -404,7 +386,7 @@ export function CategoriasSidebar({
                 />
                 <Button
                   size="sm"
-                  className="h-9 bg-[#4C258C] hover:bg-[#5E35B1]"
+                  className="h-9 bg-[#4C258C] hover:bg-[#3F1E76]"
                   disabled={busy}
                   onClick={() => void submitEdit()}
                 >
@@ -452,17 +434,12 @@ export function CategoriasSidebar({
           <button
             type="button"
             onClick={() => onSelect("__none__")}
-            className={cn(
-              "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-colors",
-              selectedId === "__none__"
-                ? "bg-[#F3EEFA] text-[#4C258C] font-semibold"
-                : "text-[#6B7280] hover:bg-[#F7F8FC]"
-            )}
+            aria-current={selectedId === "__none__" ? "true" : undefined}
+            className={cn("catalog-category-fixed is-muted", selectedId === "__none__" && "is-active")}
           >
+            <FolderX className="h-4 w-4" aria-hidden="true" />
             <span className="truncate">Sem categoria</span>
-            <span className="ml-auto text-[11px] tabular-nums">
-              {counts.get("__none__")}
-            </span>
+            <span className="catalog-count">{counts.get("__none__")}</span>
           </button>
         )}
       </div>
