@@ -75,12 +75,25 @@ function ensureMenuLoaded() {
   if (!stopUpdates) stopUpdates = subscribeCatalogUpdates(reason => { if (reason === "initial" && menuCacheAt && Date.now() - menuCacheAt < 30_000) return; void loadMenu(); });
 }
 
+/** Keeps the realtime channel through short navigations (e.g. /entrar → /). */
+export const MENU_DETACH_MS = 60_000;
+let detachTimer: ReturnType<typeof setTimeout> | undefined;
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
+  clearTimeout(detachTimer);
+  detachTimer = undefined;
   ensureMenuLoaded();
   return () => {
     listeners.delete(listener);
-    if (!listeners.size) { stopUpdates?.(); stopUpdates = undefined; }
+    if (listeners.size) return;
+    clearTimeout(detachTimer);
+    detachTimer = setTimeout(() => {
+      detachTimer = undefined;
+      if (listeners.size) return;
+      stopUpdates?.();
+      stopUpdates = undefined;
+    }, MENU_DETACH_MS);
   };
 }
 
