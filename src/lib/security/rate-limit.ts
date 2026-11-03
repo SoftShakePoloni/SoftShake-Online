@@ -60,6 +60,8 @@ export const RATE_LIMITS = {
   login: { bucket: "auth:login", limit: 5, windowSec: 60 },
   register: { bucket: "auth:register", limit: 3, windowSec: 60 },
   api: { bucket: "api:general", limit: 120, windowSec: 60 },
+  eventos: { bucket: "api:order-events:ip", limit: 30, windowSec: 60 },
+  eventosUsuario: { bucket: "api:order-events:owner", limit: 30, windowSec: 60 },
   apiStrict: { bucket: "api:strict", limit: 30, windowSec: 60 },
   checkout: { bucket: "api:checkout", limit: 10, windowSec: 60 },
   imagem: { bucket: "api:imagem", limit: 600, windowSec: 60 },

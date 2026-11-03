@@ -1,11 +1,13 @@
 "use client";
-import type { KpiCard } from "@/types/relatorios";
+import type { KpiCard, RelatorioData } from "@/types/relatorios";
 import {
   primaryReportKpis,
   reportDate,
+  reportMoney,
   reportNumber,
   validReportTrend,
 } from "@/lib/relatorios/presentation";
+
 export function RelatorioKpiCards({
   kpis,
   previousRange,
@@ -24,18 +26,12 @@ export function RelatorioKpiCards({
               <dd>{kpi.value}</dd>
               <p
                 className={
-                  trend == null
-                    ? ""
-                    : trend > 0
-                      ? "report-up"
-                      : trend < 0
-                        ? "report-down"
-                        : ""
+                  trend == null ? "" : trend > 0 ? "report-up" : trend < 0 ? "report-down" : ""
                 }
               >
                 {trend == null
-                  ? "Sem base comparável"
-                  : `${trend > 0 ? "+" : ""}${reportNumber(trend, 1)}% em relação ao período anterior`}
+                  ? "Sem comparação"
+                  : `${trend > 0 ? "+" : ""}${reportNumber(trend, 1)}% vs. anterior`}
               </p>
             </div>
           );
@@ -43,10 +39,30 @@ export function RelatorioKpiCards({
       </dl>
       {previousRange && (
         <p className="report-comparison-caption">
-          Comparação com {reportDate(previousRange.from)} a{" "}
-          {reportDate(previousRange.to)}.
+          Período anterior: {reportDate(previousRange.from)} – {reportDate(previousRange.to)}
         </p>
       )}
     </section>
+  );
+}
+
+/** Linha de destaques do período: respostas rápidas sem precisar abrir as tabelas. */
+export function RelatorioDestaques({ data }: { data: RelatorioData }) {
+  if (!data.totalPedidosPeriodo) return null;
+  const items: [string, string][] = [
+    ["Maior venda", reportMoney(data.destaques.maiorVenda)],
+    ["Horário de pico", data.destaques.horarioPico || "—"],
+    ["Dia mais movimentado", data.destaques.diaMaisPedidos || "—"],
+    ["Produto campeão", data.destaques.produtoCampeao || "—"],
+  ];
+  return (
+    <dl className="report-highlights" aria-label="Destaques do período">
+      {items.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd title={value}>{value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

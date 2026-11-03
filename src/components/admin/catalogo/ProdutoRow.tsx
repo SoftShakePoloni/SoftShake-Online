@@ -3,29 +3,17 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, Package } from "lucide-react";
 import { StorageImage as Image } from "@/components/ui/storage-image";
-
-import {
-  GripVertical,
-  Pencil,
-  Copy,
-  Eye,
-  Trash2,
-  MoreHorizontal,
-  Package,
-  Tag,
-  EyeOff,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useImagemAssinada } from "@/hooks/useImagemAssinada";
 import { Switch } from "@/components/ui/switch";
+import { CatalogTagBadge } from "./CatalogTagBadge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ProdutoActionsMenu,
+  descontoPercentual,
+  type ProdutoActions,
+} from "./ProdutoActionsMenu";
 import {
   formatBRL,
   hasPrecoPromocional,
@@ -33,45 +21,104 @@ import {
   type CatalogProduto,
 } from "./types";
 
-type ProdutoRowProps = {
+type ProdutoRowProps = ProdutoActions & {
   produto: CatalogProduto;
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onView: () => void;
-  onDelete: () => void;
-  onToggleDisponivel: () => void;
   enableDnd?: boolean;
   toggling?: boolean;
 };
 
 export function ProdutoRow(props: ProdutoRowProps) {
-  if (props.enableDnd) {
-    return <ProdutoRowSortable {...props} />;
-  }
+  if (props.enableDnd) return <ProdutoRowSortable {...props} />;
   return <ProdutoRowInner {...props} />;
 }
 
 function ProdutoRowSortable(props: ProdutoRowProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: String(props.produto.id) });
-
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: String(props.produto.id) });
   return (
     <ProdutoRowInner
       {...props}
       setNodeRef={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-      }}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       isDragging={isDragging}
       dragHandleProps={{ ...attributes, ...listeners }}
     />
+  );
+}
+
+/** Miniatura do produto com fallback; reaproveitada pela grade. */
+export function ProdutoThumb({
+  produto,
+  className,
+  sizes,
+}: {
+  produto: CatalogProduto;
+  className?: string;
+  sizes: string;
+}) {
+  const imgUrl = useImagemAssinada(produto.imagem_url);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  return (
+    <div className={cn("catalog-thumb", className)}>
+      {imgUrl && imgUrl !== failedUrl ? (
+        <Image
+          src={imgUrl}
+          onError={() => setFailedUrl(imgUrl)}
+          alt=""
+          fill
+          className="object-cover"
+          sizes={sizes}
+        />
+      ) : (
+        <Package className="h-5 w-5" aria-hidden="true" />
+      )}
+    </div>
+  );
+}
+
+export function ProdutoPreco({ produto }: { produto: CatalogProduto }) {
+  const promo = hasPrecoPromocional(produto);
+  const desconto = promo
+    ? descontoPercentual(Number(produto.preco_base), Number(produto.preco_promocional))
+    : null;
+  return (
+    <div className="catalog-price">
+      <span className="catalog-price-current">
+        {formatBRL(promo ? produto.preco_promocional : produto.preco_base)}
+      </span>
+      {promo && (
+        <span className="catalog-price-meta">
+          <s>{formatBRL(produto.preco_base)}</s>
+          {desconto ? <span className="catalog-discount">-{desconto}%</span> : null}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function DisponibilidadeSwitch({
+  produto,
+  disabled,
+  onToggle,
+}: {
+  produto: CatalogProduto;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  const disponivel = isProdutoDisponivel(produto);
+  return (
+    <label className="catalog-availability">
+      <Switch
+        checked={disponivel}
+        disabled={disabled}
+        onCheckedChange={() => onToggle()}
+        className="h-5 w-9 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-[#D4D0DA] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
+        aria-label={`${disponivel ? "Pausar" : "Retomar"} vendas de ${produto.nome}`}
+      />
+      <span className={cn("catalog-status-text", disponivel ? "is-on" : "is-off")}>
+        {disponivel ? "À venda" : "Pausado"}
+      </span>
+    </label>
   );
 }
 
@@ -93,168 +140,74 @@ function ProdutoRowInner({
   isDragging?: boolean;
   dragHandleProps?: Record<string, unknown>;
 }) {
-  const imgUrl = useImagemAssinada(produto.imagem_url);
   const disponivel = isProdutoDisponivel(produto);
-  const promo = hasPrecoPromocional(produto);
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   return (
     <tr
       ref={setNodeRef as unknown as React.Ref<HTMLTableRowElement>}
       style={style}
       className={cn(
-        "catalog-product-row group border-b border-[#F1EEF3] transition-colors hover:bg-[#FCFBFD]",
-        isDragging && "relative z-10 bg-white opacity-90 shadow-sm",
-        !disponivel && "opacity-70",
+        "catalog-product-row",
+        isDragging && "is-dragging",
+        !disponivel && "is-paused",
       )}
     >
-      {/* Drag */}
-      <td className="w-10 py-3 pl-3 pr-0">
+      <td className="catalog-cell-drag">
         {dragHandleProps ? (
           <button
             type="button"
-            className="touch-none cursor-grab p-1 text-[#AAA4B0] opacity-100 transition-opacity active:cursor-grabbing"
-            aria-label="Arrastar produto"
+            className="catalog-drag-handle"
+            aria-label={`Arrastar ${produto.nome}`}
             {...dragHandleProps}
           >
-            <GripVertical className="w-3.5 h-3.5" />
+            <GripVertical className="h-4 w-4" aria-hidden="true" />
           </button>
         ) : null}
       </td>
 
-      {/* Produto */}
-      <td className="catalog-product-cell py-3 pr-4">
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex w-full min-w-0 items-center gap-3 text-left"
-        >
-          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-[#EFECF1] bg-[#F8F7F9]">
-            {imgUrl && imgUrl !== failedUrl ? (
-              <Image
-                src={imgUrl}
-                onError={() => setFailedUrl(imgUrl)}
-                alt=""
-                fill
-                className="object-cover"
-                sizes="48px"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Package className="h-4 w-4 text-[#B8B2BE]" />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0">
-            <p className="catalog-product-name text-[13px] font-semibold leading-tight text-[#29252E]">
-              {produto.nome}
-            </p>
+      <td className="catalog-product-cell">
+        <button type="button" onClick={onEdit} className="catalog-product-main">
+          <ProdutoThumb produto={produto} sizes="52px" />
+          <span className="catalog-product-text">
+            <span className="catalog-product-title">
+              <span className="catalog-product-name">{produto.nome}</span>
+              <CatalogTagBadge tag={produto.tag} />
+            </span>
             {produto.codigo ? (
-              <p className="mt-1 text-[11px] tabular-nums text-[#96909B]">
-                {produto.codigo}
-              </p>
-            ) : (
-              <p className="mt-1 line-clamp-1 text-[11px] text-[#96909B]">
-                {(produto.descricao || "").trim() || "—"}
-              </p>
-            )}
-          </div>
+              <span className="catalog-product-desc">Cód. {produto.codigo}</span>
+            ) : null}
+          </span>
         </button>
       </td>
 
-      {/* Categoria — ocultar em tablet pequeno */}
-      <td className="catalog-product-category py-3 pr-4">
-        <span className="text-[12px] text-[#716B77]">
+      <td className="catalog-product-category">
+        <span className="catalog-category-chip">
           {produto.categoria?.nome || "Sem categoria"}
         </span>
       </td>
 
-      {/* Preço */}
-      <td className="catalog-product-price whitespace-nowrap py-3 pr-4">
-        {promo ? (
-          <div>
-            <p className="text-[13px] font-semibold tabular-nums text-[#29252E]">
-              {formatBRL(produto.preco_promocional)}
-            </p>
-            <p className="text-[11px] tabular-nums text-[#96909B] line-through">
-              {formatBRL(produto.preco_base)}
-            </p>
-          </div>
-        ) : (
-          <p className="text-[13px] font-semibold tabular-nums text-[#29252E]">
-            {formatBRL(produto.preco_base)}
-          </p>
-        )}
+      <td className="catalog-product-price">
+        <ProdutoPreco produto={produto} />
       </td>
 
       <td className="catalog-product-availability">
-        <label className="catalog-availability-control">
-          <Switch
-            checked={disponivel}
-            disabled={toggling}
-            onCheckedChange={() => onToggleDisponivel()}
-            className="h-5 w-9 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-[#D1D5DB] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
-            aria-label={disponivel ? "Desativar" : "Ativar"}
-          />
-          <span>{disponivel ? "Disponível" : "Indisponível"}</span>
-        </label>
+        <DisponibilidadeSwitch
+          produto={produto}
+          disabled={toggling}
+          onToggle={onToggleDisponivel}
+        />
       </td>
 
-      {/* Ações */}
-      <td className="catalog-product-actions py-3 pr-4 text-right">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[#716B77] transition-colors hover:border-[#E7E3EA] hover:bg-white hover:text-[#29252E]"
-              aria-label="Ações"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40 text-[13px]">
-            <DropdownMenuItem className="text-[13px]" onClick={onEdit}>
-              <Pencil className="w-3.5 h-3.5 mr-2" />
-              Editar
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-[13px]" onClick={onDuplicate}>
-              <Copy className="w-3.5 h-3.5 mr-2" />
-              Duplicar
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-[13px]" onClick={onEdit}>
-              <Tag className="w-3.5 h-3.5 mr-2" />
-              Promoção
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="text-[13px]"
-              onClick={onToggleDisponivel}
-            >
-              {disponivel ? (
-                <>
-                  <EyeOff className="w-3.5 h-3.5 mr-2" />
-                  Ocultar
-                </>
-              ) : (
-                <>
-                  <Eye className="w-3.5 h-3.5 mr-2" />
-                  Exibir
-                </>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-[13px]" onClick={onView}>
-              <Eye className="w-3.5 h-3.5 mr-2" />
-              Visualizar
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-[13px] text-red-600 focus:text-red-600"
-              onClick={onDelete}
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-2" />
-              Excluir
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <td className="catalog-product-actions">
+        <ProdutoActionsMenu
+          nome={produto.nome}
+          disponivel={disponivel}
+          onEdit={onEdit}
+          onDuplicate={onDuplicate}
+          onView={onView}
+          onDelete={onDelete}
+          onToggleDisponivel={onToggleDisponivel}
+        />
       </td>
     </tr>
   );

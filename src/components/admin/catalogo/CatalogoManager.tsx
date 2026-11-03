@@ -75,6 +75,8 @@ export function CatalogoManager({
   );
   const [drawerReadOnly, setDrawerReadOnly] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CatalogProduto | null>(null);
+  const [comboCreateOpen, setComboCreateOpen] = useState(false);
+  const [campanhaCreateOpen, setCampanhaCreateOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -171,7 +173,7 @@ export function CatalogoManager({
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-      if (e.key === "n" || e.key === "N") {
+      if ((e.key === "n" || e.key === "N") && tab === "produtos") {
         e.preventDefault();
         openNovo();
       }
@@ -185,7 +187,7 @@ export function CatalogoManager({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openNovo]);
+  }, [openNovo, tab]);
 
   const openEdit = (p: CatalogProduto) => {
     setDrawerProduto(p);
@@ -389,10 +391,16 @@ export function CatalogoManager({
   };
 
   return (
-    <div className="catalog-page flex flex-col bg-[#F7F8FC]">
+    <div className="catalog-page">
       <CatalogoHeader
         activeTab={tab}
-        onNovoProduto={openNovo}
+        onPrimary={() =>
+          tab === "combos"
+            ? setComboCreateOpen(true)
+            : tab === "promocoes"
+              ? setCampanhaCreateOpen(true)
+              : openNovo()
+        }
         onImport={() =>
           toast.message("Importação em breve", {
             description: "Em breve você poderá importar planilhas CSV/JSON.",
@@ -420,7 +428,7 @@ export function CatalogoManager({
               }
             >
               <option value="__all__">
-                Todas as categorias ({produtos.length})
+                Todos os produtos ({produtos.length})
               </option>
               {categorias.map((c) => (
                 <option key={c.id} value={String(c.id)}>
@@ -440,7 +448,7 @@ export function CatalogoManager({
               aria-expanded={manageCategories}
               onClick={() => setManageCategories((v) => !v)}
             >
-              Gerenciar
+              {manageCategories ? "Fechar" : "Categorias"}
             </button>
           </div>
           <div
@@ -499,6 +507,8 @@ export function CatalogoManager({
           products={produtos}
           initial={combosIniciais}
           loadError={combosErro}
+          createOpen={comboCreateOpen}
+          onCreateOpenChange={setComboCreateOpen}
         />
       )}
       {tab === "promocoes" && (
@@ -506,6 +516,8 @@ export function CatalogoManager({
           products={produtos}
           initial={promocoesFreteIniciais}
           loadError={promocoesFreteErro}
+          createOpen={campanhaCreateOpen}
+          onCreateOpenChange={setCampanhaCreateOpen}
         />
       )}
 

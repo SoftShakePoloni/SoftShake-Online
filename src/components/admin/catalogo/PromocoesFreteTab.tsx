@@ -1,15 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import {
-  AlertTriangle,
-  CalendarDays,
-  Clock3,
-  Gift,
-  Loader2,
-  Trash2,
-  Truck,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   createPromocaoFrete,
@@ -27,17 +19,219 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
+
+type Situacao = "ativa" | "agendada" | "encerrada";
+
+const SITUACOES: { id: Situacao; label: string }[] = [
+  { id: "ativa", label: "Ativas agora" },
+  { id: "agendada", label: "Agendadas" },
+  { id: "encerrada", label: "Encerradas" },
+];
+
+const toDate = (date: string, time: string) => new Date(`${date}T${time.slice(0, 5)}:00`);
+
+export function situacaoCampanha(item: PromocaoFrete, now: Date): Situacao {
+  if (item.ativa === false) return "encerrada";
+  if (now < toDate(item.data_inicio, item.hora_inicio)) return "agendada";
+  if (now > toDate(item.data_fim, item.hora_fim)) return "encerrada";
+  return "ativa";
+}
+
+const dateLabel = (date: string) =>
+  new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+
+function periodo(item: PromocaoFrete) {
+  const startClock = item.hora_inicio.slice(0, 5);
+  const endClock = item.hora_fim.slice(0, 5);
+  if (item.data_inicio === item.data_fim)
+    return `${dateLabel(item.data_inicio)}, ${startClock}–${endClock}`;
+  return `${dateLabel(item.data_inicio)} ${startClock} → ${dateLabel(item.data_fim)} ${endClock}`;
+}
 
 export function PromocoesFreteTab({
   products,
   initial,
   loadError,
+  createOpen,
+  onCreateOpenChange,
 }: {
   products: CatalogProduto[];
   initial: PromocaoFrete[];
   loadError: string | null;
+  createOpen: boolean;
+  onCreateOpenChange: (open: boolean) => void;
 }) {
   const [items, setItems] = useState(initial);
+  const [deleteTarget, setDeleteTarget] = useState<PromocaoFrete | null>(null);
+  const [now, setNow] = useState<Date | null>(null);
+
+  // Situação depende do relógio do navegador; recalcula a cada minuto.
+  useEffect(() => {
+    setNow(new Date());
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const grupos = useMemo(() => {
+    const map: Record<Situacao, PromocaoFrete[]> = { ativa: [], agendada: [], encerrada: [] };
+    if (!now) return map;
+    for (const item of items) map[situacaoCampanha(item, now)].push(item);
+    map.agendada.sort((a, b) => a.data_inicio.localeCompare(b.data_inicio));
+    map.encerrada.sort((a, b) => b.data_fim.localeCompare(a.data_fim));
+    return map;
+  }, [items, now]);
+
+  const remove = async () => {
+    const target = deleteTarget;
+    if (!target) return;
+    try {
+      await deletePromocaoFrete(target.id);
+      setItems((current) => current.filter((item) => item.id !== target.id));
+      toast.success("Campanha removida");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível remover a campanha.");
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  return (
+    <div className="catalog-module">
+      {loadError && (
+        <div role="alert" className="catalog-alert">
+          <strong>Não foi possível carregar as campanhas.</strong> {loadError}
+        </div>
+      )}
+
+      {items.length === 0 && !loadError ? (
+        <div className="catalog-surface catalog-empty-block">
+          <p className="catalog-empty-title">Nenhuma campanha</p>
+          <p className="catalog-empty-text">Agende frete grátis para a loja toda ou para um produto.</p>
+          <Button
+            type="button"
+            onClick={() => onCreateOpenChange(true)}
+            className="mt-4 bg-[#4C258C] hover:bg-[#3F1E76]"
+          >
+            Criar campanha
+          </Button>
+        </div>
+      ) : (
+        <div className="catalog-promo-groups">
+          {SITUACOES.map(({ id, label }) => {
+            const list = grupos[id];
+            if (!list.length) return null;
+            return (
+              <section key={id} aria-labelledby={`promo-${id}`}>
+                <h2 id={`promo-${id}`} className="catalog-group-title">
+                  {label} <span className="catalog-count">{list.length}</span>
+                </h2>
+                <div className={cn("catalog-surface", id === "encerrada" && "is-muted")}>
+                  <table className="catalog-data-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Aplicado a</th>
+                        <th scope="col">Período</th>
+                        <th scope="col">Situação</th>
+                        <th scope="col">
+                          <span className="sr-only">Ações</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {list.map((item) => (
+                        <tr key={item.id}>
+                          <td data-label="Aplicado a">
+                            <p className="catalog-data-title">{item.produto?.nome ?? "Toda a loja"}</p>
+                            <p className="catalog-data-sub">Frete grátis</p>
+                          </td>
+                          <td data-label="Período" className="catalog-data-period">
+                            {periodo(item)}
+                          </td>
+                          <td data-label="Situação">
+                            <span className={cn("catalog-state", `is-${id}`)}>
+                              {id === "ativa" ? "Ativa" : id === "agendada" ? "Agendada" : "Encerrada"}
+                            </span>
+                          </td>
+                          <td className="is-action">
+                            <button
+                              type="button"
+                              className="catalog-text-danger"
+                              onClick={() => setDeleteTarget(item)}
+                              aria-label={`Remover campanha de ${item.produto?.nome ?? "toda a loja"}`}
+                            >
+                              Remover
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      <NovaCampanhaSheet
+        open={createOpen}
+        onOpenChange={onCreateOpenChange}
+        products={products}
+        blocked={Boolean(loadError)}
+        onCreated={(created) => setItems((current) => [created, ...current])}
+      />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover campanha?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O frete grátis de “{deleteTarget?.produto?.nome ?? "toda a loja"}” deixará de valer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => void remove()}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function NovaCampanhaSheet({
+  open,
+  onOpenChange,
+  products,
+  blocked,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  products: CatalogProduto[];
+  blocked: boolean;
+  onCreated: (item: PromocaoFrete) => void;
+}) {
   const [product, setProduct] = useState("all");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -47,14 +241,7 @@ export function PromocoesFreteTab({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (
-      !start ||
-      !end ||
-      !startTime ||
-      !endTime ||
-      end < start ||
-      (end === start && endTime < startTime)
-    ) {
+    if (!start || !end || !startTime || !endTime || end < start || (end === start && endTime < startTime)) {
       toast.error("Confira as datas e os horários da campanha.");
       return;
     }
@@ -68,7 +255,7 @@ export function PromocoesFreteTab({
         hora_inicio: startTime,
         hora_fim: endTime,
       });
-      const created: PromocaoFrete = {
+      onCreated({
         id,
         produto_id: productId,
         data_inicio: start,
@@ -79,317 +266,103 @@ export function PromocoesFreteTab({
         produto:
           productId == null
             ? null
-            : {
-                nome:
-                  products.find((item) => String(item.id) === product)?.nome ??
-                  "Produto",
-              },
-      };
-      setItems((current) => [created, ...current]);
+            : { nome: products.find((item) => String(item.id) === product)?.nome ?? "Produto" },
+      });
       setStart("");
       setEnd("");
       setStartTime("00:00");
       setEndTime("23:59");
       setProduct("all");
-      toast.success("Campanha criada");
+      onOpenChange(false);
+      toast.success("Campanha agendada");
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível criar a campanha.",
-      );
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar a campanha.");
     } finally {
       setSaving(false);
     }
   };
 
-  const remove = async (id: number) => {
-    try {
-      await deletePromocaoFrete(id);
-      setItems((current) => current.filter((item) => item.id !== id));
-      toast.success("Campanha removida");
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível remover a campanha.",
-      );
-    }
-  };
-
-  const dateLabel = (date: string) =>
-    new Date(`${date}T12:00:00`).toLocaleDateString("pt-BR");
-  const campaignLabel = (item: PromocaoFrete) => {
-    const startClock = item.hora_inicio.slice(0, 5);
-    const endClock = item.hora_fim.slice(0, 5);
-    if (item.data_inicio === item.data_fim) {
-      return `${dateLabel(item.data_inicio)} · ${startClock}–${endClock}`;
-    }
-    return `${dateLabel(item.data_inicio)} às ${startClock} – ${dateLabel(item.data_fim)} às ${endClock}`;
-  };
-
   return (
-    <div className="catalog-module catalog-promotions">
-      <div className="catalog-module-content space-y-5">
-        {loadError && (
-          <div
-            role="alert"
-            className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-950"
-          >
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
-            <div>
-              <p className="font-semibold">
-                Não foi possível carregar as campanhas
-              </p>
-              <p className="mt-1 text-amber-900">{loadError}</p>
-            </div>
-          </div>
-        )}
-
-        <div className="catalog-promotion-layout">
-          <details className="catalog-create-panel" open={initial.length === 0}>
-            <summary>
-              Nova campanha de frete grátis<span aria-hidden="true">+</span>
-            </summary>
-            <form
-              onSubmit={submit}
-              className="overflow-hidden rounded-lg border border-[#E7E3EA] bg-white shadow-none"
-            >
-              <div className="space-y-5 px-5 py-5 sm:px-6 sm:py-6">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="frete-product"
-                    className="text-[12px] font-medium text-[#514B59]"
-                  >
-                    Aplicar a
-                  </Label>
-                  <Select value={product} onValueChange={setProduct}>
-                    <SelectTrigger
-                      id="frete-product"
-                      className="h-11 rounded-lg border-[#E4E1E8] bg-white text-[13px] shadow-none focus:ring-[#4C258C]/20"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os produtos</SelectItem>
-                      {products.map((item) => (
-                        <SelectItem key={item.id} value={String(item.id)}>
-                          {item.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="frete-start"
-                      className="text-[12px] font-medium text-[#514B59]"
-                    >
-                      Começa em
-                    </Label>
-                    <div className="grid grid-cols-1 min-[480px]:grid-cols-[minmax(0,1fr)_124px] gap-2">
-                      <Input
-                        id="frete-start"
-                        type="date"
-                        value={start}
-                        onChange={(event) => setStart(event.target.value)}
-                        required
-                        aria-label="Data de início"
-                        className="h-11 min-w-0 rounded-lg border-[#E4E1E8] text-[12px] shadow-none focus-visible:ring-[#4C258C]/20"
-                      />
-                      <Input
-                        id="frete-start-time"
-                        type="time"
-                        value={startTime}
-                        onChange={(event) => setStartTime(event.target.value)}
-                        required
-                        aria-label="Horário de início"
-                        className="h-11 min-w-0 rounded-lg border-[#E4E1E8] px-2 text-[12px] shadow-none focus-visible:ring-[#4C258C]/20"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="frete-end"
-                      className="text-[12px] font-medium text-[#514B59]"
-                    >
-                      Termina em
-                    </Label>
-                    <div className="grid grid-cols-1 min-[480px]:grid-cols-[minmax(0,1fr)_124px] gap-2">
-                      <Input
-                        id="frete-end"
-                        type="date"
-                        value={end}
-                        onChange={(event) => setEnd(event.target.value)}
-                        min={start || undefined}
-                        required
-                        aria-label="Data de término"
-                        className="h-11 min-w-0 rounded-lg border-[#E4E1E8] text-[12px] shadow-none focus-visible:ring-[#4C258C]/20"
-                      />
-                      <Input
-                        id="frete-end-time"
-                        type="time"
-                        value={endTime}
-                        onChange={(event) => setEndTime(event.target.value)}
-                        required
-                        aria-label="Horário de término"
-                        className="h-11 min-w-0 rounded-lg border-[#E4E1E8] px-2 text-[12px] shadow-none focus-visible:ring-[#4C258C]/20"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col-reverse gap-3 border-t border-[#F0EDF3] bg-[#FCFBFD] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                <p className="text-[11px] text-[#89838F]">
-                  O horário considera o fuso local da loja.
-                </p>
-                <Button
-                  type="submit"
-                  disabled={
-                    saving || products.length === 0 || Boolean(loadError)
-                  }
-                  className="h-10 rounded-lg bg-[#4C258C] px-5 text-[13px] font-semibold shadow-none hover:bg-[#3F1E76]"
-                >
-                  {saving ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Gift className="mr-2 h-4 w-4" />
-                  )}
-                  Agendar campanha
-                </Button>
-              </div>
-            </form>
-          </details>
-
-          <aside className="rounded-lg border border-[#E7E3EA] bg-white p-5 shadow-none sm:p-6">
-            <div className="flex items-center gap-3 border-b border-[#F0EDF3] pb-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#EEF5F0] text-[#467553]">
-                <Gift className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-[14px] font-semibold text-[#29252E]">
-                  Regras da oferta
-                </h3>
-                <p className="mt-0.5 text-[11px] text-[#89838F]">
-                  O que o cliente verá
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-4 text-[12px] leading-relaxed text-[#716B77]">
-              <p>
-                O destaque de frete grátis aparece nos produtos participantes
-                enquanto a campanha estiver ativa.
-              </p>
-              <p>
-                Em pedidos com entrega, a taxa é zerada quando há um produto
-                participante. Na retirada, não há taxa de entrega.
-              </p>
-              <div className="flex gap-2.5 rounded-xl border border-[#E9E3F0] bg-[#FAF8FC] p-3 text-[#5A456F]">
-                <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Para uma oferta de um único dia, use a mesma data de início e
-                  término.
-                </span>
-              </div>
-            </div>
-          </aside>
-        </div>
-
-        <section className="overflow-hidden rounded-lg border border-[#E7E3EA] bg-white shadow-none">
-          <div className="flex items-center justify-between border-b border-[#EEEAF1] px-5 py-4 sm:px-6">
-            <div>
-              <h3 className="text-[14px] font-semibold text-[#29252E]">
-                Campanhas cadastradas
-              </h3>
-              <p className="mt-0.5 text-[12px] text-[#89838F]">
-                Campanhas gerais e por produto
-              </p>
-            </div>
-            <span className="rounded-full bg-[#F4F0F8] px-3 py-1 text-[11px] font-semibold text-[#4C258C]">
-              {items.length} {items.length === 1 ? "campanha" : "campanhas"}
-            </span>
-          </div>
-
-          {items.length === 0 && !loadError ? (
-            <div className="px-6 py-10 text-center">
-              <CalendarDays className="mx-auto h-5 w-5 text-[#AAA4B0]" />
-              <p className="mt-3 text-[13px] font-medium text-[#514B59]">
-                Nenhuma campanha cadastrada
-              </p>
-              <p className="mt-1 text-[12px] text-[#89838F]">
-                As campanhas que você criar aparecerão aqui.
-              </p>
-            </div>
-          ) : items.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left">
-                <thead className="bg-[#FAF9FB] text-[10px] font-semibold uppercase tracking-[0.08em] text-[#817A87]">
-                  <tr>
-                    <th className="px-5 py-3.5 sm:px-6">Benefício</th>
-                    <th className="px-5 py-3.5">Abrangência</th>
-                    <th className="px-5 py-3.5">Vigência</th>
-                    <th className="px-5 py-3.5 text-right sm:px-6">Ação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0EDF3]">
-                  {items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="transition-colors hover:bg-[#FCFBFD]"
-                    >
-                      <td className="px-5 py-4 sm:px-6">
-                        <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-[#467553]">
-                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#EEF5F0]">
-                            <Truck className="h-3.5 w-3.5" />
-                          </span>
-                          Frete grátis
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <p className="text-[13px] font-medium text-[#29252E]">
-                          {item.produto?.nome ?? "Todos os produtos"}
-                        </p>
-                        <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-[#89838F]">
-                          {item.produto_id == null
-                            ? "Toda a loja"
-                            : "Produto específico"}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="inline-flex items-center gap-2 text-[12px] text-[#514B59]">
-                          <CalendarDays className="h-4 w-4 shrink-0 text-[#817A87]" />
-                          {campaignLabel(item)}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-right sm:px-6">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Remover campanha de ${item.produto?.nome ?? "todos os produtos"}`}
-                          onClick={() => void remove(item.id)}
-                          className="h-8 w-8 rounded-lg text-[#8A838F] hover:bg-red-50 hover:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="left" className="catalog-sheet flex w-[88vw] max-w-[440px] flex-col gap-0 p-0 sm:max-w-[440px]">
+        <SheetHeader className="catalog-sheet-header">
+          <SheetTitle>Nova campanha de frete grátis</SheetTitle>
+          <SheetDescription className="sr-only">
+            Escolha onde a campanha vale e o período.
+          </SheetDescription>
+        </SheetHeader>
+        <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+          <div className="catalog-sheet-body">
+            <section className="catalog-form-section">
+              <h3>1. Onde vale</h3>
+              <Select value={product} onValueChange={setProduct}>
+                <SelectTrigger id="frete-product" aria-label="Aplicar a" className="h-11 shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toda a loja</SelectItem>
+                  {products.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.nome}
+                    </SelectItem>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="px-6 py-10 text-center">
-              <p className="text-[13px] font-medium text-[#514B59]">
-                A lista estará disponível após corrigir o carregamento.
-              </p>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
+                </SelectContent>
+              </Select>
+            </section>
+            <section className="catalog-form-section">
+              <h3>2. Período</h3>
+              <div className="space-y-1.5">
+                <Label htmlFor="frete-start">Início</Label>
+                <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+                  <Input id="frete-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} required />
+                  <Input
+                    type="time"
+                    aria-label="Horário de início"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="frete-end">Término</Label>
+                <div className="grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+                  <Input
+                    id="frete-end"
+                    type="date"
+                    value={end}
+                    min={start || undefined}
+                    onChange={(e) => setEnd(e.target.value)}
+                    required
+                  />
+                  <Input
+                    type="time"
+                    aria-label="Horário de término"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <p className="catalog-form-help">Para um único dia, use a mesma data. Horário local da loja.</p>
+            </section>
+          </div>
+          <div className="catalog-sheet-footer">
+            <span className="catalog-sheet-summary" />
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={saving || products.length === 0 || blocked}
+              className="bg-[#4C258C] hover:bg-[#3F1E76]"
+            >
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+              Agendar
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }
