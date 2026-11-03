@@ -28,8 +28,8 @@ const RELEASES_URL = "https://github.com/SoftShakePoloni/SoftShake-Online/releas
 const bridge = () => (window as Window & { softshakeDesktop?: DesktopBridge }).softshakeDesktop;
 
 const STATUS_TEXT: Record<DesktopUpdateState["status"], string> = {
-  idle: "Aguardando verificação",
-  disabled: "Atualização automática desligada nesta instalação",
+  idle: "Clique em Verificar agora para procurar uma nova versão",
+  disabled: "Indisponível nesta instalação",
   checking: "Verificando…",
   downloading: "Baixando atualização",
   downloaded: "Atualização pronta para instalar",
@@ -95,8 +95,8 @@ export function AtualizacoesSection() {
       <div>
         <h2 className="mb-2 text-lg font-semibold text-[#111827]">Atualizações</h2>
         <p className="mb-3 text-sm text-[#6B7280]">
-          O painel é atualizado automaticamente a cada publicação. O aplicativo Windows verifica novas versões no
-          GitHub ao abrir e a cada 30 minutos.
+          O painel é atualizado automaticamente a cada publicação. O aplicativo Windows só procura uma nova versão
+          quando você clica em Verificar agora.
         </p>
       </div>
 
