@@ -178,13 +178,16 @@ function connect() {
       retryDelay = 1_000;
       stopRecovery();
       // A first connection establishes a baseline, not a second invalidation.
-      if (initial)
-        for (const entry of entries.values()) {
-          if (entry.at >= connectedAt) {
-            entry.at = liveSince;
-            entry.version = lastEventVersion;
-          }
+      for (const entry of entries.values()) {
+        if (
+          entry.at > 0 &&
+          (entry.version === lastEventVersion ||
+            (initial && entry.at >= connectedAt))
+        ) {
+          entry.at = liveSince;
+          entry.version = lastEventVersion;
         }
+      }
     } catch {
       loseConnection();
     }
@@ -237,7 +240,7 @@ function ensureEvents() {
     eventsAttached = true;
   }
   if (!failedAt && !liveSince) failedAt = Date.now();
-  connect();
+  if (!retry) connect();
   startRecovery();
 }
 function releaseEvents() {
