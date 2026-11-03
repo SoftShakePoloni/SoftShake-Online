@@ -1,10 +1,10 @@
 "use client";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -49,7 +49,6 @@ export function ChartFaturamento({ data }: { data: SerieDia[] }) {
   const sales = data.filter((row) => row.faturamento > 0).length;
   return (
     <ReportPanel title="Evolução das vendas" className="report-sales">
-      <p className="report-panel-note">Faturamento diário em reais</p>
       {!available ? (
         <ReportEmpty />
       ) : sales === 0 ? (
@@ -64,11 +63,17 @@ export function ChartFaturamento({ data }: { data: SerieDia[] }) {
             aria-label={`Evolução diária de vendas. ${sales} dias com faturamento.`}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart
+              <AreaChart
                 data={data}
                 margin={{ top: 12, right: 12, left: 0, bottom: 4 }}
                 accessibilityLayer
               >
+                <defs>
+                  <linearGradient id="report-sales-fill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={PURPLE} stopOpacity={0.16} />
+                    <stop offset="100%" stopColor={PURPLE} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid stroke="#EEEAF2" vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -94,17 +99,18 @@ export function ChartFaturamento({ data }: { data: SerieDia[] }) {
                     "Faturamento",
                   ]}
                 />
-                <Line
+                <Area
                   type="linear"
                   dataKey="faturamento"
                   stroke={PURPLE}
                   strokeWidth={2}
+                  fill="url(#report-sales-fill)"
                   dot={data.length <= 7 ? { r: 3, fill: PURPLE } : false}
                   activeDot={{ r: 4 }}
                   connectNulls={false}
                   isAnimationActive={false}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
           <details className="report-chart-data">
@@ -143,9 +149,6 @@ export function ChartHoras({ data }: { data: SerieHora[] }) {
   const has = data.some((row) => row.pedidos > 0);
   return (
     <ReportPanel title="Pedidos por horário">
-      <p className="report-panel-note">
-        Distribuição dos pedidos ao longo do dia
-      </p>
       {!has ? (
         <ReportEmpty />
       ) : (
@@ -265,7 +268,6 @@ export function ChartPizza({ data }: { data: NomeValor[] }) {
     <Distribution
       title="Formas de pagamento"
       data={data}
-      note="Quantidade de pedidos e participação no total."
     />
   );
 }

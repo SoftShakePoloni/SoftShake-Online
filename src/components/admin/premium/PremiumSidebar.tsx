@@ -116,23 +116,11 @@ function pathIsActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function SidebarLinkTrailing({ active }: { active: boolean }) {
+function SidebarLinkTrailing() {
   const { pending } = useLinkStatus();
-
-  if (pending) {
-    return (
-      <Loader2
-        className="w-4 h-4 shrink-0 animate-spin text-[#4C258C]"
-        aria-hidden
-      />
-    );
-  }
-
-  if (active) {
-    return <ChevronRight className="w-4 h-4 shrink-0 text-[#4C258C]" />;
-  }
-
-  return null;
+  return pending ? (
+    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#4C258C]" aria-hidden />
+  ) : null;
 }
 
 function SidebarLink({
@@ -159,22 +147,19 @@ function SidebarLink({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? label : undefined}
       className={cn(
-        "group flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors duration-150 relative",
+        "group relative flex items-center gap-3 rounded-lg text-sm transition-colors duration-150",
         active
-          ? "bg-[#EEE8FA] text-[#4C258C]"
-          : "text-[#6B7280] hover:bg-gray-50 hover:text-[#111827]",
-        collapsed && "justify-center px-0",
+          ? "bg-[#F3EFFA] font-semibold text-[#4C258C]"
+          : "font-medium text-[#4B5563] hover:bg-[#F7F7F9] hover:text-[#111827]",
+        collapsed ? "h-10 justify-center" : "px-3 py-2",
       )}
     >
       {active && !collapsed && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-[#4C258C] rounded-r-full" />
+        <span className="absolute -left-4 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#4C258C]" />
       )}
-      <Icon
-        className={cn(
-          "w-5 h-5 shrink-0",
-          active ? "text-[#4C258C]" : "text-[#6B7280]",
-        )}
-      />
+      {collapsed && (
+        <Icon className={cn("h-5 w-5 shrink-0", active ? "text-[#4C258C]" : "text-[#6B7280]")} />
+      )}
       {!collapsed && (
         <>
           <span className="flex-1 truncate">{label}</span>
@@ -190,7 +175,7 @@ function SidebarLink({
               {badge}
             </span>
           )}
-          <SidebarLinkTrailing active={active} />
+          <SidebarLinkTrailing />
         </>
       )}
     </Link>
@@ -250,7 +235,7 @@ export function PremiumSidebar({
     <TooltipProvider delayDuration={200}>
       <aside
         className={cn(
-          "bg-white border-r border-[#E5E7EB] flex flex-col transition-[width] duration-300 ease-in-out motion-reduce:transition-none",
+          "bg-white border-r border-[#EEF0F3] flex flex-col transition-[width] duration-300 ease-in-out motion-reduce:transition-none",
           mobile ? "relative h-full w-full" : "fixed left-0 top-0 h-dvh z-40",
           !mobile && (collapsed ? "w-[72px]" : "w-[270px]"),
         )}
@@ -258,18 +243,15 @@ export function PremiumSidebar({
         {/* Topo: seta para recolher/expandir */}
         <div
           className={cn(
-            "relative shrink-0 border-b border-[#E5E7EB]",
-            collapsed ? "h-12" : "h-12",
+            "relative shrink-0",
+            "h-14",
           )}
         >
           {!collapsed && (
-            <div className="flex h-full items-center px-4 pr-12">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[#111827] truncate">
-                  SoftShake
-                </p>
-                <p className="text-[10px] text-[#9CA3AF] truncate">Painel</p>
-              </div>
+            <div className="flex h-full items-center px-5 pr-12">
+              <p className="truncate text-[15px] font-bold tracking-tight text-[#111827]">
+                SoftShake<span className="ml-1.5 text-xs font-medium text-[#9CA3AF]">Admin</span>
+              </p>
             </div>
           )}
           {onToggleCollapsed && (
@@ -279,7 +261,7 @@ export function PremiumSidebar({
                   type="button"
                   onClick={onToggleCollapsed}
                   className={cn(
-                    "absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#6B7280] shadow-sm transition-colors hover:border-[#D4C4F0] hover:bg-[#F9F7FD] hover:text-[#4C258C]",
+                    "absolute top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#111827]",
                     collapsed ? "left-1/2 -translate-x-1/2" : "right-3",
                   )}
                   aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
@@ -310,18 +292,13 @@ export function PremiumSidebar({
             if ((event.target as HTMLElement).closest("a")) onNavigate?.();
           }}
           className={cn(
-            "flex-1 py-4 overflow-y-auto overflow-x-hidden",
+            "flex-1 py-3 overflow-y-auto overflow-x-hidden",
             collapsed ? "px-2" : "px-4",
           )}
         >
           {mainItems.length > 0 && (
             <>
-              {!collapsed && (
-                <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
-                  Menu
-                </p>
-              )}
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {mainItems.map((item) => (
                   <SidebarLink
                     key={item.href}
@@ -340,14 +317,14 @@ export function PremiumSidebar({
           {configItems.length > 0 && (
             <>
               {!collapsed && (
-                <p className="px-3 mb-2 mt-5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">
+                <p className="mb-1.5 mt-6 px-3 text-[11px] font-medium text-[#9CA3AF]">
                   Configurações
                 </p>
               )}
               {collapsed && (
                 <div className="my-3 mx-2 border-t border-[#E5E7EB]" />
               )}
-              <div className={cn("space-y-1", !collapsed && "mt-0")}>
+              <div className="space-y-0.5">
                 {configItems.map((item) => (
                   <SidebarLink
                     key={item.href}
@@ -365,7 +342,7 @@ export function PremiumSidebar({
         </nav>
 
         <div
-          className={cn("border-t border-[#E5E7EB]", collapsed ? "p-2" : "p-4")}
+          className={cn("border-t border-[#EEF0F3]", collapsed ? "p-2" : "px-4 py-3")}
         >
           {collapsed ? (
             <div className="flex flex-col items-center gap-2">
@@ -392,32 +369,24 @@ export function PremiumSidebar({
               </Tooltip>
             </div>
           ) : (
-            <>
-              <div className="flex items-center gap-3 px-3 py-2">
-                <div className="w-10 h-10 rounded-full bg-[#4C258C] flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">
-                    {initial}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#111827] truncate">
-                    {displayName}
-                  </p>
-                  <p className="text-xs text-[#6B7280] truncate">
-                    {roleName}
-                    {adminEmail ? ` · ${adminEmail}` : ""}
-                  </p>
-                </div>
+            <div className="flex items-center gap-3 px-1">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F3EFFA]">
+                <span className="text-sm font-semibold text-[#4C258C]">{initial}</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[#111827]">{displayName}</p>
+                <p className="truncate text-xs text-[#9CA3AF]" title={adminEmail || undefined}>
+                  {roleName}
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => void handleLogout()}
-                className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-[#6B7280] hover:text-[#EF4444] hover:bg-red-50 rounded-lg transition-colors duration-150"
+                className="shrink-0 rounded-md px-2 py-1.5 text-xs font-medium text-[#6B7280] transition-colors hover:bg-red-50 hover:text-[#B42318]"
               >
-                <LogOut className="w-4 h-4" />
-                <span>Sair</span>
+                Sair
               </button>
-            </>
+            </div>
           )}
         </div>
       </aside>
