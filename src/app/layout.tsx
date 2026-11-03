@@ -1,3 +1,4 @@
+import { getCustomerSession } from "@/lib/customer-session.server";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles.css";
@@ -11,12 +12,17 @@ export const metadata: Metadata = {
   description: "Peça seu milkshake online no SoftShake.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const initialCliente = await getCustomerSession().catch(() => undefined);
   return (
     <html lang="pt-BR">
       <body className={inter.className}>
-        <Providers>
-            <RouteConditionalLayout>{children}</RouteConditionalLayout>
+        <Providers initialCliente={initialCliente}>
+          <RouteConditionalLayout>{children}</RouteConditionalLayout>
         </Providers>
       </body>
     </html>

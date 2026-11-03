@@ -42,30 +42,10 @@ export default function PaginaEnderecos() {
   }, [loading, cliente, router]);
 
   useEffect(() => {
-    const carregarEnderecos = async () => {
-      if (!cliente) return;
-
-      try {
-        const resposta = await fetch("/api/auth/sessao", { cache: "no-store" });
-
-        if (resposta.ok) {
-          const dados = await resposta.json();
-
-          const enderecosCarregados = customerAddresses(dados.cliente || {});
-
-          setEnderecos(enderecosCarregados);
-        }
-      } catch {
-        toast.error("Erro ao carregar endereços");
-      } finally {
-        setCarregando(false);
-      }
-    };
-
-    if (cliente) {
-      carregarEnderecos();
-    }
-  }, [cliente]);
+    if (loading) return;
+    setEnderecos(customerAddresses(cliente ?? {}));
+    setCarregando(false);
+  }, [cliente, loading]);
 
   const handleRemover = async (enderecoId: string) => {
     // Não permite remover o endereço legado

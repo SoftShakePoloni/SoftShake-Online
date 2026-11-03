@@ -1,7 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { invalidateCustomerOrderDetail, useCustomerResource } from "@/lib/customer-resource";
+import {
+  invalidateCustomerOrderDetail,
+  useCustomerResource,
+} from "@/lib/customer-resource";
 export type ClientePedidoItem = {
   uid?: string;
   qty: number;
@@ -76,7 +79,12 @@ export function useClientePedidos(clienteId: string | null | undefined) {
       previous.current.owner === clienteId ? previous.current.rows : [];
     const changed = new Set<string>();
     for (const pedido of incoming) {
-      if (clienteId) invalidateCustomerOrderDetail(clienteId, pedido.id, pedido.status + ":" + (pedido.updated_at ?? ""));
+      if (clienteId)
+        invalidateCustomerOrderDetail(
+          clienteId,
+          pedido.id,
+          pedido.status + ":" + (pedido.updated_at ?? ""),
+        );
       const before = old.find((p) => p.id === pedido.id);
       if (before && before.status !== pedido.status) {
         changed.add(pedido.id);
@@ -143,7 +151,7 @@ export function useClientePedido(clienteId: string, id: string) {
 export function useClientePedidosCount(clienteId: string) {
   const result = useCustomerResource<{ count: number }>(
     clienteId,
-    "/api/pedidos/contagem",
+    "/api/cliente/resumo",
   );
   return { count: result.data?.count ?? 0, loading: result.loading };
 }
