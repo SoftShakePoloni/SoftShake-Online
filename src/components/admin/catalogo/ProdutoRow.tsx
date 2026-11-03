@@ -115,7 +115,7 @@ export function DisponibilidadeSwitch({
         className="h-5 w-9 data-[state=checked]:bg-emerald-600 data-[state=unchecked]:bg-[#D4D0DA] [&>span]:h-4 [&>span]:w-4 [&>span]:data-[state=checked]:translate-x-4"
         aria-label={`${disponivel ? "Pausar" : "Retomar"} vendas de ${produto.nome}`}
       />
-      <span className={cn("catalog-status-pill", disponivel ? "is-on" : "is-off")}>
+      <span className={cn("catalog-status-text", disponivel ? "is-on" : "is-off")}>
         {disponivel ? "À venda" : "Pausado"}
       </span>
     </label>
@@ -141,7 +141,6 @@ function ProdutoRowInner({
   dragHandleProps?: Record<string, unknown>;
 }) {
   const disponivel = isProdutoDisponivel(produto);
-  const descricao = (produto.descricao || "").trim();
 
   return (
     <tr
@@ -174,9 +173,9 @@ function ProdutoRowInner({
               <span className="catalog-product-name">{produto.nome}</span>
               <CatalogTagBadge tag={produto.tag} />
             </span>
-            <span className="catalog-product-desc">
-              {produto.codigo ? `Cód. ${produto.codigo}` : descricao || "Sem descrição"}
-            </span>
+            {produto.codigo ? (
+              <span className="catalog-product-desc">Cód. {produto.codigo}</span>
+            ) : null}
           </span>
         </button>
       </td>

@@ -26,8 +26,6 @@ import {
   Copy,
   EyeOff,
   Trash2,
-  LayoutGrid,
-  FolderX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -340,7 +338,6 @@ export function CategoriasSidebar({
           aria-current={selectedId == null ? "true" : undefined}
           className={cn("catalog-category-fixed", selectedId == null && "is-active")}
         >
-          <LayoutGrid className="h-4 w-4" aria-hidden="true" />
           <span className="truncate">Todos os produtos</span>
           <span className="catalog-count">{produtos.length}</span>
         </button>
@@ -437,7 +434,6 @@ export function CategoriasSidebar({
             aria-current={selectedId === "__none__" ? "true" : undefined}
             className={cn("catalog-category-fixed is-muted", selectedId === "__none__" && "is-active")}
           >
-            <FolderX className="h-4 w-4" aria-hidden="true" />
             <span className="truncate">Sem categoria</span>
             <span className="catalog-count">{counts.get("__none__")}</span>
           </button>

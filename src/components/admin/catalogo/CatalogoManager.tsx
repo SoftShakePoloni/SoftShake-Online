@@ -75,6 +75,8 @@ export function CatalogoManager({
   );
   const [drawerReadOnly, setDrawerReadOnly] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CatalogProduto | null>(null);
+  const [comboCreateOpen, setComboCreateOpen] = useState(false);
+  const [campanhaCreateOpen, setCampanhaCreateOpen] = useState(false);
 
   const supabase = createClient();
 
@@ -171,7 +173,7 @@ export function CatalogoManager({
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-      if (e.key === "n" || e.key === "N") {
+      if ((e.key === "n" || e.key === "N") && tab === "produtos") {
         e.preventDefault();
         openNovo();
       }
@@ -185,7 +187,7 @@ export function CatalogoManager({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openNovo]);
+  }, [openNovo, tab]);
 
   const openEdit = (p: CatalogProduto) => {
     setDrawerProduto(p);
@@ -392,7 +394,13 @@ export function CatalogoManager({
     <div className="catalog-page">
       <CatalogoHeader
         activeTab={tab}
-        onNovoProduto={openNovo}
+        onPrimary={() =>
+          tab === "combos"
+            ? setComboCreateOpen(true)
+            : tab === "promocoes"
+              ? setCampanhaCreateOpen(true)
+              : openNovo()
+        }
         onImport={() =>
           toast.message("Importação em breve", {
             description: "Em breve você poderá importar planilhas CSV/JSON.",
@@ -499,6 +507,8 @@ export function CatalogoManager({
           products={produtos}
           initial={combosIniciais}
           loadError={combosErro}
+          createOpen={comboCreateOpen}
+          onCreateOpenChange={setComboCreateOpen}
         />
       )}
       {tab === "promocoes" && (
@@ -506,6 +516,8 @@ export function CatalogoManager({
           products={produtos}
           initial={promocoesFreteIniciais}
           loadError={promocoesFreteErro}
+          createOpen={campanhaCreateOpen}
+          onCreateOpenChange={setCampanhaCreateOpen}
         />
       )}
 

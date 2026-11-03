@@ -23,16 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  BadgePercent,
-  CirclePause,
-  CircleCheck,
-  LayoutGrid,
-  List,
-  Package,
-  Search,
-  X,
-} from "lucide-react";
+import { Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProdutoRow } from "./ProdutoRow";
 import { ProdutoCard } from "./ProdutoCard";
@@ -49,16 +40,11 @@ const PAGE_SIZE = 50;
 const VIEW_KEY = "softshake:admin-catalogo:view";
 type View = "lista" | "grade";
 
-const STATUS_CARDS: {
-  id: ProdutoStatusFilter;
-  label: string;
-  icon: typeof Package;
-  tone: string;
-}[] = [
-  { id: "todos", label: "Todos", icon: Package, tone: "brand" },
-  { id: "ativo", label: "À venda", icon: CircleCheck, tone: "success" },
-  { id: "inativo", label: "Pausados", icon: CirclePause, tone: "muted" },
-  { id: "promocao", label: "Em promoção", icon: BadgePercent, tone: "warning" },
+const STATUS_FILTERS: { id: ProdutoStatusFilter; label: string }[] = [
+  { id: "todos", label: "Todos" },
+  { id: "ativo", label: "À venda" },
+  { id: "inativo", label: "Pausados" },
+  { id: "promocao", label: "Em promoção" },
 ];
 
 function readView(): View {
@@ -237,43 +223,15 @@ export function ProdutosArea({
     </table>
   );
 
-  const reorderHint =
-    view === "lista" && !canReorder && sort === "ordem"
-      ? "Escolha uma categoria, sem busca ou filtro, para arrastar e reordenar."
-      : null;
-
   return (
     <section className="catalog-products" aria-label="Produtos">
-      <div className="catalog-stats" role="group" aria-label="Filtrar por situação">
-        {STATUS_CARDS.map(({ id, label, icon: Icon, tone }) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={statusFilter === id}
-            className={cn("catalog-stat", `tone-${tone}`, statusFilter === id && "is-active")}
-            onClick={() => {
-              setStatusFilter(id);
-              setVisible(PAGE_SIZE);
-            }}
-          >
-            <span className="catalog-stat-icon" aria-hidden="true">
-              <Icon className="h-4 w-4" />
-            </span>
-            <span className="catalog-stat-text">
-              <span className="catalog-stat-value">{counts[id]}</span>
-              <span className="catalog-stat-label">{label}</span>
-            </span>
-          </button>
-        ))}
-      </div>
-
       <div className="catalog-toolbar">
         <div className="catalog-search">
           <Search size={16} aria-hidden="true" />
           <input
             type="search"
             aria-label="Buscar produtos"
-            placeholder="Buscar por nome, descrição ou código"
+            placeholder="Buscar produto"
             value={search}
             onChange={(e) => {
               onSearchChange(e.target.value);
@@ -289,9 +247,7 @@ export function ProdutosArea({
             >
               <X size={14} aria-hidden="true" />
             </button>
-          ) : (
-            <kbd className="catalog-kbd" aria-hidden="true">/</kbd>
-          )}
+          ) : null}
         </div>
         <div className="catalog-filters">
           <Select
@@ -313,21 +269,11 @@ export function ProdutosArea({
             </SelectContent>
           </Select>
           <div className="catalog-view-toggle" role="group" aria-label="Modo de visualização">
-            <button
-              type="button"
-              aria-pressed={view === "lista"}
-              aria-label="Ver em lista"
-              onClick={() => changeView("lista")}
-            >
-              <List size={16} aria-hidden="true" />
+            <button type="button" aria-pressed={view === "lista"} onClick={() => changeView("lista")}>
+              Lista
             </button>
-            <button
-              type="button"
-              aria-pressed={view === "grade"}
-              aria-label="Ver em grade"
-              onClick={() => changeView("grade")}
-            >
-              <LayoutGrid size={16} aria-hidden="true" />
+            <button type="button" aria-pressed={view === "grade"} onClick={() => changeView("grade")}>
+              Grade
             </button>
           </div>
         </div>
@@ -335,10 +281,22 @@ export function ProdutosArea({
 
       <div className="catalog-list-label">
         <h2>{categoriaNome}</h2>
-        <span>
-          {filtered.length} {filtered.length === 1 ? "produto" : "produtos"}
-        </span>
-        {reorderHint && <p className="catalog-list-hint">{reorderHint}</p>}
+        <div className="catalog-chips" role="group" aria-label="Filtrar por situação">
+          {STATUS_FILTERS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={statusFilter === id}
+              className={cn("catalog-filter-chip", statusFilter === id && "is-active")}
+              onClick={() => {
+                setStatusFilter(id);
+                setVisible(PAGE_SIZE);
+              }}
+            >
+              {label} <span>{counts[id]}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
