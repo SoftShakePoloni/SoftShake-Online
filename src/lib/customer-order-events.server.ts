@@ -5,6 +5,13 @@ import type {
   OrderChange,
 } from "@/lib/customer-order-hub.server";
 /** Each SSE owns a subscriber, never the shared Supabase connection. */
+/**
+ * Stream lifetime before a clean "rotate". Must stay below the route's
+ * maxDuration (300s on Vercel Fluid compute) so the platform never cuts the
+ * stream mid-flight; the client resumes from Last-Event-ID without refetching.
+ */
+export const ORDER_STREAM_LIFETIME_MS = 280_000;
+
 export function customerOrderEvents(
   hub: OrderEventHub,
   owner: string,
@@ -114,7 +121,7 @@ export function customerOrderEvents(
         send("rotate", {});
         debug("rotate");
         finish();
-      }, 50_000);
+      }, ORDER_STREAM_LIFETIME_MS);
       signal.addEventListener("abort", finish, { once: true });
       if (signal.aborted) finish();
       debug("open");

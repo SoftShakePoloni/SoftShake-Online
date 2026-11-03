@@ -11,7 +11,8 @@ import { withApiGuard } from "@/lib/security/with-api-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Requires Vercel Fluid compute (Hobby/Pro allow up to 300s). Keep above ORDER_STREAM_LIFETIME_MS.
+export const maxDuration = 300;
 
 export const GET = withApiGuard(
   { methods: ["GET"], rateLimit: RATE_LIMITS.eventos, checkOrigin: false },
