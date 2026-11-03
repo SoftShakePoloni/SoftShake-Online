@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, setPrintDevice } from "@/lib/admin/automatic-print";
 import { DesktopPrinterSettings } from "./DesktopPrinterSettings";
 import { AtualizacoesSection } from "./AtualizacoesSection";
+import { BackupSection } from "./BackupSection";
 import { AdminMfaSettings } from "./AdminMfaSettings";
 import { UsuariosSection } from "./UsuariosSection";
 
@@ -684,7 +685,7 @@ export function SistemaConfigManager({
           {section === "usuarios" && <UsuariosSection />}
           {section === "integracoes" && <EmptySection title="Integrações" />}
           {section === "api" && <EmptySection title="API" />}
-          {section === "backup" && <EmptySection title="Backup" />}
+          {section === "backup" && <BackupSection />}
           {section === "atualizacoes" && <AtualizacoesSection />}
           {section === "assinatura" && <EmptySection title="Assinatura" />}
 

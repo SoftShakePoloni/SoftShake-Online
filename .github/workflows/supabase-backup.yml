@@ -1,0 +1,103 @@
+name: Backup diário do banco (Supabase)
+# Todo dia às 23:30 de Brasília (02:30 UTC) gera um dump completo do Postgres do
+# Supabase (roles, schema e dados) e guarda no bucket PRIVADO "backups" do
+# Supabase Storage, mantendo os 30 mais recentes.
+#
+# O repositório é público: o backup NUNCA é salvo como artifact, release ou log do
+# GitHub, onde qualquer pessoa poderia baixá-lo.
+#
+# Secrets necessários (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL            Connection string do "Session pooler" (IPv4), com senha
+#   SUPABASE_URL               https://<projeto>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY  Chave service_role do projeto
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: supabase-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.repository == 'SoftShakePoloni/SoftShake-Online'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BUCKET: backups
+      KEEP: "30"
+    steps:
+      - name: Conferir secrets
+        run: |
+          for name in SUPABASE_DB_URL SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!name}" ]; then echo "::error::Secret $name não configurado."; exit 1; fi
+          done
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Gerar dump
+        run: |
+          set -euo pipefail
+          stamp="$(TZ=America/Sao_Paulo date +%Y-%m-%d_%H%M)"
+          dir="softshake-$stamp"
+          mkdir -p "$RUNNER_TEMP/$dir"
+          cd "$RUNNER_TEMP/$dir"
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f roles.sql --role-only
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f schema.sql
+          supabase db dump --db-url "$SUPABASE_DB_URL" -f data.sql --use-copy --data-only
+          cat > RESTAURAR.txt <<'TXT'
+          Backup SoftShake (Supabase / Postgres)
+
+          Para restaurar em um banco vazio (ex.: novo projeto Supabase), use a connection string dele:
+            psql "$NOVO_DB_URL" --single-transaction --variable ON_ERROR_STOP=1 \
+              --file roles.sql --file schema.sql \
+              --command 'SET session_replication_role = replica' --file data.sql
+
+          Os arquivos do Storage (imagens) não fazem parte deste backup.
+          TXT
+          for f in roles.sql schema.sql data.sql; do test -s "$f" || { echo "::error::$f vazio"; exit 1; }; done
+          cd "$RUNNER_TEMP"
+          tar -czf "$dir.tar.gz" "$dir"
+          echo "FILE=$RUNNER_TEMP/$dir.tar.gz" >> "$GITHUB_ENV"
+          echo "NAME=$dir.tar.gz" >> "$GITHUB_ENV"
+          echo "Backup gerado: $dir.tar.gz ($(du -h "$dir.tar.gz" | cut -f1))"
+      - name: Garantir bucket privado
+        run: |
+          code=$(curl -sS -o /tmp/bucket.json -w '%{http_code}' -X POST "$SUPABASE_URL/storage/v1/bucket" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{\"id\":\"$BUCKET\",\"name\":\"$BUCKET\",\"public\":false}")
+          if [ "$code" = "200" ]; then echo "Bucket criado.";
+          elif grep -qi "exist" /tmp/bucket.json; then echo "Bucket já existe.";
+          else echo "::error::Falha ao criar bucket (HTTP $code)"; cat /tmp/bucket.json; exit 1; fi
+          # Garante que continua privado mesmo se alguém tiver alterado no painel.
+          curl -sS --fail-with-body -o /dev/null -X PUT "$SUPABASE_URL/storage/v1/bucket/$BUCKET" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -d '{"public":false}'
+      - name: Enviar para o Storage
+        run: |
+          curl -sS --fail-with-body -o /dev/null -X POST "$SUPABASE_URL/storage/v1/object/$BUCKET/$NAME" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/gzip" -H "x-upsert: true" \
+            --data-binary "@$FILE"
+          echo "Enviado: $BUCKET/$NAME"
+      - name: Manter só os ${{ env.KEEP }} mais recentes
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body -X POST "$SUPABASE_URL/storage/v1/object/list/$BUCKET" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"prefix":"","limit":1000,"sortBy":{"column":"name","order":"desc"}}' > /tmp/list.json
+          old=$(jq -c --argjson keep "$KEEP" '[.[] | select(.name | test("^softshake-[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}\\.tar\\.gz$")) | .name] | sort | reverse | .[$keep:]' /tmp/list.json)
+          if [ "$old" = "[]" ]; then echo "Nada para remover."; exit 0; fi
+          echo "Removendo: $old"
+          curl -sS --fail-with-body -o /dev/null -X DELETE "$SUPABASE_URL/storage/v1/object/$BUCKET" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -d "{\"prefixes\":$old}"
+      - name: Limpar arquivos locais
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/softshake-*
