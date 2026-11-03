@@ -3,11 +3,21 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Only narrow print IPC is exposed. No filesystem, shell or generic IPC access.
 if (location.origin === 'https://softshake.com.br' && (location.pathname === '/admin' || location.pathname.startsWith('/admin/'))) {
   contextBridge.exposeInMainWorld('softshakeDesktop', {
-    version: '1.1.2',
+    version: '1.2.1',
     getPrinters: () => ipcRenderer.invoke('softshake:printers'),
     selectPrinter: name => ipcRenderer.invoke('softshake:select-printer', name),
     openWindowsPrinters: () => ipcRenderer.invoke('softshake:windows-printers'),
     print: () => ipcRenderer.invoke('softshake:print'),
+    updates: {
+      getState: () => ipcRenderer.invoke('softshake:update-state'),
+      check: () => ipcRenderer.invoke('softshake:update-check'),
+      install: () => ipcRenderer.invoke('softshake:update-install'),
+      onStatus: callback => {
+        const listener = (_event, state) => callback(state);
+        ipcRenderer.on('softshake:update-status', listener);
+        return () => ipcRenderer.removeListener('softshake:update-status', listener);
+      },
+    },
   });
   contextBridge.executeInMainWorld({ func: () => {
     try {

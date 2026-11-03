@@ -1,15 +1,16 @@
 {
   "name": "softshake-admin-desktop",
   "productName": "Softshake",
-  "version": "1.1.2",
+  "version": "1.2.1",
   "private": true,
   "description": "Painel administrativo SoftShake com impressão direta de cozinha e cliente",
   "author": "SoftShake",
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test.cjs",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "test": "node --test test.cjs updater.test.cjs",
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "release": "electron-builder --win nsis --x64 --publish always"
   },
   "devDependencies": {
     "electron": "45.2.0",
@@ -26,6 +27,7 @@
       "main.cjs",
       "preload.cjs",
       "policy.cjs",
+      "updater.cjs",
       "assets/icon.png",
       "assets/icon.ico",
       "package.json"
@@ -46,6 +48,17 @@
       "shortcutName": "Softshake",
       "runAfterFinish": false,
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SoftShakePoloni",
+        "repo": "SoftShake-Online",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

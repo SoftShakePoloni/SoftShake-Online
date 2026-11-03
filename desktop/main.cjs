@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron')
 const fs = require('node:fs');
 const path = require('node:path');
 const { START_URL, trustedUrl, physicalPrinter, selectPrinter } = require('./policy.cjs');
+const { createUpdater } = require('./updater.cjs');
 
 app.setName('Softshake');
 // Preserve the existing login and printer preferences when upgrading the renamed app.
@@ -17,6 +18,7 @@ function savePrinter(name) {
 function validateSender(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !trustedUrl(event.senderFrame.url)) throw Error('Origem de impressão inválida.');
 }
+const updater = createUpdater({ app, ipcMain, dialog, getWindow: () => mainWindow, validateSender, loadAutoUpdater: () => require('electron-updater').autoUpdater });
 ipcMain.handle('softshake:printers', async event => {
   validateSender(event);
   return { selected: readSettings().printerName || '', printers: (await mainWindow.webContents.getPrintersAsync()).filter(physicalPrinter).map(p => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })) };
@@ -49,11 +51,12 @@ ipcMain.handle('softshake:print', async event => {
 });
 
 async function createWindow() {
-  mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false, fullscreen: true,
+  mainWindow = new BrowserWindow({ width: 1360, height: 900, minWidth: 800, minHeight: 600, title: 'Softshake', icon: path.join(__dirname, 'assets/icon.png'), backgroundColor: '#F7F8FC', show: false, fullscreen: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, backgroundThrottling: false, partition: 'persist:softshake-admin' } });
   Menu.setApplicationMenu(null);
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  // Janela normal maximizada: mantém a barra do Windows com minimizar, restaurar e fechar.
+  mainWindow.once('ready-to-show', () => { mainWindow.maximize(); mainWindow.show(); });
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'F11' && !input.isAutoRepeat) {
       event.preventDefault();
@@ -85,6 +88,6 @@ async function createWindow() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); } });
-  app.whenReady().then(createWindow);
+  app.whenReady().then(async () => { await createWindow(); updater.start(); });
   app.on('window-all-closed', () => app.quit());
 }
