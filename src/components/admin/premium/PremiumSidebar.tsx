@@ -157,9 +157,13 @@ function SidebarLink({
       {active && !collapsed && (
         <span className="absolute -left-4 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#4C258C]" />
       )}
-      {collapsed && (
-        <Icon className={cn("h-5 w-5 shrink-0", active ? "text-[#4C258C]" : "text-[#6B7280]")} />
-      )}
+      <Icon
+        className={cn(
+          "shrink-0",
+          collapsed ? "h-5 w-5" : "h-[18px] w-[18px]",
+          active ? "text-[#4C258C]" : "text-[#9CA3AF] group-hover:text-[#4B5563]",
+        )}
+      />
       {!collapsed && (
         <>
           <span className="flex-1 truncate">{label}</span>
@@ -382,8 +386,9 @@ export function PremiumSidebar({
               <button
                 type="button"
                 onClick={() => void handleLogout()}
-                className="shrink-0 rounded-md px-2 py-1.5 text-xs font-medium text-[#6B7280] transition-colors hover:bg-red-50 hover:text-[#B42318]"
+                className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-[#6B7280] transition-colors hover:bg-red-50 hover:text-[#B42318]"
               >
+                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
                 Sair
               </button>
             </div>
