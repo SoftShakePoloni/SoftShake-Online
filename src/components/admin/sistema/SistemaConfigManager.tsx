@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, setPrintDevice } from "@/lib/admin/automatic-print";
 import { DesktopPrinterSettings } from "./DesktopPrinterSettings";
+import { AtualizacoesSection } from "./AtualizacoesSection";
 import { AdminMfaSettings } from "./AdminMfaSettings";
 import { UsuariosSection } from "./UsuariosSection";
 
@@ -45,6 +46,7 @@ const SECTIONS = [
   { id: "integracoes", label: "Integrações" },
   { id: "api", label: "API" },
   { id: "backup", label: "Backup" },
+  { id: "atualizacoes", label: "Atualizações" },
   { id: "assinatura", label: "Assinatura" },
   { id: "conta", label: "Conta" },
 ] as const;
@@ -683,6 +685,7 @@ export function SistemaConfigManager({
           {section === "integracoes" && <EmptySection title="Integrações" />}
           {section === "api" && <EmptySection title="API" />}
           {section === "backup" && <EmptySection title="Backup" />}
+          {section === "atualizacoes" && <AtualizacoesSection />}
           {section === "assinatura" && <EmptySection title="Assinatura" />}
 
           {section === "conta" && (

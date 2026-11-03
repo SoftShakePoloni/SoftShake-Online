@@ -1,0 +1,52 @@
+name: Publicar atualização do app Windows
+# Quando a versão em desktop/package.json muda na main, gera o instalador e publica
+# um Release "vX.Y.Z" com latest.yml. Os apps instalados se atualizam a partir dele.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "desktop/package.json"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Versão
+        id: version
+        shell: bash
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Já publicada?
+        id: exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.version.outputs.tag }} já existe; nada a publicar."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm ci
+      - if: steps.exists.outputs.skip == 'false'
+        run: npm test
+      - if: steps.exists.outputs.skip == 'false'
+        name: Gerar e publicar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run release

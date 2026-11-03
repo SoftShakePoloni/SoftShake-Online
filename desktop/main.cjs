@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron')
 const fs = require('node:fs');
 const path = require('node:path');
 const { START_URL, trustedUrl, physicalPrinter, selectPrinter } = require('./policy.cjs');
+const { createUpdater } = require('./updater.cjs');
 
 app.setName('Softshake');
 // Preserve the existing login and printer preferences when upgrading the renamed app.
@@ -17,6 +18,7 @@ function savePrinter(name) {
 function validateSender(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !trustedUrl(event.senderFrame.url)) throw Error('Origem de impressão inválida.');
 }
+const updater = createUpdater({ app, ipcMain, dialog, getWindow: () => mainWindow, validateSender, loadAutoUpdater: () => require('electron-updater').autoUpdater });
 ipcMain.handle('softshake:printers', async event => {
   validateSender(event);
   return { selected: readSettings().printerName || '', printers: (await mainWindow.webContents.getPrintersAsync()).filter(physicalPrinter).map(p => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })) };
@@ -85,6 +87,6 @@ async function createWindow() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); } });
-  app.whenReady().then(createWindow);
+  app.whenReady().then(async () => { await createWindow(); updater.start(); });
   app.on('window-all-closed', () => app.quit());
 }
