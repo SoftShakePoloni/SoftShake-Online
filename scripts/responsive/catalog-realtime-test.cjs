@@ -14,7 +14,7 @@ test('only successful public catalog writes schedule invalidation; payload conta
   const api = load('src/lib/catalog-fetch.server.ts', {
     '@/lib/public-read.server': { invalidatePublicReads() {} },
     'server-only': {}, 'next/server': { after: callback => callbacks.push(callback) },
-    'next/cache': { revalidatePath: path => invalidated.push(path) },
+    'next/cache': { revalidateTag() {}, revalidatePath: path => invalidated.push(path) },
   }, { fetch: async (url, init) => { requests.push({ url, init }); return new Response('{}', { status: ok ? 200 : 400 }); },
     process: { env: { NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'server-secret' } } });
   await api.catalogFetch('https://example.supabase.co/rest/v1/produtos');

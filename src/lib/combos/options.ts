@@ -50,7 +50,20 @@ export async function loadComboOptionGroups(
   items: ComboOptionItem[],
 ): Promise<OptionGroup[]> {
   if (!items.length) return [];
-  const ids = [...new Set(items.map((item) => item.produto_id))];
+  return (
+    await createComboOptionLoader(
+      client,
+      items.map((item) => item.produto_id),
+    )
+  )(items);
+}
+
+/** Fetch shared options once, validate each combo independently. */
+export async function createComboOptionLoader(
+  client: SupabaseClient<Database>,
+  productIds: number[],
+) {
+  const ids = [...new Set(productIds)];
   const [{ data: products, error: pe }, { data: links, error: le }] =
     await Promise.all([
       client.from("produtos").select("id,nome,esta_disponivel").in("id", ids),
@@ -64,13 +77,7 @@ export async function loadComboOptionGroups(
     throw new Error(
       "Não foi possível carregar as opções dos produtos do combo.",
     );
-  if (
-    products?.length !== ids.length ||
-    products.some((p) => p.esta_disponivel === false)
-  )
-    throw new Error("Um produto do combo não está disponível.");
   const groupIds = [...new Set((links ?? []).map((link) => link.grupo_id))];
-  if (!groupIds.length) return [];
   const [{ data: groups, error: ge }, { data: options, error: oe }] =
     await Promise.all([
       client
@@ -85,49 +92,59 @@ export async function loadComboOptionGroups(
     ]);
   if (ge || oe)
     throw new Error("Não foi possível carregar as opções do combo.");
-  return items.flatMap((item) =>
-    Array.from({ length: item.quantidade }, (_, unit) => {
-      const product = products!.find((p) => p.id === item.produto_id)!;
-      return (links ?? [])
-        .filter((link) => link.produto_id === item.produto_id)
-        .flatMap((link) => {
-          const group = groups?.find((g) => g.id === link.grupo_id);
-          if (!group)
-            throw new Error(
-              "Um grupo de opções do combo não está mais disponível.",
-            );
-          const min = group.min_escolha ?? 0,
-            max = group.max_escolha ?? 0;
-          return [
-            {
-              id: `p${item.produto_id}u${unit}g${group.id}`,
-              name: `${product.nome}${item.quantidade > 1 ? ` ${unit + 1}/${item.quantidade}` : ""} · ${group.nome}`,
-              productName: product.nome,
-              comboUnitKey: `p${item.produto_id}u${unit}`,
-              sourceGroupName: group.nome,
-              min,
-              max,
-              required: min > 0,
-              helper:
-                min > 0
-                  ? `Escolha de ${min} a ${max} opções`
-                  : `Escolha até ${max} opções`,
-              items: (options ?? [])
-                .filter((option) => option.grupo_id === group.id)
-                .map((option) => ({
-                  id: String(option.id),
-                  name: option.nome,
-                  priceDelta: Number(option.preco_adicional ?? 0),
-                  disponivel:
-                    option.esta_disponivel !== false &&
-                    String(option.status ?? "ativo").toLowerCase() !==
-                      "inativo",
-                })),
-            },
-          ];
-        });
-    }).flat(),
-  );
+  return (items: ComboOptionItem[]): OptionGroup[] => {
+    const requested = [...new Set(items.map((item) => item.produto_id))];
+    if (
+      requested.some(
+        (id) =>
+          !products?.some((p) => p.id === id && p.esta_disponivel !== false),
+      )
+    )
+      throw new Error("Um produto do combo não está disponível.");
+    return items.flatMap((item) =>
+      Array.from({ length: item.quantidade }, (_, unit) => {
+        const product = products!.find((p) => p.id === item.produto_id)!;
+        return (links ?? [])
+          .filter((link) => link.produto_id === item.produto_id)
+          .flatMap((link) => {
+            const group = groups?.find((g) => g.id === link.grupo_id);
+            if (!group)
+              throw new Error(
+                "Um grupo de opções do combo não está mais disponível.",
+              );
+            const min = group.min_escolha ?? 0,
+              max = group.max_escolha ?? 0;
+            return [
+              {
+                id: `p${item.produto_id}u${unit}g${group.id}`,
+                name: `${product.nome}${item.quantidade > 1 ? ` ${unit + 1}/${item.quantidade}` : ""} · ${group.nome}`,
+                productName: product.nome,
+                comboUnitKey: `p${item.produto_id}u${unit}`,
+                sourceGroupName: group.nome,
+                min,
+                max,
+                required: min > 0,
+                helper:
+                  min > 0
+                    ? `Escolha de ${min} a ${max} opções`
+                    : `Escolha até ${max} opções`,
+                items: (options ?? [])
+                  .filter((option) => option.grupo_id === group.id)
+                  .map((option) => ({
+                    id: String(option.id),
+                    name: option.nome,
+                    priceDelta: Number(option.preco_adicional ?? 0),
+                    disponivel:
+                      option.esta_disponivel !== false &&
+                      String(option.status ?? "ativo").toLowerCase() !==
+                        "inativo",
+                  })),
+              },
+            ];
+          });
+      }).flat(),
+    );
+  };
 }
 
 export function resolveComboChoices(
@@ -152,9 +169,16 @@ export function resolveComboChoices(
       )
       .reduce((sum, g) => sum + (selections[g.id] ?? []).length, 0);
     if (isSharedComboAddon(group) && sharedCount > limit)
-      throw new Error(`${group.productName}: escolha até ${limit} adicionais no total para cada unidade.`);
-    if (ids.length < (group.min ?? (group.required ? 1 : 0)) || ids.length > limit)
-      throw new Error(`${group.name}: escolha de ${group.min ?? (group.required ? 1 : 0)} a ${limit} opções.`);
+      throw new Error(
+        `${group.productName}: escolha até ${limit} adicionais no total para cada unidade.`,
+      );
+    if (
+      ids.length < (group.min ?? (group.required ? 1 : 0)) ||
+      ids.length > limit
+    )
+      throw new Error(
+        `${group.name}: escolha de ${group.min ?? (group.required ? 1 : 0)} a ${limit} opções.`,
+      );
     return ids.map((id) => {
       const option = group.items.find((item) => item.id === id);
       if (!option || option.disponivel === false)
