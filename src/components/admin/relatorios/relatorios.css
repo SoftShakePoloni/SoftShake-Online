@@ -660,3 +660,204 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ───────────── Visual limpo (2026-11) ───────────── */
+.report-page {
+  --report-bg: #f7f6fa;
+  --report-soft: #f3effa;
+  background: var(--report-bg);
+}
+.report-header {
+  margin-bottom: 16px;
+}
+.report-header h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.report-page .report-export {
+  background: var(--report-purple);
+  color: #fff;
+  border-radius: 10px;
+  padding: 0 18px;
+  font-weight: 600;
+}
+.report-page .report-export:hover {
+  background: #3f1e76;
+}
+.report-presets {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+.report-presets::-webkit-scrollbar {
+  display: none;
+}
+.report-presets button {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--report-border);
+  border-radius: 999px;
+  background: #fff;
+  color: #4a4352;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+.report-presets button:hover {
+  border-color: #d6d0de;
+}
+.report-presets button.is-active {
+  background: var(--report-purple);
+  border-color: var(--report-purple);
+  color: #fff;
+}
+.report-custom {
+  margin-top: 12px;
+  border: 1px solid var(--report-border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 14px 16px;
+}
+.report-toolbar {
+  margin-top: 14px;
+}
+.report-period-summary {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.report-filters {
+  margin: 12px 0 20px;
+  gap: 8px;
+}
+.report-filters label {
+  width: 200px;
+}
+.report-filters select {
+  height: 38px;
+  border-radius: 10px;
+}
+.report-kpis {
+  gap: 12px;
+  border: 0;
+  background: transparent;
+}
+.report-kpis > div,
+.report-kpis > div:first-child {
+  border: 1px solid var(--report-border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 18px 20px;
+}
+.report-kpis dt {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.report-kpis p {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.report-kpis .report-up,
+.report-kpis .report-down {
+  font-weight: 600;
+}
+.report-highlights {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--report-border);
+  border-radius: 12px;
+  background: #fff;
+}
+.report-highlights > div {
+  min-width: 0;
+  padding: 14px 20px;
+  border-left: 1px solid var(--report-border);
+}
+.report-highlights > div:first-child {
+  border-left: 0;
+}
+.report-highlights dt {
+  font-size: 12px;
+  color: var(--report-muted);
+}
+.report-highlights dd {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-panel {
+  border-radius: 12px;
+}
+.report-panel h2 {
+  font-size: 15px;
+}
+.report-rank {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 10px;
+  border-radius: 6px;
+  background: var(--report-soft);
+  color: var(--report-purple);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.report-share {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+.report-share .report-bar {
+  flex: 1;
+  max-width: 90px;
+}
+@media (max-width: 1023px) {
+  .report-highlights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .report-highlights > div:nth-child(3) {
+    border-left: 0;
+  }
+  .report-highlights > div:nth-child(n + 3) {
+    border-top: 1px solid var(--report-border);
+  }
+}
+@media (max-width: 767px) {
+  .report-header {
+    flex-direction: row;
+    align-items: center;
+  }
+  .report-header-actions {
+    width: auto;
+  }
+  .report-kpis {
+    gap: 8px;
+  }
+  .report-kpis > div,
+  .report-kpis > div:first-child,
+  .report-kpis > div:nth-child(3),
+  .report-kpis > div:nth-child(n + 3) {
+    border: 1px solid var(--report-border);
+    padding: 14px;
+  }
+  .report-filters label {
+    width: auto;
+  }
+  .report-highlights > div {
+    padding: 12px 14px;
+  }
+  .report-share .report-bar {
+    display: none;
+  }
+}
