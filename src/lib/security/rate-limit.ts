@@ -62,7 +62,7 @@ export const RATE_LIMITS = {
   api: { bucket: "api:general", limit: 120, windowSec: 60 },
   apiStrict: { bucket: "api:strict", limit: 30, windowSec: 60 },
   checkout: { bucket: "api:checkout", limit: 10, windowSec: 60 },
-  imagem: { bucket: "api:imagem", limit: 60, windowSec: 60 },
+  imagem: { bucket: "api:imagem", limit: 600, windowSec: 60 },
   admin: { bucket: "api:admin", limit: 100, windowSec: 60 },
   search: { bucket: "api:search", limit: 40, windowSec: 60 },
   mutation: { bucket: "api:mutation", limit: 20, windowSec: 60 },

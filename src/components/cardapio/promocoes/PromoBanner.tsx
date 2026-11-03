@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { StorageImage as Image } from "@/components/ui/storage-image";
+import { ProductImage as Image } from "@/components/ui/product-image";
 import type { Product } from "@/data/tipos";
 import {
   productDiscountPercent,
@@ -47,9 +47,7 @@ export function PromoBanner({
           <Image
             src={product.image}
             alt=""
-            fill
-            sizes="(max-width:767px) 130px, 200px"
-            className="object-cover"
+            className="h-full w-full object-cover"
             onError={() => { setFailed(product.image ?? null); onImageError?.(); }}
           />
         </div>

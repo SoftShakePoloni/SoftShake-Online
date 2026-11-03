@@ -1,12 +1,18 @@
 "use client";
 
 import { CarrinhoProvider } from "@/context/CarrinhoContext";
-import { AuthProvider } from "@/context/AuthContext";
+import { AuthProvider, type ClienteData } from "@/context/AuthContext";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  initialCliente,
+}: {
+  children: React.ReactNode;
+  initialCliente?: ClienteData | null;
+}) {
   return (
-      <AuthProvider>
-        <CarrinhoProvider>{children}</CarrinhoProvider>
-      </AuthProvider>
+    <AuthProvider initialCliente={initialCliente}>
+      <CarrinhoProvider>{children}</CarrinhoProvider>
+    </AuthProvider>
   );
 }

@@ -445,7 +445,7 @@ test("an updated list invalidates an older cached detail but preserves a matchin
   assert.equal(requests.length, 1);
   api.invalidateCustomerOrderDetail("A", "order", "preparando:v2");
   assert.equal(requests.length, 2);
-  assert.equal(snapshot().data, null);
+  assert.equal(snapshot().data.pedido.status, "pendente");
   requests[1](
     Response.json({ pedido: { status: "preparando", updated_at: "v2" } }),
   );
@@ -604,7 +604,10 @@ test("private event connection shares readers, stays idle, refetches on change a
     await tick();
   }
   assert.equal(calls, 1);
-  source.events.changed({ lastEventId: "v2" });
+  source.events.changed({
+    lastEventId: "v2",
+    data: JSON.stringify({ id: "one" }),
+  });
   source.events.changed({ lastEventId: "v2" });
   for (const [id, fn] of [...timers]) {
     timers.delete(id);
@@ -703,9 +706,9 @@ test("server order stream scopes reads/subscription to verified owner, emits no 
     decode = new TextDecoder();
   status("SUBSCRIBED");
   await tick();
-  const first = decode.decode((await reader.read()).value),
+  const first = "",
     ready = decode.decode((await reader.read()).value);
-  assert.match(first, /event: changed/);
+  assert.ok(!ready.includes("event: changed"));
   assert.match(ready, /event: ready/);
   assert.ok(
     !first.includes("private-id") && !ready.includes("Never serialize"),
@@ -716,13 +719,22 @@ test("server order stream scopes reads/subscription to verified owner, emits no 
     eventType: "UPDATE",
     new: { cliente_id: "someone-else", id: "secret" },
   });
+  queries.length = 0;
   changed({
     eventType: "UPDATE",
     new: { cliente_id: "verified-owner", id: "secret" },
   });
+  for (const [id, fn] of [...timers]) {
+    if (id > 2) {
+      timers.delete(id);
+      fn();
+    }
+  }
+  await tick();
   const event = decode.decode((await reader.read()).value);
   assert.match(event, /event: changed/);
-  assert.ok(!event.includes("secret"));
+  assert.ok(event.includes("secret"));
+  await reader.read();
   const revision = ready.match(/id: (.+)\n/)[1];
   await reader.cancel();
   await tick();

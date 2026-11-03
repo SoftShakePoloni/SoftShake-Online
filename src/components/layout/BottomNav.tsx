@@ -31,8 +31,12 @@ export function BottomNav() {
   const { count: promosCount } = usePromocoesCount();
   const { cliente } = useAuth();
 
-  const activeOrders = useCustomerResource<{ count: number }>(cliente?.id, "/api/pedidos/ativos", 60_000);
-  const pedidosAtivos = activeOrders.data?.count ?? 0;
+  const activeOrders = useCustomerResource<{ count: number; ativos: number }>(
+    cliente?.id,
+    "/api/cliente/resumo",
+    60_000,
+  );
+  const pedidosAtivos = activeOrders.data?.ativos ?? 0;
 
   return (
     <nav

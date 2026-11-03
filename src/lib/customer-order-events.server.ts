@@ -47,7 +47,8 @@ export function customerOrderEvents(
           .finally(() => db.realtime.disconnect());
         if (!cancelled) controller.close();
       };
-      const snapshot = async () => {
+      let revisionSeen = previousVersion;
+      const snapshot = async (ids?: string[]) => {
         const version = ++sequence;
         try {
           // One compact revision per connection, not a repeated full history.
@@ -63,7 +64,16 @@ export function customerOrderEvents(
           const revision = createHash("sha256")
             .update(JSON.stringify([count, data]))
             .digest("hex");
-          if (previousVersion !== revision) send("changed", {}, revision);
+          if (ids?.length || (revisionSeen && revisionSeen !== revision))
+            send(
+              "changed",
+              {
+                scope: "pedido",
+                ...(ids?.length ? { ids } : { catchup: true }),
+              },
+              revision,
+            );
+          revisionSeen = revision;
           send("ready", { owner }, revision);
         } catch {
           if (!stopped) {
@@ -71,6 +81,13 @@ export function customerOrderEvents(
             finish();
           }
         }
+      };
+      let changeTimer: ReturnType<typeof setTimeout> | undefined;
+      const changedIds = new Set<string>();
+      const release = finish;
+      finish = () => {
+        clearTimeout(changeTimer);
+        release();
       };
       channel
         .on(
@@ -87,7 +104,13 @@ export function customerOrderEvents(
             const row =
               payload.eventType === "DELETE" ? payload.old : payload.new;
             if ((row as { cliente_id?: string }).cliente_id !== owner) return;
-            send("changed", {}, "changed-" + crypto.randomUUID());
+            changedIds.add((row as { id: string }).id);
+            clearTimeout(changeTimer);
+            changeTimer = setTimeout(() => {
+              const ids = [...changedIds];
+              changedIds.clear();
+              void snapshot(ids);
+            }, 100);
           },
         )
         .subscribe((status) => {
