@@ -55,6 +55,18 @@ async function icon(logo, file, size, logoScale) {
   // "maskable": Android recorta em círculo/gota; o logo fica dentro da zona segura (80%).
   await icon(logo, "admin-maskable-512.png", 512, 0.74);
   await icon(logo, "admin-apple-180.png", 180, 0.9);
+
+  // App do entregador (mobile/entregador/assets), mesmo logo.
+  const APP = path.join(__dirname, "../../mobile/entregador/assets");
+  const out = (file) => path.join("..", "..", "mobile", "entregador", "assets", file).replace(/\\/g, "/");
+  await icon(logo, out("icon.png"), 1024, 0.9);
+  // Ícone adaptativo do Android: frente com o logo na zona segura (~61%) + fundo liso.
+  await icon(logo, out("android-icon-foreground.png"), 1024, 0.62);
+  await sharp({ create: { width: 1024, height: 1024, channels: 4, background: BACKGROUND } })
+    .png()
+    .toFile(path.join(APP, "android-icon-background.png"));
+  await icon(logo, out("splash-icon.png"), 1024, 0.96);
+  console.log("app do entregador: icon, android-icon-foreground/background, splash-icon");
 })().catch((error) => {
   console.error(error);
   process.exit(1);
