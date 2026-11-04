@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "SoftShake Entregador",
+    "slug": "softshake-entregador",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "softshake-entregador",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F7F6F9",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "br.com.softshake.entregador",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "br.com.softshake.entregador",
+      "adaptiveIcon": {
+        "backgroundColor": "#24012A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png"
+      },
+      "softwareKeyboardLayoutMode": "pan",
+      "predictiveBackGestureEnabled": false,
+      "permissions": []
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#24012A"
+        }
+      ]
+    ]
+  }
+}
