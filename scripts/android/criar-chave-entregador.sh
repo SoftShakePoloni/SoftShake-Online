@@ -36,8 +36,15 @@ fi
 PASS="$(openssl rand -base64 30 | tr -d '/+=\n' | cut -c1-32)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:4096 -sha256 -days 10000 -nodes \
-  -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -subj "/CN=SoftShake Entregador/O=SoftShake/C=BR" 2>/dev/null
+# No Git Bash (Windows) o openssl é um programa do Windows: caminhos no formato C:/...
+native() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+# MSYS_NO_PATHCONV evita que o Git Bash transforme "/CN=..." num caminho; por isso
+# os caminhos desse comando já vão convertidos.
+if ! MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:4096 -sha256 -days 10000 -nodes \
+  -keyout "$(native "$TMP/key.pem")" -out "$(native "$TMP/cert.pem")" \
+  -subj "/CN=SoftShake Entregador/O=SoftShake/C=BR" >/dev/null 2>"$TMP/req.log"; then
+  echo "Falha ao criar o certificado:"; tail -3 "$TMP/req.log"; exit 1
+fi
 openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -name "$ALIAS" \
   -out "$P12" -passout "pass:$PASS" -keypbe AES-256-CBC -certpbe AES-256-CBC -macalg sha256
 printf '%s\n' "$PASS" > "$DIR/entregador-android.senha.txt"
