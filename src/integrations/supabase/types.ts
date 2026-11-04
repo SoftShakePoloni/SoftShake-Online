@@ -264,6 +264,9 @@ export type Database = {
           idempotency_key: string | null
           idempotency_hash: string | null
           desconto_cupom: number
+          entregador_id: string | null
+          saiu_entrega_at: string | null
+          entregue_at: string | null
         }
         Insert: {
           id?: string
@@ -287,6 +290,9 @@ export type Database = {
           idempotency_key?: string | null
           idempotency_hash?: string | null
           desconto_cupom?: number
+          entregador_id?: string | null
+          saiu_entrega_at?: string | null
+          entregue_at?: string | null
         }
         Update: {
           id?: string
@@ -310,6 +316,9 @@ export type Database = {
           idempotency_key?: string | null
           idempotency_hash?: string | null
           desconto_cupom?: number
+          entregador_id?: string | null
+          saiu_entrega_at?: string | null
+          entregue_at?: string | null
         }
         Relationships: [
           {
@@ -503,6 +512,36 @@ export type Database = {
         }
         Relationships: []
       }
+      entregadores: {
+        Row: {
+          id: string
+          nome: string
+          email: string
+          ativo: boolean
+          selecionado: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          nome: string
+          email: string
+          ativo?: boolean
+          selecionado?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          email?: string
+          ativo?: boolean
+          selecionado?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       perfis: {
         Row: {
           id: string
@@ -541,7 +580,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      admin_selecionar_entregador: {
+        Args: { p_entregador_id: string | null }
+        Returns: undefined
+      }
+      entregador_perfil: {
+        Args: Record<PropertyKey, never>
+        Returns: { id: string; nome: string }[]
+      }
+      entregador_minhas_entregas: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          numero: string
+          cliente_nome: string
+          cliente_telefone: string
+          endereco: Json | null
+          observacoes: string | null
+          itens: Json
+          meio_pagamento: string
+          total: number
+          troco_para: string | null
+          saiu_entrega_at: string | null
+        }[]
+      }
+      entregador_concluir_entrega: {
+        Args: { p_pedido_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
