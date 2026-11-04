@@ -1,11 +1,23 @@
+"use client";
+
 import { Toaster as Sonner } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+/**
+ * Avisos flutuantes (toast) do site e do painel. Ficam no topo: embaixo há as barras
+ * de navegação do cardápio e do painel no celular.
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       className="toaster group"
+      position="top-center"
+      richColors
+      closeButton
+      duration={4000}
+      visibleToasts={3}
+      mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 12px)", left: 12, right: 12 }}
       toastOptions={{
         classNames: {
           toast:
