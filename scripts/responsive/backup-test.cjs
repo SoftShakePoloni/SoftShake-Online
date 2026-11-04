@@ -50,7 +50,7 @@ test("health flags a missing daily backup after 26 hours", () => {
 });
 
 test("workflow encrypts and verifies before uploading, and never uploads the plain dump", () => {
-  const yml = fs.readFileSync(".github/workflows/supabase-backup.yml", "utf8");
+  const yml = fs.readFileSync(".github/workflows/supabase-backup.yml", "utf8").replace(/\r\n/g, "\n");
   assert.match(yml, /cron: "30 2 \* \* \*"/);
   assert.match(yml, /github\.ref == 'refs\/heads\/main'/);
   const encrypt = yml.indexOf("backup-crypto.cjs encrypt");
@@ -98,13 +98,23 @@ test("download token is bound to the artifact, signed and expires in 60 s", () =
   for (const bad of [null, "", "123", `${token}x`, "a".repeat(500)]) assert.equal(server.verifyDownloadToken(bad, key, now), null);
 });
 
-test("panel actions require the administrator and the route checks the token first", () => {
+test("panel actions require the administrator, never throw, and the route checks the token first", () => {
   const actions = fs.readFileSync("src/actions/admin/backups.ts", "utf8");
-  assert.equal((actions.match(/requirePermission\("admin:manage"\)/g) || []).length, 2);
+  assert.match(actions, /requirePermission\("admin:manage"\)/);
+  for (const fn of ["listBackups", "getBackupDownloadUrl"]) {
+    const body = actions.slice(actions.indexOf(`export async function ${fn}`)).split(/\nexport /)[0];
+    assert.match(body, /if \(!\(?(await admin\(\)|user)\)?\) return \{ ok: false/, `${fn} checks admin first`);
+    // Em produção o Next.js esconde a mensagem de erros lançados em Server Actions.
+    assert.doesNotMatch(body, /throw /, `${fn} must return { ok: false, error } instead of throwing`);
+  }
+  assert.match(actions, /typeof id !== "number"\) return \{ ok: false, error: STALE_PANEL \}/, "old panel sending a file name gets a reload hint");
   assert.match(actions, /writeAudit\(/);
+  const panel = fs.readFileSync("src/components/admin/sistema/BackupSection.tsx", "utf8");
+  assert.match(panel, /window\.location\.reload\(\)/);
   const route = fs.readFileSync("src/app/api/backup/download/route.ts", "utf8");
   assert.ok(route.indexOf("verifyDownloadToken(") < route.indexOf("downloadBackup(id"));
   assert.match(route, /no-store/);
+  assert.match(route, /escape\(message\)/, "error page escapes its message");
   const serverSrc = fs.readFileSync("src/lib/backups.server.ts", "utf8");
   assert.match(serverSrc, /redirect: "manual"/, "token must not follow the redirect to the blob host");
   assert.match(serverSrc, /head_branch === "main"/);
