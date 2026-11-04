@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createAutosave, type AutosaveStatus } from "./autosave";
+import { hhmm, validateConfig, type FieldErrors } from "./validation";
 import Link from "next/link";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 import { toast } from "sonner";
@@ -45,9 +47,12 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 
 /* ─── UI (mesmo layout de Configurações) ──────────────────────────────── */
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children, status }: { children: React.ReactNode; status?: React.ReactNode }) {
   return (
-    <h2 className="mb-2 text-lg font-semibold text-[#111827]">{children}</h2>
+    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h2 className="text-lg font-semibold text-[#111827]">{children}</h2>
+      {status}
+    </div>
   );
 }
 
@@ -137,7 +142,42 @@ function BrandSwitch({
 }
 
 const fieldClass =
-  "h-9 w-full max-w-[420px] rounded-md border-[#E5E7EB] text-sm focus-visible:ring-[#4C258C]/30 focus-visible:border-[#4C258C]";
+  "h-9 w-full max-w-[420px] rounded-md border-[#E5E7EB] text-sm focus-visible:ring-[#4C258C]/30 focus-visible:border-[#4C258C] aria-[invalid=true]:border-[#F04438]";
+
+type TextField =
+  | "nome" | "descricao" | "endereco" | "cidade" | "telefone" | "whatsapp"
+  | "instagram" | "facebook" | "horario_abertura" | "horario_fechamento";
+type NumberField = "taxa_entrega" | "pedido_minimo" | "tempo_entrega_min" | "tempo_entrega_max";
+function FieldError({ message }: { message?: string }) {
+  return message ? (
+    <p className="field-error mt-1.5 text-xs text-[#B42318]" role="alert">
+      {message}
+    </p>
+  ) : null;
+}
+
+function SaveStatus({ status, onRetry }: { status: AutosaveStatus; onRetry: () => void }) {
+  if (status === "idle") return null;
+  if (status === "error")
+    return (
+      <span className="text-xs font-medium text-[#B42318]" role="status">
+        Não foi possível salvar ·{" "}
+        <button type="button" onClick={onRetry} className="font-semibold underline">
+          Tentar de novo
+        </button>
+      </span>
+    );
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1.5 text-xs", status === "saved" ? "text-emerald-700" : "text-[#6B7280]")}
+      role="status"
+      aria-live="polite"
+    >
+      {status === "saved" ? null : <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+      {status === "saved" ? "Alterações salvas" : status === "saving" ? "Salvando…" : "Alterações pendentes…"}
+    </span>
+  );
+}
 
 /* ─── Manager ─────────────────────────────────────────────────────────── */
 
@@ -150,87 +190,119 @@ export function EstabelecimentoManager({
 }: EstabelecimentoManagerProps) {
   const [config, setConfig] = useState(configuracaoInicial);
   const [section, setSection] = useState<SectionId>("geral");
-  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<AutosaveStatus>("idle");
+  const [errors, setErrors] = useState<FieldErrors>({});
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingBanner, setUploadingBanner] = useState(false);
+  const configRef = useRef(config);
+  configRef.current = config;
 
   const diasFuncionamento = parseDiasFuncionamento(config.dias_funcionamento);
+  const configId = config.id;
+  const hasRecord = Boolean(configId) && configId !== "default" && configId !== 0;
 
-  const persist = useCallback(
-    async (patch: Partial<ConfiguracaoLoja>) => {
-      if (!config.id || config.id === "default" || config.id === 0) {
+  const autosave = useMemo(() => {
+    const queue = createAutosave<ConfiguracaoLoja, Record<string, unknown>>({
+      save: async (patch) =>
+        (await updateConfiguracoesLoja(configId, patch)) as Record<string, unknown>,
+      onSaved: (_patch, data) => {
+        const saved = normalizeConfiguracao(data);
+        // Só aplica o que voltou do servidor nos campos sem edição pendente:
+        // o que a pessoa digitou durante o salvamento não é desfeito.
+        const busy = queue.pendingKeys();
+        setConfig((prev) => {
+          const next = { ...prev };
+          for (const key of Object.keys(saved) as Array<keyof ConfiguracaoLoja>) {
+            if (!busy.has(key)) (next as Record<string, unknown>)[key] = saved[key];
+          }
+          return next;
+        });
+      },
+      onStatus: (value) => {
+        setStatus(value);
+        if (value === "error") toast.error("Não foi possível salvar. Confira a conexão e tente de novo.");
+      },
+    });
+    return queue;
+  }, [configId]);
+
+  useEffect(() => {
+    // Ao sair da página, salva o que ainda estiver na fila.
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!autosave.isDirty()) return;
+      void autosave.flush();
+      // No app Windows (Electron) isso cancelaria o fechamento/F5 sem aviso.
+      if (!(window as Window & { softshakeDesktop?: unknown }).softshakeDesktop) event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      autosave.dispose();
+      void autosave.flush();
+    };
+  }, [autosave]);
+
+  /** Atualiza a tela na hora e agenda o salvamento (validando antes). */
+  const edit = useCallback(
+    (patch: Partial<ConfiguracaoLoja>, immediate = false) => {
+      if (!hasRecord) {
         toast.error("Configuração ainda não foi criada no banco");
         return;
       }
-      setSaving(true);
-      try {
-        const data = await updateConfiguracoesLoja(config.id, patch);
-        const normalized = normalizeConfiguracao(
-          data as Record<string, unknown>,
-        );
-        setConfig((prev) => ({
-          ...prev,
-          ...normalized,
-          dias_funcionamento:
-            patch.dias_funcionamento !== undefined
-              ? Array.isArray(patch.dias_funcionamento)
-                ? patch.dias_funcionamento
-                : normalized.dias_funcionamento
-              : prev.dias_funcionamento,
-        }));
-        toast.success("Alterações salvas.");
-      } catch {
-        toast.error("Não foi possível salvar.");
-      } finally {
-        setSaving(false);
-      }
+      setConfig((prev) => ({ ...prev, ...patch }));
+      const next = { ...configRef.current, ...patch };
+      const found = validateConfig(next);
+      setErrors(found);
+      // Campos inválidos ficam só na tela até serem corrigidos.
+      const valid = Object.fromEntries(
+        Object.entries(patch).filter(([key]) => !found[key as keyof ConfiguracaoLoja]),
+      ) as Partial<ConfiguracaoLoja>;
+      // Corrigir o mínimo pode tornar válido um máximo que estava parado na tela.
+      if ("tempo_entrega_min" in patch && !found.tempo_entrega_max && errors.tempo_entrega_max)
+        valid.tempo_entrega_max = next.tempo_entrega_max;
+      if ("tempo_entrega_max" in patch && !found.tempo_entrega_min && errors.tempo_entrega_min)
+        valid.tempo_entrega_min = next.tempo_entrega_min;
+      if (Object.keys(valid).length) autosave.queue(valid, immediate);
     },
-    [config.id],
+    [autosave, hasRecord, errors],
   );
 
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingPatch = useRef<Partial<ConfiguracaoLoja>>({});
+  /** Props para campos de texto: salva após a pausa e ao sair do campo. */
+  const textField = (field: TextField) => ({
+    value: (config[field] as string | null) ?? "",
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      edit({ [field]: field === "nome" ? e.target.value : e.target.value || null } as Partial<ConfiguracaoLoja>),
+    onBlur: () => void autosave.flush(),
+    "aria-invalid": Boolean(errors[field]) || undefined,
+  });
 
-  const queueField = useCallback(
-    (
-      field: keyof ConfiguracaoLoja,
-      value: ConfiguracaoLoja[keyof ConfiguracaoLoja],
-    ) => {
-      setConfig((prev) => ({ ...prev, [field]: value }));
-      pendingPatch.current = { ...pendingPatch.current, [field]: value };
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => {
-        const p = { ...pendingPatch.current };
-        pendingPatch.current = {};
-        void persist(p);
-      }, 450);
+  const numberField = (field: NumberField, integer = false) => ({
+    value: config[field] ?? "",
+    inputMode: (integer ? "numeric" : "decimal") as "numeric" | "decimal",
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      // Entrada incompleta ("-", "1e") chega como "": não apaga o valor salvo.
+      if (e.target.validity.badInput) return;
+      const raw = e.target.value.trim();
+      const parsed = raw === "" ? null : integer ? Number.parseInt(raw, 10) : Number.parseFloat(raw);
+      edit({ [field]: parsed } as Partial<ConfiguracaoLoja>);
     },
-    [persist],
-  );
+    onBlur: () => void autosave.flush(),
+    "aria-invalid": Boolean(errors[field]) || undefined,
+  });
 
-  const setFieldNow = useCallback(
-    (
-      field: keyof ConfiguracaoLoja,
-      value: ConfiguracaoLoja[keyof ConfiguracaoLoja],
-    ) => {
-      setConfig((prev) => ({ ...prev, [field]: value }));
-      void persist({ [field]: value } as Partial<ConfiguracaoLoja>);
-    },
-    [persist],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    };
-  }, []);
+  const changeSection = (next: SectionId) => {
+    void autosave.flush();
+    setSection(next);
+  };
 
   const handleDiaToggle = (dia: string, checked: boolean) => {
+    const atuais = parseDiasFuncionamento(configRef.current.dias_funcionamento);
     const novos = checked
-      ? [...diasFuncionamento, dia]
-      : diasFuncionamento.filter((d) => d !== dia);
-    setConfig((prev) => ({ ...prev, dias_funcionamento: novos }));
-    void persist({ dias_funcionamento: novos });
+      ? Array.from(new Set([...atuais, dia]))
+      : atuais.filter((d) => d !== dia);
+    // Mantém a ordem da semana.
+    const ordenados = diasSemana.map((d) => d.value).filter((d) => novos.includes(d));
+    edit({ dias_funcionamento: ordenados }, true);
   };
 
   const handleUpload = async (file: File, type: "logo" | "banner") => {
@@ -240,8 +312,7 @@ export function EstabelecimentoManager({
     setUploading(true);
     try {
       const path = await uploadStoreImage(file, type);
-      const field = type === "logo" ? "logo_url" : "banner_url";
-      await persist({ [field]: path });
+      edit({ [type === "logo" ? "logo_url" : "banner_url"]: path }, true);
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -253,11 +324,14 @@ export function EstabelecimentoManager({
     }
   };
 
-  const handleRemoveImage = async (type: "logo" | "banner") => {
+  const handleRemoveImage = (type: "logo" | "banner") => {
     if (uploadingLogo || uploadingBanner) return;
-    const field = type === "logo" ? "logo_url" : "banner_url";
-    await persist({ [field]: null });
+    edit({ [type === "logo" ? "logo_url" : "banner_url"]: null }, true);
   };
+
+  const saveStatus = (
+    <SaveStatus status={status} onRetry={() => autosave.retry()} />
+  );
 
   return (
     <div className="min-h-full bg-[#F9FAFB]">
@@ -274,7 +348,7 @@ export function EstabelecimentoManager({
                 <li key={s.id}>
                   <button
                     type="button"
-                    onClick={() => setSection(s.id)}
+                    onClick={() => changeSection(s.id)}
                     className={cn(
                       "w-full rounded px-3 py-2 text-left text-sm transition-colors",
                       active
@@ -304,7 +378,7 @@ export function EstabelecimentoManager({
         <div className="mb-3 w-full md:hidden">
           <Select
             value={section}
-            onValueChange={(v) => setSection(v as SectionId)}
+            onValueChange={(v) => changeSection(v as SectionId)}
           >
             <SelectTrigger className="h-10 rounded-md border-[#E5E7EB] bg-white text-sm">
               <SelectValue />
@@ -323,7 +397,7 @@ export function EstabelecimentoManager({
           {/* ——— GERAL ——— */}
           {section === "geral" && (
             <div>
-              <SectionTitle>Geral</SectionTitle>
+              <SectionTitle status={saveStatus}>Geral</SectionTitle>
               <SectionHint>
                 Identidade e status de funcionamento da loja.
               </SectionHint>
@@ -334,12 +408,12 @@ export function EstabelecimentoManager({
                   align="start"
                 >
                   <Input
-                    value={config.nome}
-                    disabled={saving}
-                    onChange={(e) => queueField("nome", e.target.value)}
+                    {...textField("nome")}
                     placeholder="Ex: SoftShake"
+                    maxLength={80}
                     className={fieldClass}
                   />
+                  <FieldError message={errors.nome} />
                 </Row>
                 <Row
                   title="Descrição"
@@ -347,9 +421,8 @@ export function EstabelecimentoManager({
                   align="start"
                 >
                   <Textarea
-                    value={config.descricao || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("descricao", e.target.value)}
+                    {...textField("descricao")}
+                    maxLength={300}
                     placeholder="Descreva sua loja..."
                     rows={3}
                     className={cn(
@@ -369,8 +442,7 @@ export function EstabelecimentoManager({
                 >
                   <BrandSwitch
                     checked={config.esta_aberto}
-                    disabled={saving}
-                    onCheckedChange={(v) => setFieldNow("esta_aberto", v)}
+                    onCheckedChange={(v) => edit({ esta_aberto: v }, true)}
                     aria-label="Loja aberta"
                   />
                 </Row>
@@ -381,7 +453,7 @@ export function EstabelecimentoManager({
           {/* ——— APARÊNCIA ——— */}
           {section === "aparencia" && (
             <div>
-              <SectionTitle>Aparência</SectionTitle>
+              <SectionTitle status={saveStatus}>Aparência</SectionTitle>
               <SectionHint>Logo e banner exibidos no cardápio.</SectionHint>
               <Panel>
                 <Row
@@ -411,7 +483,7 @@ export function EstabelecimentoManager({
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={uploadingLogo || saving}
+                          disabled={uploadingLogo || uploadingBanner}
                           onClick={() =>
                             document.getElementById("logo-input")?.click()
                           }
@@ -429,8 +501,8 @@ export function EstabelecimentoManager({
                             type="button"
                             variant="outline"
                             size="sm"
-                            disabled={uploadingLogo || saving}
-                            onClick={() => void handleRemoveImage("logo")}
+                            disabled={uploadingLogo || uploadingBanner}
+                            onClick={() => handleRemoveImage("logo")}
                             className="h-9 border-[#E5E7EB] text-sm text-red-600 hover:bg-red-50 hover:text-red-700"
                           >
                             <X className="mr-1.5 h-4 w-4" />
@@ -482,7 +554,7 @@ export function EstabelecimentoManager({
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={uploadingBanner || saving}
+                        disabled={uploadingLogo || uploadingBanner}
                         onClick={() =>
                           document.getElementById("banner-input")?.click()
                         }
@@ -500,8 +572,8 @@ export function EstabelecimentoManager({
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={uploadingBanner || saving}
-                          onClick={() => void handleRemoveImage("banner")}
+                          disabled={uploadingLogo || uploadingBanner}
+                          onClick={() => handleRemoveImage("banner")}
                           className="h-9 border-[#E5E7EB] text-sm text-red-600 hover:bg-red-50 hover:text-red-700"
                         >
                           <X className="mr-1.5 h-4 w-4" />
@@ -529,7 +601,7 @@ export function EstabelecimentoManager({
           {/* ——— ENDEREÇO ——— */}
           {section === "endereco" && (
             <div>
-              <SectionTitle>Endereço</SectionTitle>
+              <SectionTitle status={saveStatus}>Endereço</SectionTitle>
               <SectionHint>Localização exibida no cardápio.</SectionHint>
               <Panel>
                 <Row
@@ -538,18 +610,14 @@ export function EstabelecimentoManager({
                   align="start"
                 >
                   <Input
-                    value={config.endereco || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("endereco", e.target.value)}
+                    {...textField("endereco")}
                     placeholder="Rua, número, complemento"
                     className={fieldClass}
                   />
                 </Row>
                 <Row title="Cidade" align="start">
                   <Input
-                    value={config.cidade || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("cidade", e.target.value)}
+                    {...textField("cidade")}
                     placeholder="Ex: São Paulo"
                     className={fieldClass}
                   />
@@ -557,8 +625,7 @@ export function EstabelecimentoManager({
                 <Row title="Estado" last>
                   <Select
                     value={config.estado || ""}
-                    disabled={saving}
-                    onValueChange={(v) => setFieldNow("estado", v)}
+                    onValueChange={(v) => edit({ estado: v }, true)}
                   >
                     <SelectTrigger className={cn(fieldClass, "max-w-[200px]")}>
                       <SelectValue placeholder="UF" />
@@ -598,7 +665,7 @@ export function EstabelecimentoManager({
           {/* ——— CONTATO ——— */}
           {section === "contato" && (
             <div>
-              <SectionTitle>Contato</SectionTitle>
+              <SectionTitle status={saveStatus}>Contato</SectionTitle>
               <SectionHint>Telefone e redes sociais da loja.</SectionHint>
               <Panel>
                 <Row
@@ -607,9 +674,9 @@ export function EstabelecimentoManager({
                   align="start"
                 >
                   <Input
-                    value={config.telefone || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("telefone", e.target.value)}
+                    {...textField("telefone")}
+                    type="tel"
+                    autoComplete="off"
                     placeholder="(00) 00000-0000"
                     className={fieldClass}
                   />
@@ -620,9 +687,9 @@ export function EstabelecimentoManager({
                   align="start"
                 >
                   <Input
-                    value={config.whatsapp || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("whatsapp", e.target.value)}
+                    {...textField("whatsapp")}
+                    type="tel"
+                    autoComplete="off"
                     placeholder="(00) 00000-0000"
                     className={fieldClass}
                   />
@@ -633,9 +700,7 @@ export function EstabelecimentoManager({
                   align="start"
                 >
                   <Input
-                    value={config.instagram || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("instagram", e.target.value)}
+                    {...textField("instagram")}
                     placeholder="@seuperfil"
                     className={fieldClass}
                   />
@@ -647,9 +712,7 @@ export function EstabelecimentoManager({
                   last
                 >
                   <Input
-                    value={config.facebook || ""}
-                    disabled={saving}
-                    onChange={(e) => queueField("facebook", e.target.value)}
+                    {...textField("facebook")}
                     placeholder="https://facebook.com/..."
                     className={fieldClass}
                   />
@@ -662,7 +725,7 @@ export function EstabelecimentoManager({
           {section === "horario" && (
             <div className="space-y-6">
               <div>
-                <SectionTitle>Horários</SectionTitle>
+                <SectionTitle status={saveStatus}>Horários</SectionTitle>
                 <SectionHint>
                   Dias e horários em que a loja recebe pedidos.
                 </SectionHint>
@@ -670,11 +733,8 @@ export function EstabelecimentoManager({
                   <Row title="Abertura" description="Horário de abertura.">
                     <Input
                       type="time"
-                      value={config.horario_abertura || ""}
-                      disabled={saving}
-                      onChange={(e) =>
-                        queueField("horario_abertura", e.target.value)
-                      }
+                      {...textField("horario_abertura")}
+                      value={hhmm(config.horario_abertura)}
                       className={cn(fieldClass, "max-w-[160px]")}
                     />
                   </Row>
@@ -685,11 +745,8 @@ export function EstabelecimentoManager({
                   >
                     <Input
                       type="time"
-                      value={config.horario_fechamento || ""}
-                      disabled={saving}
-                      onChange={(e) =>
-                        queueField("horario_fechamento", e.target.value)
-                      }
+                      {...textField("horario_fechamento")}
+                      value={hhmm(config.horario_fechamento)}
                       className={cn(fieldClass, "max-w-[160px]")}
                     />
                   </Row>
@@ -707,7 +764,6 @@ export function EstabelecimentoManager({
                     >
                       <Checkbox
                         checked={diasFuncionamento.includes(dia.value)}
-                        disabled={saving}
                         onCheckedChange={(checked) =>
                           handleDiaToggle(dia.value, Boolean(checked))
                         }
@@ -724,7 +780,7 @@ export function EstabelecimentoManager({
           {/* ——— DELIVERY ——— */}
           {section === "delivery" && (
             <div>
-              <SectionTitle>Delivery</SectionTitle>
+              <SectionTitle status={saveStatus}>Delivery</SectionTitle>
               <SectionHint>Taxas, pedido mínimo e tempo estimado.</SectionHint>
               <Panel>
                 <Row
@@ -735,19 +791,11 @@ export function EstabelecimentoManager({
                     type="number"
                     step="0.01"
                     min="0"
-                    value={config.taxa_entrega ?? ""}
-                    disabled={saving}
-                    onChange={(e) =>
-                      queueField(
-                        "taxa_entrega",
-                        e.target.value === ""
-                          ? null
-                          : parseFloat(e.target.value),
-                      )
-                    }
+                    {...numberField("taxa_entrega")}
                     placeholder="0,00"
                     className={cn(fieldClass, "max-w-[140px]")}
                   />
+                  <FieldError message={errors.taxa_entrega} />
                 </Row>
                 <Row
                   title="Pedido mínimo"
@@ -757,19 +805,11 @@ export function EstabelecimentoManager({
                     type="number"
                     step="0.01"
                     min="0"
-                    value={config.pedido_minimo ?? ""}
-                    disabled={saving}
-                    onChange={(e) =>
-                      queueField(
-                        "pedido_minimo",
-                        e.target.value === ""
-                          ? null
-                          : parseFloat(e.target.value),
-                      )
-                    }
+                    {...numberField("pedido_minimo")}
                     placeholder="0,00"
                     className={cn(fieldClass, "max-w-[140px]")}
                   />
+                  <FieldError message={errors.pedido_minimo} />
                 </Row>
                 <Row
                   title="Tempo mínimo"
@@ -778,19 +818,11 @@ export function EstabelecimentoManager({
                   <Input
                     type="number"
                     min="0"
-                    value={config.tempo_entrega_min ?? ""}
-                    disabled={saving}
-                    onChange={(e) =>
-                      queueField(
-                        "tempo_entrega_min",
-                        e.target.value === ""
-                          ? null
-                          : parseInt(e.target.value, 10),
-                      )
-                    }
+                    {...numberField("tempo_entrega_min", true)}
                     placeholder="30"
                     className={cn(fieldClass, "max-w-[140px]")}
                   />
+                  <FieldError message={errors.tempo_entrega_min} />
                 </Row>
                 <Row
                   title="Tempo máximo"
@@ -800,19 +832,11 @@ export function EstabelecimentoManager({
                   <Input
                     type="number"
                     min="0"
-                    value={config.tempo_entrega_max ?? ""}
-                    disabled={saving}
-                    onChange={(e) =>
-                      queueField(
-                        "tempo_entrega_max",
-                        e.target.value === ""
-                          ? null
-                          : parseInt(e.target.value, 10),
-                      )
-                    }
+                    {...numberField("tempo_entrega_max", true)}
                     placeholder="45"
                     className={cn(fieldClass, "max-w-[140px]")}
                   />
+                  <FieldError message={errors.tempo_entrega_max} />
                 </Row>
               </Panel>
             </div>
