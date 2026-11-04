@@ -22,6 +22,7 @@ body:has(.admin-shell) :where([role="dialog"], [role="menu"]) :focus-visible {
   .admin-settings-row { flex-direction: row; align-items: center; justify-content: space-between; }
   .admin-settings-row > :first-child { flex: 1; }
   .admin-settings-value { width: min(50%, 420px); display: flex; justify-content: flex-end; }
+  .admin-settings-value:has(> .field-error) { flex-direction: column; align-items: flex-end; }
 }
 .admin-mobile-menu { height: 100dvh; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
 .admin-mobile-menu > button { z-index: 1; top: max(.125rem, env(safe-area-inset-top)); right: .5rem; }
