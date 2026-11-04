@@ -55,6 +55,8 @@ interface PedidoDetailPanelProps {
   ) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
   busy?: boolean;
+  /** Nome do entregador atribuído (null = sem entregador). */
+  entregadorNome?: string | null;
 }
 
 const actionIcons = {
@@ -87,6 +89,7 @@ export function PedidoDetailPanel({
   onStatusChange,
   onClose,
   busy = false,
+  entregadorNome = null,
 }: PedidoDetailPanelProps) {
   const [printTipo, setPrintTipo] = useState<OrderPrintTipo | null>(null);
   const [pendingAction, setPendingAction] = useState<OrderAction | null>(null);
@@ -247,6 +250,12 @@ export function PedidoDetailPanel({
           {orderDateTime.format(new Date(pedido.created_at))}
           {" · "}
           {tipoEntregaLabel(pedido.tipo_entrega)}
+          {delivery && (pedido.status === "saiu_entrega" || pedido.status === "entregue") && (
+            <>
+              {" · "}
+              {entregadorNome ? `Entregador: ${entregadorNome}` : "Sem entregador"}
+            </>
+          )}
         </p>
       </div>
 

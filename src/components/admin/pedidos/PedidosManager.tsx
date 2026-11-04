@@ -37,6 +37,9 @@ import {
 } from "@/hooks/usePedidosRealtime";
 import { toast } from "sonner";
 import { PedidosToolbar } from "./PedidosToolbar";
+import Link from "next/link";
+import { getEntregadoresResumo } from "@/actions/admin/entregadores";
+import type { EntregadoresResumo } from "@/lib/entregadores";
 import { PedidoKanbanColumn } from "./PedidoKanbanColumn";
 import { PedidoDetailPanel } from "./PedidoDetailPanel";
 import { OrderPrint, type OrderPrintTipo } from "./OrderPrint";
@@ -116,6 +119,18 @@ export function PedidosManager({
     if (pedidoId) setSelectedId(pedidoId);
   }, []);
   const [mobileColumn, setMobileColumn] = useState<KanbanColumnId | "todos">("todos");
+  // Entregador selecionado e nomes (para o aviso e os detalhes). Sem a migration 0019
+  // ou sem permissão, fica null e nada aparece.
+  const [entregadores, setEntregadores] = useState<EntregadoresResumo | null>(null);
+  useEffect(() => {
+    const refresh = () =>
+      void getEntregadoresResumo()
+        .then((r) => setEntregadores(r.ok ? r.resumo : null))
+        .catch(() => {});
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
   const detailTrigger = useRef<HTMLElement | null>(null);
   const [opcoes, setOpcoes] = useState<OpcaoLookup[]>([]);
   const [grupos, setGrupos] = useState<GrupoLookup[]>([]);
@@ -472,6 +487,18 @@ export function PedidosManager({
         totalCount={filtered.length}
       />
 
+      {entregadores && !entregadores.selecionado && (
+        <p className="flex flex-wrap items-center gap-x-2 border-b border-[#F1E7C8] bg-[#FFFBEB] px-4 py-1.5 text-xs text-[#92400E]">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+          Nenhum entregador selecionado: pedidos que saírem para entrega ficarão sem entregador.
+          {canManageStore && (
+            <Link href="/admin/configuracoes#entregadores" className="font-semibold underline underline-offset-2">
+              Selecionar
+            </Link>
+          )}
+        </p>
+      )}
+
       <div className="relative flex-1 min-h-0 min-w-0 bg-[#F7F6F9]">
         <div className="px-3 pt-3 md:hidden"><label htmlFor="mobile-order-stage" className="sr-only">Etapa dos pedidos</label><select id="mobile-order-stage" value={mobileColumn} onChange={(event) => {setMobileColumn(event.target.value as KanbanColumnId | "todos");setFilters(prev => ({...prev,status:"todos"}));}} className="h-11 w-full rounded-lg border border-[#E7E1EB] bg-white px-3 text-sm font-medium text-[#4C258C]">
           <option value="todos">Todos os pedidos ({filtered.length})</option>
@@ -534,6 +561,9 @@ export function PedidosManager({
                 onStatusChange={handleDrawerStatusChange}
                 onClose={handleClose}
                 busy={statusBusy}
+                entregadorNome={
+                  selectedPedido.entregador_id ? (entregadores?.nomes[selectedPedido.entregador_id] ?? null) : null
+                }
               />
             )}
           </SheetContent>

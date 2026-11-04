@@ -63,6 +63,10 @@ export interface Pedido {
     | "entregue"
     | "cancelado";
   observacoes?: string;
+  /** Entregador que recebeu o pedido ao sair para entrega (migration 0019). */
+  entregador_id?: string | null;
+  saiu_entrega_at?: string | null;
+  entregue_at?: string | null;
   created_at: string;
   updated_at: string;
 }

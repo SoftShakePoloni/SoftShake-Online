@@ -33,6 +33,7 @@ import { DesktopPrinterSettings } from "./DesktopPrinterSettings";
 import { AtualizacoesSection } from "./AtualizacoesSection";
 import { BackupSection } from "./BackupSection";
 import { AppCelularSection } from "./AppCelularSection";
+import { EntregadoresSection } from "./EntregadoresSection";
 import { AdminMfaSettings } from "./AdminMfaSettings";
 import { UsuariosSection } from "./UsuariosSection";
 
@@ -45,6 +46,7 @@ const SECTIONS = [
   { id: "geral", label: "Geral" },
   { id: "seguranca", label: "Segurança" },
   { id: "usuarios", label: "Usuários" },
+  { id: "entregadores", label: "Entregadores" },
   { id: "integracoes", label: "Integrações" },
   { id: "api", label: "API" },
   { id: "backup", label: "Backup" },
@@ -688,6 +690,7 @@ export function SistemaConfigManager({
 
           {section === "seguranca" && <AdminMfaSettings />}
           {section === "usuarios" && <UsuariosSection />}
+          {section === "entregadores" && <EntregadoresSection />}
           {section === "integracoes" && <EmptySection title="Integrações" />}
           {section === "api" && <EmptySection title="API" />}
           {section === "backup" && <BackupSection />}
