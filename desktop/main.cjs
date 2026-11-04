@@ -18,7 +18,7 @@ function savePrinter(name) {
 function validateSender(event) {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !trustedUrl(event.senderFrame.url)) throw Error('Origem de impressão inválida.');
 }
-const updater = createUpdater({ app, ipcMain, dialog, getWindow: () => mainWindow, validateSender, loadAutoUpdater: () => require('electron-updater').autoUpdater });
+const updater = createUpdater({ app, ipcMain, getWindow: () => mainWindow, validateSender, loadAutoUpdater: () => require('electron-updater').autoUpdater });
 ipcMain.handle('softshake:printers', async event => {
   validateSender(event);
   return { selected: readSettings().printerName || '', printers: (await mainWindow.webContents.getPrintersAsync()).filter(physicalPrinter).map(p => ({ name: p.name, label: p.displayName || p.name, isDefault: p.isDefault })) };
