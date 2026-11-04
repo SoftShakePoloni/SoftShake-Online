@@ -38,6 +38,8 @@ export type ClientePedido = {
   total: number;
   itens: ClientePedidoItem[];
   status: string;
+  /** Primeiro nome de quem está levando (só depois que saiu para entrega). */
+  entregador_nome?: string | null;
   created_at: string;
   updated_at?: string;
 };

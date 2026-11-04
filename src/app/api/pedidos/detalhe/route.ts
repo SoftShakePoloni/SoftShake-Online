@@ -9,6 +9,7 @@ import {
 import { obterSessao } from "@/lib/auth";
 import { createServerClient } from "@/integrations/supabase/client.server";
 const headers = { "Cache-Control": "private, no-store" };
+import { primeiroNome } from "@/lib/entregadores";
 import {
   enrichPedidoItens,
   type OpcaoLookup,
@@ -26,7 +27,7 @@ export const GET = withApiGuard(
       const { data: pedido, error } = await db
         .from("pedidos")
         .select(
-          "id, cliente_nome, cliente_telefone, tipo_entrega, endereco_completo, meio_pagamento, troco_para, subtotal, taxa_entrega, total, itens, status, created_at, updated_at",
+          "id, cliente_nome, cliente_telefone, tipo_entrega, endereco_completo, meio_pagamento, troco_para, subtotal, taxa_entrega, total, itens, status, created_at, updated_at, entregador_id",
         )
         .eq("cliente_id", sessao.id)
         .eq("id", id)
@@ -79,10 +80,23 @@ export const GET = withApiGuard(
         opcoes = (options.data ?? []) as unknown as OpcaoLookup[];
         grupos = (groups.data ?? []) as GrupoLookup[];
       }
+      // Quem está levando: só o primeiro nome e só depois que saiu para entrega.
+      // O id do entregador nunca vai para o cliente.
+      const { entregador_id, ...publico } = pedido;
+      let entregador_nome: string | null = null;
+      if (entregador_id && (pedido.status === "saiu_entrega" || pedido.status === "entregue")) {
+        const { data: entregador } = await db
+          .from("entregadores")
+          .select("nome")
+          .eq("id", entregador_id)
+          .maybeSingle();
+        entregador_nome = primeiroNome(entregador?.nome);
+      }
       return apiOk(
         {
           pedido: {
-            ...pedido,
+            ...publico,
+            entregador_nome,
             itens: enrichPedidoItens(itens, opcoes, grupos),
           },
         },

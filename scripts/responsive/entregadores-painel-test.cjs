@@ -173,3 +173,16 @@ test("painel: seção nas Configurações, aviso no Kanban e nenhuma chave no na
   const actionsSrc = fs.readFileSync("src/actions/admin/entregadores.ts", "utf8");
   assert.match(actionsSrc, /^"use server";/);
 });
+
+test("cliente vê só o primeiro nome do entregador, nunca o id", () => {
+  assert.equal(lib.primeiroNome("  João   da Silva "), "João");
+  assert.equal(lib.primeiroNome(""), null);
+  assert.equal(lib.primeiroNome(null), null);
+  const rota = fs.readFileSync("src/app/api/pedidos/detalhe/route.ts", "utf8");
+  assert.match(rota, /const \{ entregador_id, \.\.\.publico \} = pedido;/);
+  assert.match(rota, /\.\.\.publico,\s*entregador_nome,/);
+  assert.match(rota, /pedido\.status === "saiu_entrega" \|\| pedido\.status === "entregue"/);
+  const tela = fs.readFileSync("src/components/cliente/pedidos/DetalhePedidoView.tsx", "utf8");
+  assert.match(tela, /está levando seu pedido até você/);
+  assert.match(tela, /Entregue por/);
+});

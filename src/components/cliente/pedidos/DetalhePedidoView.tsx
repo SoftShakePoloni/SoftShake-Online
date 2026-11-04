@@ -180,9 +180,22 @@ export function DetalhePedidoView({
             <div>
               <p className="text-sm font-medium">Entrega a caminho</p>
               <p className="text-xs text-[#7B668C]">
-                Estamos levando seu pedido até você.
+                {pedido.entregador_nome
+                  ? `${pedido.entregador_nome} está levando seu pedido até você.`
+                  : "Estamos levando seu pedido até você."}
               </p>
             </div>
+          </div>
+        )}
+
+        {pedido.status === "entregue" && pedido.entregador_nome && (
+          <div className="flex items-center gap-3 border-b border-[#E7E1EB] py-5">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E7E1EB] text-[#5B2C98]">
+              <Bike aria-hidden="true" className="h-5 w-5" />
+            </span>
+            <p className="text-sm text-[#7B668C]">
+              Entregue por <span className="font-medium text-[#21172D]">{pedido.entregador_nome}</span>
+            </p>
           </div>
         )}
 

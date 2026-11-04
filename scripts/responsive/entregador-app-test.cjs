@@ -100,3 +100,40 @@ test("concluir: botão travado durante o envio e card só sai com a confirmaçã
   assert.match(hook, /state === "background"[\s\S]*desconectar\(\)/, "fecha o canal em segundo plano");
   assert.doesNotMatch(hook, /setInterval/, "sem polling");
 });
+
+test("busca por cliente, número ou rua ignora acento, maiúscula e # e exige todas as palavras", () => {
+  const lista = lib.normalizarEntregas([
+    { id: "1", numero: "AB12CD34", cliente_nome: "João Silva", endereco: { logradouro: "Rua São Bento", numero: "10" } },
+    { id: "2", numero: "EF56GH78", cliente_nome: "Ana Paula", endereco: { logradouro: "Av. Brasil", numero: "200" } },
+  ]);
+  const ids = (q) => lib.filtrarEntregas(lista, q).map((e) => e.id);
+  assert.deepEqual(ids(""), ["1", "2"]);
+  assert.deepEqual(ids("joao"), ["1"]);
+  assert.deepEqual(ids("  ANA  "), ["2"]);
+  assert.deepEqual(ids("#ef56"), ["2"]);
+  assert.deepEqual(ids("sao bento"), ["1"]);
+  assert.deepEqual(ids("joao brasil"), [], "todas as palavras");
+});
+
+test("saudação pelo horário de São Paulo e contagem", () => {
+  assert.equal(lib.saudacao(Date.parse("2026-11-04T11:00:00Z")), "Bom dia"); // 08h
+  assert.equal(lib.saudacao(Date.parse("2026-11-04T17:00:00Z")), "Boa tarde"); // 14h
+  assert.equal(lib.saudacao(Date.parse("2026-11-04T23:30:00Z")), "Boa noite"); // 20h30
+  assert.equal(lib.contagemEntregas(0), "Nenhuma entrega no momento");
+  assert.equal(lib.contagemEntregas(1), "1 entrega para fazer");
+  assert.equal(lib.contagemEntregas(3), "3 entregas para fazer");
+});
+
+test("tela de entregas: sem logo, nome em destaque, busca e acessibilidade", () => {
+  const tela = read("src/screens/EntregasScreen.tsx");
+  assert.doesNotMatch(tela, /logo\.png/, "sem imagem no topo da lista");
+  assert.match(tela, /accessibilityRole="header"[\s\S]{0,40}numberOfLines=\{2\}/);
+  assert.match(tela, /<BarraBusca/);
+  assert.match(tela, /anunciar\(`Nova entrega/);
+  assert.match(tela, /useReduzirMovimento/);
+  assert.match(read("src/components/BarraBusca.tsx"), /accessibilityLabel="Buscar entrega"/);
+  const card = read("src/components/EntregaCard.tsx");
+  assert.match(card, /fontScale/, "letra grande quebra linha em vez de cortar");
+  assert.match(card, /levar troco de/);
+  assert.doesNotMatch(read("src/screens/LoginScreen.tsx"), /placeholderTextColor=\{t\.subtle\}/, "contraste do texto de exemplo");
+});

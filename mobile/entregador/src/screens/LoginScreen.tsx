@@ -53,7 +53,9 @@ export function LoginScreen({
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.marca}>
             <Image source={require("../../assets/logo.png")} style={styles.logo} accessibilityLabel="SoftShake" />
-            <Text style={[styles.titulo, { color: t.text }]}>Boas-vindas</Text>
+            <Text style={[styles.titulo, { color: t.text }]} accessibilityRole="header">
+              Boas-vindas
+            </Text>
             <Text style={[styles.sub, { color: t.muted }]}>Entre para ver suas entregas.</Text>
           </View>
 
@@ -64,7 +66,7 @@ export function LoginScreen({
               value={email}
               onChangeText={setEmail}
               placeholder="seu@email.com"
-              placeholderTextColor={t.subtle}
+              placeholderTextColor={t.muted}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="email"
@@ -84,7 +86,7 @@ export function LoginScreen({
                 value={senha}
                 onChangeText={setSenha}
                 placeholder="Sua senha"
-                placeholderTextColor={t.subtle}
+                placeholderTextColor={t.muted}
                 secureTextEntry={!mostrar}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -107,7 +109,11 @@ export function LoginScreen({
             </View>
 
             {!!erro && (
-              <Text style={[styles.erro, { color: t.danger, backgroundColor: t.dangerSoft }]} accessibilityRole="alert">
+              <Text
+                style={[styles.erro, { color: t.danger, backgroundColor: t.dangerSoft }]}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
                 {erro}
               </Text>
             )}

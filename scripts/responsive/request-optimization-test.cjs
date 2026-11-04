@@ -213,6 +213,7 @@ test("customer list, detail and count authorize by server session; detail avoids
     "@/lib/security/api-response": load("src/lib/security/api-response.ts"),
     "@/lib/customer-order-summary": load("src/lib/customer-order-summary.ts"),
     "@/lib/utils/pedido": load("src/lib/utils/pedido.ts"),
+    "@/lib/entregadores": load("src/lib/entregadores.ts"),
   };
   for (const route of ["listar", "detalhe", "contagem"]) {
     queries = [];

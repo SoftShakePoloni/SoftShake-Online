@@ -133,6 +133,37 @@ export function normalizarEntregas(rows: unknown): Entrega[] {
   }));
 }
 
+/** Texto para busca: sem acentos, minúsculo, espaços simples. */
+export function normalizarBusca(texto: string) {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Filtra por nome do cliente, número do pedido ou rua/bairro (todas as palavras). */
+export function filtrarEntregas(entregas: Entrega[], busca: string): Entrega[] {
+  const termos = normalizarBusca(busca).replace(/^#/, "").split(" ").filter(Boolean);
+  if (!termos.length) return entregas;
+  return entregas.filter((e) => {
+    const end = formatarEndereco(e.endereco);
+    const alvo = normalizarBusca(`${e.cliente_nome} ${e.numero} ${end.linha1}`);
+    return termos.every((t) => alvo.includes(t));
+  });
+}
+
+/** Saudação pela hora de São Paulo. */
+export function saudacao(agora = Date.now()) {
+  const h = Number(new Date(agora).toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/Sao_Paulo" })) % 24;
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+}
+
+export function contagemEntregas(n: number) {
+  return n === 0 ? "Nenhuma entrega no momento" : n === 1 ? "1 entrega para fazer" : `${n} entregas para fazer`;
+}
+
 export type ErroApp =
   | { tipo: "sem_acesso"; mensagem: string }
   | { tipo: "desativado"; mensagem: string }

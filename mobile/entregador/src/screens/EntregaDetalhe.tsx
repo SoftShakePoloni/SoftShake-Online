@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { confirmar } from "../lib/confirmar";
+import { useReduzirMovimento } from "../lib/acessibilidade";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 // Um import por ícone: o Metro não remove código não usado, e o pacote inteiro
@@ -35,7 +37,9 @@ function Secao({ titulo, children, ultima }: { titulo: string; children: React.R
   const t = useTheme();
   return (
     <View style={[styles.secao, !ultima && { borderBottomColor: t.border, borderBottomWidth: StyleSheet.hairlineWidth }]}>
-      <Text style={[styles.secaoTitulo, { color: t.muted }]}>{titulo}</Text>
+      <Text style={[styles.secaoTitulo, { color: t.muted }]} accessibilityRole="header">
+        {titulo}
+      </Text>
       {children}
     </View>
   );
@@ -45,6 +49,7 @@ function Secao({ titulo, children, ultima }: { titulo: string; children: React.R
 export function EntregaDetalhe({ entrega, agora, onFechar, onConcluir, onConcluida }: Props) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
+  const reduzirMovimento = useReduzirMovimento();
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -56,30 +61,19 @@ export function EntregaDetalhe({ entrega, agora, onFechar, onConcluir, onConclui
 
   const concluir = () => {
     if (!entrega || enviando) return;
-    Alert.alert(
-      "Confirmar entrega?",
-      `Pedido #${entrega.numero} · ${entrega.cliente_nome}`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Entregue",
-          onPress: async () => {
-            setEnviando(true); // segura toques repetidos até o servidor responder
-            setErro(null);
-            const r = await onConcluir(entrega.id);
-            setEnviando(false);
-            if (r.ok) {
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-              onConcluida();
-            } else {
-              setErro(r.erro.mensagem);
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-            }
-          },
-        },
-      ],
-      { cancelable: true },
-    );
+    confirmar("Confirmar entrega?", `Pedido #${entrega.numero} · ${entrega.cliente_nome}`, "Entregue", async () => {
+      setEnviando(true); // segura toques repetidos até o servidor responder
+      setErro(null);
+      const r = await onConcluir(entrega.id);
+      setEnviando(false);
+      if (r.ok) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        onConcluida();
+      } else {
+        setErro(r.erro.mensagem);
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      }
+    });
   };
 
   const e = entrega;
@@ -89,7 +83,7 @@ export function EntregaDetalhe({ entrega, agora, onFechar, onConcluir, onConclui
   const IconePagamento = e?.meio_pagamento === "dinheiro" ? Banknote : e?.meio_pagamento === "pix" ? QrCode : CreditCard;
 
   return (
-    <Modal visible={Boolean(e)} animationType="slide" presentationStyle="fullScreen" onRequestClose={fechar} statusBarTranslucent>
+    <Modal visible={Boolean(e)} animationType={reduzirMovimento ? "none" : "slide"} presentationStyle="fullScreen" onRequestClose={fechar} statusBarTranslucent>
       <SafeAreaView style={[styles.safe, { backgroundColor: t.bg }]} edges={["top", "left", "right"]}>
         <View style={styles.barra}>
           <Pressable
@@ -108,7 +102,9 @@ export function EntregaDetalhe({ entrega, agora, onFechar, onConcluir, onConclui
           <>
             <ScrollView contentContainerStyle={[styles.conteudo, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
               <View style={[styles.cabecalho, { borderBottomColor: t.border }]}>
-                <Text style={[styles.titulo, { color: t.text }]}>Pedido #{e.numero}</Text>
+                <Text style={[styles.titulo, { color: t.text }]} accessibilityRole="header">
+                  Pedido #{e.numero}
+                </Text>
                 <Text style={[styles.sub, { color: t.muted }]}>{horaSaida(e.saiu_entrega_at, agora)}</Text>
               </View>
 
@@ -207,7 +203,11 @@ export function EntregaDetalhe({ entrega, agora, onFechar, onConcluir, onConclui
 
             <View style={[styles.rodape, { borderTopColor: t.border, backgroundColor: t.bg, paddingBottom: insets.bottom + 12 }]}>
               {!!erro && (
-                <Text style={[styles.erro, { color: t.danger, backgroundColor: t.dangerSoft }]} accessibilityRole="alert">
+                <Text
+                  style={[styles.erro, { color: t.danger, backgroundColor: t.dangerSoft }]}
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                >
                   {erro}
                 </Text>
               )}
@@ -228,7 +228,7 @@ export function EntregaDetalhe({ entrega, agora, onFechar, onConcluir, onConclui
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   barra: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 4 },
-  voltar: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingVertical: 8 },
+  voltar: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", minHeight: 44, paddingRight: 12 },
   voltarTexto: { fontFamily: font.medium, fontSize: 15 },
   conteudo: { paddingHorizontal: 20 },
   cabecalho: { paddingTop: 8, paddingBottom: 18, borderBottomWidth: StyleSheet.hairlineWidth },

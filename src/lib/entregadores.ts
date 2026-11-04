@@ -47,5 +47,11 @@ export function validateEntregador(input: { nome?: unknown; email?: unknown; sen
   return errors;
 }
 
+/** Para o cliente: só o primeiro nome do entregador ("João Silva" → "João"). */
+export function primeiroNome(nome: unknown): string | null {
+  const first = String(nome ?? "").trim().split(/\s+/)[0];
+  return first ? first.slice(0, 40) : null;
+}
+
 /** Releases do app do entregador: tag "entregador-vX.Y.Z" com um .apk anexado. */
 export const APP_ENTREGADOR_TAG = /^entregador-v(\d+\.\d+\.\d+)$/;
