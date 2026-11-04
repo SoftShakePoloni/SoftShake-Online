@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getBackupDownloadUrl, listBackups } from "@/actions/admin/backups";
-import { backupHealth, formatBytes, type BackupItem } from "@/lib/backups";
+import { BACKUP_RETENTION_DAYS, backupHealth, formatBytes, type BackupItem } from "@/lib/backups";
 
 const ACTIONS_URL =
   "https://github.com/SoftShakePoloni/SoftShake-Online/actions/workflows/supabase-backup.yml";
@@ -22,7 +22,7 @@ export function BackupSection() {
   const [configured, setConfigured] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -42,11 +42,11 @@ export function BackupSection() {
     void load();
   }, [load]);
 
-  const download = async (name: string) => {
-    setDownloading(name);
+  const download = async (id: number) => {
+    setDownloading(id);
     setError("");
     try {
-      const url = await getBackupDownloadUrl(name);
+      const url = new URL(await getBackupDownloadUrl(id), window.location.href).href;
       // Nova aba: no app Windows abre no navegador, que faz o download.
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
@@ -63,8 +63,8 @@ export function BackupSection() {
       <div>
         <h2 className="mb-2 text-lg font-semibold text-[#111827]">Backup</h2>
         <p className="mb-3 text-sm text-[#6B7280]">
-          Cópia completa do banco de dados feita todos os dias às 23:30, guardada em armazenamento privado. Os 30
-          backups mais recentes ficam disponíveis.
+          Cópia completa do banco de dados feita todos os dias às 23:30 e guardada criptografada no GitHub. Os
+          backups dos últimos {BACKUP_RETENTION_DAYS} dias ficam disponíveis.
         </p>
       </div>
 
@@ -96,7 +96,7 @@ export function BackupSection() {
         <p className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {configured
             ? "O backup de ontem não chegou. Confira a execução no GitHub Actions."
-            : "O armazenamento de backups será criado na primeira execução."}{" "}
+            : "Backup não configurado no servidor: faltam BACKUP_ENCRYPTION_KEY e GITHUB_BACKUP_TOKEN."}{" "}
           <a href={ACTIONS_URL} target="_blank" rel="noreferrer" className="font-semibold underline">
             Abrir GitHub Actions
           </a>
@@ -122,12 +122,12 @@ export function BackupSection() {
             <p className="px-4 py-6 text-center text-sm text-[#6B7280]">Carregando backups…</p>
           ) : items.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-[#6B7280]">
-              Nenhum backup guardado ainda. O primeiro será feito hoje às 23:30.
+              Nenhum backup guardado ainda. O próximo será feito hoje às 23:30.
             </p>
           ) : (
             <ul className="divide-y divide-[#F3F4F6]">
               {items.map((item, index) => (
-                <li key={item.name} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-[#111827]">
                       {when(item.takenAt)}
@@ -144,9 +144,9 @@ export function BackupSection() {
                     variant="outline"
                     className="h-8 text-xs"
                     disabled={downloading !== null}
-                    onClick={() => void download(item.name)}
+                    onClick={() => void download(item.id)}
                   >
-                    {downloading === item.name && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+                    {downloading === item.id && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                     Baixar
                   </Button>
                 </li>
