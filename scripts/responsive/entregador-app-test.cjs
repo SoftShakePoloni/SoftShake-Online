@@ -29,10 +29,11 @@ test("endereço do cardápio (jsonb ou texto) vira linhas legíveis", () => {
 });
 
 test("pagamento: forma e valor sempre; troco só em dinheiro", () => {
-  assert.deepEqual(lib.resumoPagamento({ meio_pagamento: "pix", total: 45, troco_para: "50" }), { forma: "Pix", valor: "R$ 45,00", troco: null, levarTroco: false });
+  assert.deepEqual(lib.resumoPagamento({ meio_pagamento: "pix", total: 45, troco_para: "50" }), { forma: "Pix", valor: "R$ 45,00", troco: null, levarTroco: false, valorTroco: null });
   const din = lib.resumoPagamento({ meio_pagamento: "dinheiro", total: 45, troco_para: "100" });
   assert.equal(din.forma, "Dinheiro");
   assert.equal(din.levarTroco, true);
+  assert.equal(din.valorTroco, "R$ 55,00");
   assert.equal(din.troco, "Levar R$ 55,00 de troco (cliente paga com R$ 100,00)");
   assert.equal(lib.resumoPagamento({ meio_pagamento: "dinheiro", total: 45, troco_para: null }).troco, "Sem troco");
   assert.equal(lib.resumoPagamento({ meio_pagamento: "dinheiro", total: 45, troco_para: "45" }).troco, "Sem troco");
@@ -87,9 +88,12 @@ test("sem chave secreta, sem cadastro público, sessão no SecureStore", () => {
 });
 
 test("concluir: botão travado durante o envio e card só sai com a confirmação do servidor", () => {
-  const card = read("src/components/EntregaCard.tsx");
-  assert.match(card, /if \(enviando\) return;/);
-  assert.match(card, /carregando=\{enviando\}/);
+  const detalhe = read("src/screens/EntregaDetalhe.tsx");
+  assert.match(detalhe, /if \(!entrega \|\| enviando\) return;/);
+  assert.match(detalhe, /carregando=\{enviando\}/);
+  // O card compacto só abre os detalhes; a ação fica nos detalhes.
+  assert.doesNotMatch(read("src/components/EntregaCard.tsx"), /onConcluir|Marcar como entregue/);
+  assert.equal(JSON.parse(read("app.json")).expo.userInterfaceStyle, "light", "app sempre branco");
   const hook = read("src/hooks/useEntregas.ts");
   const concluir = hook.slice(hook.indexOf("const concluir"));
   assert.ok(concluir.indexOf("if (error)") < concluir.indexOf("setEntregas((lista) => lista.filter"), "remove só depois de conferir o erro");
