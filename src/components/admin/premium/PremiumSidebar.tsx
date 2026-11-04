@@ -41,7 +41,7 @@ interface PremiumSidebarProps {
   onNavigate?: () => void;
 }
 
-type MenuItem = {
+export type MenuItem = {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -50,7 +50,7 @@ type MenuItem = {
   group?: string;
 };
 
-const menuItems: MenuItem[] = [
+export const menuItems: MenuItem[] = [
   {
     label: "Dashboard",
     href: "/admin",
@@ -103,7 +103,7 @@ const menuItems: MenuItem[] = [
   },
 ];
 
-function pathIsActive(pathname: string, href: string) {
+export function pathIsActive(pathname: string, href: string) {
   if (href === "/admin") return pathname === href;
   if (href === "/admin/produtos") {
     return (

@@ -32,6 +32,7 @@ import { PRINT_DEVICE_EVENT, PRINT_DEVICE_KEY, setPrintDevice } from "@/lib/admi
 import { DesktopPrinterSettings } from "./DesktopPrinterSettings";
 import { AtualizacoesSection } from "./AtualizacoesSection";
 import { BackupSection } from "./BackupSection";
+import { AppCelularSection } from "./AppCelularSection";
 import { AdminMfaSettings } from "./AdminMfaSettings";
 import { UsuariosSection } from "./UsuariosSection";
 
@@ -48,6 +49,7 @@ const SECTIONS = [
   { id: "api", label: "API" },
   { id: "backup", label: "Backup" },
   { id: "atualizacoes", label: "Atualizações" },
+  { id: "app", label: "App no celular" },
   { id: "assinatura", label: "Assinatura" },
   { id: "conta", label: "Conta" },
 ] as const;
@@ -209,6 +211,9 @@ export function SistemaConfigManager({
 
   useEffect(() => {
     setSistema(loadSistema());
+    // Link direto para uma seção, ex.: /admin/configuracoes#app (convite de instalação).
+    const hash = window.location.hash.slice(1);
+    if (SECTIONS.some((s) => s.id === hash)) setSection(hash as SectionId);
   }, []);
 
   useEffect(() => {
@@ -687,6 +692,7 @@ export function SistemaConfigManager({
           {section === "api" && <EmptySection title="API" />}
           {section === "backup" && <BackupSection />}
           {section === "atualizacoes" && <AtualizacoesSection />}
+          {section === "app" && <AppCelularSection />}
           {section === "assinatura" && <EmptySection title="Assinatura" />}
 
           {section === "conta" && (
