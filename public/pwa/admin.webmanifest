@@ -1,0 +1,24 @@
+{
+  "id": "/admin",
+  "name": "SoftShake Admin",
+  "short_name": "SoftShake",
+  "description": "Painel de administração da SoftShake: pedidos, cardápio e loja.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/admin/pedidos",
+  "scope": "/admin",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#24012A",
+  "theme_color": "#4C258C",
+  "categories": ["business", "food"],
+  "icons": [
+    { "src": "/pwa/admin-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa/admin-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa/admin-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Pedidos", "url": "/admin/pedidos", "icons": [{ "src": "/pwa/admin-192.png", "sizes": "192x192" }] },
+    { "name": "Estabelecimento", "url": "/admin/estabelecimento", "icons": [{ "src": "/pwa/admin-192.png", "sizes": "192x192" }] }
+  ]
+}

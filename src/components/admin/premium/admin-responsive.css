@@ -2,8 +2,15 @@
    lg 1024, xl 1280. Portals are scoped through the active admin shell. */
 .admin-shell {
   --admin-toolbar-height: 3rem;
+  /* Barra de atalhos do celular (MobileBottomNav); 0 a partir de md. */
+  --admin-bottom-nav: 0px;
   overflow-wrap: anywhere;
 }
+@media (max-width: 767.98px) {
+  .admin-shell { --admin-bottom-nav: calc(4rem + env(safe-area-inset-bottom, 0px)); }
+  .admin-content-area { padding-bottom: var(--admin-bottom-nav); }
+}
+.admin-bottom-nav { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .admin-shell :where(.grid > *) { min-width: 0; }
 .admin-shell :where(input, textarea, select) { max-width: 100%; }
 .admin-shell :where(button, a, input, select, textarea):focus-visible,
@@ -13,7 +20,9 @@ body:has(.admin-shell) :where([role="dialog"], [role="menu"]) :focus-visible {
 }
 .admin-skip-link { position: fixed; left: 1rem; top: -6rem; z-index: 100; padding: .75rem; background: white; color: #4c258c; }
 .admin-skip-link:focus { top: .5rem; }
-.admin-workspace { height: calc(100dvh - var(--admin-toolbar-height)); min-height: 0; }
+.admin-workspace { height: calc(100dvh - var(--admin-toolbar-height) - var(--admin-bottom-nav)); min-height: 0; }
+/* A área de trabalho já desconta a barra: sem padding extra embaixo dela. */
+.admin-content-area:has(.admin-workspace) { padding-bottom: 0; }
 .admin-settings-row { display: flex; flex-direction: column; align-items: stretch; gap: 1rem; }
 .admin-settings-value { width: 100%; min-width: 0; }
 .admin-settings-value > * { max-width: 100%; }

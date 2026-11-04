@@ -29,6 +29,21 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Service worker do app do painel no celular: fica em /pwa/ mas controla /admin.
+        source: "/pwa/admin-sw.js",
+        headers: [
+          { key: "Service-Worker-Allowed", value: "/admin" },
+          { key: "Cache-Control", value: "no-cache" },
+        ],
+      },
+      {
+        source: "/pwa/admin.webmanifest",
+        headers: [
+          { key: "Content-Type", value: "application/manifest+json; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache" },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },

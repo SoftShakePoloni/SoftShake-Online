@@ -11,6 +11,8 @@ import type { AdminPageAccess } from "@/lib/security/rbac";
 import { usePathname } from "next/navigation";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import "./admin-responsive.css";
+import { InstallBanner } from "@/components/admin/pwa/InstallBanner";
+import { MobileBottomNav } from "./MobileBottomNav";
 
 const SIDEBAR_KEY = "softshake-admin-sidebar-collapsed";
 
@@ -109,8 +111,13 @@ export function AdminShell({
             menuTrigger.current = document.activeElement as HTMLElement;
             setMenuOpen(true);
           }} menuOpen={menuOpen} />
-          <div className="min-w-0 flex-1">{children}</div>
+          <InstallBanner />
+          <div className="admin-content-area min-w-0 flex-1">{children}</div>
         </main>
+        <MobileBottomNav acessos={acessos} menuOpen={menuOpen} onOpenMenu={() => {
+          menuTrigger.current = document.activeElement as HTMLElement;
+          setMenuOpen(true);
+        }} />
       </div>
     </div>
     </ConfiguracoesLojaProvider>
