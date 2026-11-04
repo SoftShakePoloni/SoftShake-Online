@@ -1,15 +1,16 @@
 name: Backup diário do banco (Supabase)
 # Todo dia às 23:30 de Brasília (02:30 UTC) gera um dump completo do Postgres do
-# Supabase (roles, schema e dados) e guarda no bucket PRIVADO "backups" do
-# Supabase Storage, mantendo os 30 mais recentes.
+# Supabase (roles, schema e dados) e guarda como artifact desta execução por 90 dias.
 #
-# O repositório é público: o backup NUNCA é salvo como artifact, release ou log do
-# GitHub, onde qualquer pessoa poderia baixá-lo.
+# O repositório é público e qualquer conta do GitHub pode baixar artifacts: por isso
+# o backup é CRIPTOGRAFADO (AES-256-GCM, scripts/backup/backup-crypto.cjs) antes de
+# sair do runner, e o arquivo sem criptografia nunca é enviado nem impresso no log.
+# O painel (Configurações → Backup) baixa o artifact e descriptografa no servidor.
 #
 # Secrets necessários (Settings → Secrets and variables → Actions):
-#   SUPABASE_DB_URL            Connection string do "Session pooler" (IPv4), com senha
-#   SUPABASE_URL               https://<projeto>.supabase.co
-#   SUPABASE_SERVICE_ROLE_KEY  Chave service_role do projeto
+#   SUPABASE_DB_URL        Connection string do "Session pooler" (IPv4), com senha
+#   BACKUP_ENCRYPTION_KEY  Chave de 32 bytes em base64 (backup-crypto.cjs keygen).
+#                          A mesma chave fica na Vercel. Sem ela os backups não abrem.
 on:
   schedule:
     - cron: "30 2 * * *"
@@ -21,21 +22,22 @@ concurrency:
   cancel-in-progress: false
 jobs:
   backup:
-    if: github.repository == 'SoftShakePoloni/SoftShake-Online'
+    if: github.repository == 'SoftShakePoloni/SoftShake-Online' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      BUCKET: backups
-      KEEP: "30"
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
     steps:
       - name: Conferir secrets
         run: |
-          for name in SUPABASE_DB_URL SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+          for name in SUPABASE_DB_URL BACKUP_ENCRYPTION_KEY; do
             if [ -z "${!name}" ]; then echo "::error::Secret $name não configurado."; exit 1; fi
           done
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/backup
       - uses: supabase/setup-cli@v1
         with:
           version: latest
@@ -62,42 +64,29 @@ jobs:
           for f in roles.sql schema.sql data.sql; do test -s "$f" || { echo "::error::$f vazio"; exit 1; }; done
           cd "$RUNNER_TEMP"
           tar -czf "$dir.tar.gz" "$dir"
-          echo "FILE=$RUNNER_TEMP/$dir.tar.gz" >> "$GITHUB_ENV"
-          echo "NAME=$dir.tar.gz" >> "$GITHUB_ENV"
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
           echo "Backup gerado: $dir.tar.gz ($(du -h "$dir.tar.gz" | cut -f1))"
-      - name: Garantir bucket privado
-        run: |
-          code=$(curl -sS -o /tmp/bucket.json -w '%{http_code}' -X POST "$SUPABASE_URL/storage/v1/bucket" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{\"id\":\"$BUCKET\",\"name\":\"$BUCKET\",\"public\":false}")
-          if [ "$code" = "200" ]; then echo "Bucket criado.";
-          elif grep -qi "exist" /tmp/bucket.json; then echo "Bucket já existe.";
-          else echo "::error::Falha ao criar bucket (HTTP $code)"; cat /tmp/bucket.json; exit 1; fi
-          # Garante que continua privado mesmo se alguém tiver alterado no painel.
-          curl -sS --fail-with-body -o /dev/null -X PUT "$SUPABASE_URL/storage/v1/bucket/$BUCKET" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/json" -d '{"public":false}'
-      - name: Enviar para o Storage
-        run: |
-          curl -sS --fail-with-body -o /dev/null -X POST "$SUPABASE_URL/storage/v1/object/$BUCKET/$NAME" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/gzip" -H "x-upsert: true" \
-            --data-binary "@$FILE"
-          echo "Enviado: $BUCKET/$NAME"
-      - name: Manter só os ${{ env.KEEP }} mais recentes
+      - name: Criptografar e conferir
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X POST "$SUPABASE_URL/storage/v1/object/list/$BUCKET" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{"prefix":"","limit":1000,"sortBy":{"column":"name","order":"desc"}}' > /tmp/list.json
-          old=$(jq -c --argjson keep "$KEEP" '[.[] | select(.name | test("^softshake-[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}\\.tar\\.gz$")) | .name] | sort | reverse | .[$keep:]' /tmp/list.json)
-          if [ "$old" = "[]" ]; then echo "Nada para remover."; exit 0; fi
-          echo "Removendo: $old"
-          curl -sS --fail-with-body -o /dev/null -X DELETE "$SUPABASE_URL/storage/v1/object/$BUCKET" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
-            -H "Content-Type: application/json" -d "{\"prefixes\":$old}"
+          plain="$RUNNER_TEMP/softshake-$STAMP.tar.gz"
+          mkdir -p "$RUNNER_TEMP/upload"
+          enc="$RUNNER_TEMP/upload/softshake-$STAMP.tar.gz.enc"
+          node scripts/backup/backup-crypto.cjs encrypt "$plain" "$enc"
+          # Prova que o arquivo enviado abre com a chave antes de apagar o original.
+          node scripts/backup/backup-crypto.cjs decrypt "$enc" "$RUNNER_TEMP/check.tar.gz"
+          cmp "$plain" "$RUNNER_TEMP/check.tar.gz"
+          tar -tzf "$RUNNER_TEMP/check.tar.gz" > /dev/null
+          rm -rf "$plain" "$RUNNER_TEMP/check.tar.gz" "$RUNNER_TEMP/softshake-$STAMP"
+          echo "Criptografado: $(du -h "$enc" | cut -f1)"
+      - name: Guardar no GitHub (criptografado)
+        uses: actions/upload-artifact@v4
+        with:
+          name: softshake-${{ env.STAMP }}
+          path: ${{ runner.temp }}/upload/softshake-${{ env.STAMP }}.tar.gz.enc
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
       - name: Limpar arquivos locais
         if: always()
-        run: rm -rf "$RUNNER_TEMP"/softshake-*
+        run: rm -rf "$RUNNER_TEMP"/softshake-* "$RUNNER_TEMP"/upload "$RUNNER_TEMP"/check.tar.gz
