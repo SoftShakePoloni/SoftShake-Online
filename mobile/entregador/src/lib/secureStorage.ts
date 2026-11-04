@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
 /**
@@ -15,7 +16,32 @@ async function removeChunks(key: string) {
   await SecureStore.deleteItemAsync(`${key}.n`, OPTIONS);
 }
 
-export const secureStorage = {
+/** Versão web (iPhone pelo Safari): não há SecureStore; usa o armazenamento do site. */
+const webStorage = {
+  async getItem(name: string) {
+    try {
+      return window.localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  async setItem(name: string, value: string) {
+    try {
+      window.localStorage.setItem(name, value);
+    } catch {
+      /* modo privado/bloqueado: a sessão dura só enquanto a página estiver aberta */
+    }
+  },
+  async removeItem(name: string) {
+    try {
+      window.localStorage.removeItem(name);
+    } catch {
+      /* idem */
+    }
+  },
+};
+
+const nativeStorage = {
   async getItem(name: string): Promise<string | null> {
     const key = safe(name);
     const count = Number((await SecureStore.getItemAsync(`${key}.n`, OPTIONS)) ?? 0);
@@ -39,3 +65,5 @@ export const secureStorage = {
     await removeChunks(safe(name));
   },
 };
+
+export const secureStorage = Platform.OS === "web" ? webStorage : nativeStorage;
