@@ -2,12 +2,12 @@
   "expo": {
     "name": "SoftShake Entregador",
     "slug": "softshake-entregador",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "softshake-entregador",
-    "userInterfaceStyle": "automatic",
-    "backgroundColor": "#F7F6F9",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFFFFF",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "br.com.softshake.entregador",
@@ -35,7 +35,7 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 220,
           "resizeMode": "contain",
-          "backgroundColor": "#24012A"
+          "backgroundColor": "#FFFFFF"
         }
       ]
     ]

@@ -17,6 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Botao } from "../components/Botao";
 import { EntregaCard } from "../components/EntregaCard";
 import { EstadoVazio } from "../components/EstadoVazio";
+import { EntregaDetalhe } from "./EntregaDetalhe";
 import { useEntregas } from "../hooks/useEntregas";
 import type { Perfil } from "../hooks/useAuth";
 import { font, radius, useTheme } from "../theme";
@@ -37,6 +38,10 @@ export function EntregasScreen({
   const { entregas, carregando, atualizando, erro, conexao, atualizar, concluir } = useEntregas(perfil.id, onAcessoNegado);
   const [agora, setAgora] = useState(Date.now());
   const aviso = useRef(new Animated.Value(0)).current;
+  const [aberta, setAberta] = useState<string | null>(null);
+  const [textoAviso, setTextoAviso] = useState("Entrega concluída");
+  const concluidaAgora = useRef<string | null>(null);
+  const entregaAberta = aberta ? (entregas.find((e) => e.id === aberta) ?? null) : null;
 
   // "há X min" no card: atualiza a cada minuto, sem buscar nada no servidor.
   useEffect(() => {
@@ -44,7 +49,8 @@ export function EntregasScreen({
     return () => clearInterval(timer);
   }, []);
 
-  const mostrarConcluida = useCallback(() => {
+  const mostrarAviso = useCallback((texto: string) => {
+    setTextoAviso(texto);
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     aviso.setValue(0);
     Animated.sequence([
@@ -53,6 +59,26 @@ export function EntregasScreen({
       Animated.timing(aviso, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start();
   }, [aviso]);
+
+  const concluirAberta = useCallback(
+    async (id: string) => {
+      concluidaAgora.current = id;
+      const r = await concluir(id);
+      if (!r.ok) concluidaAgora.current = null;
+      return r;
+    },
+    [concluir],
+  );
+
+  // O pedido aberto saiu da lista: concluído aqui (aviso de sucesso) ou mudado
+  // pela loja (cancelado, voltou de status): fecha os detalhes e explica.
+  useEffect(() => {
+    if (!aberta || carregando || entregaAberta) return;
+    const foiAqui = concluidaAgora.current === aberta;
+    concluidaAgora.current = null;
+    setAberta(null);
+    mostrarAviso(foiAqui ? "Entrega concluída" : "Este pedido não está mais com você");
+  }, [aberta, carregando, entregaAberta, mostrarAviso]);
 
   const confirmarSaida = () =>
     Alert.alert("Sair do app?", "Você vai precisar entrar de novo com e-mail e senha.", [
@@ -98,10 +124,8 @@ export function EntregasScreen({
         <FlatList
           data={entregas}
           keyExtractor={(e) => e.id}
-          renderItem={({ item }) => (
-            <EntregaCard entrega={item} agora={agora} onConcluir={concluir} onConcluida={mostrarConcluida} />
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+          renderItem={({ item }) => <EntregaCard entrega={item} agora={agora} onAbrir={setAberta} />}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           contentContainerStyle={[styles.lista, { paddingBottom: insets.bottom + 24 }, quantidade === 0 && { flexGrow: 1 }]}
           ListEmptyComponent={<EstadoVazio />}
           refreshControl={<RefreshControl refreshing={atualizando} onRefresh={() => void atualizar()} tintColor={t.brand} colors={[t.brand]} />}
@@ -122,8 +146,19 @@ export function EntregasScreen({
         ]}
         accessibilityLiveRegion="polite"
       >
-        <Text style={[styles.toastTexto, { color: t.bg }]}>Entrega concluída</Text>
+        <Text style={[styles.toastTexto, { color: t.bg }]}>{textoAviso}</Text>
       </Animated.View>
+
+      <EntregaDetalhe
+        entrega={entregaAberta}
+        agora={agora}
+        onFechar={() => setAberta(null)}
+        onConcluir={concluirAberta}
+        onConcluida={() => {
+          /* o card some da lista e o efeito acima fecha os detalhes com o aviso */
+        }}
+      />
+
     </SafeAreaView>
   );
 }

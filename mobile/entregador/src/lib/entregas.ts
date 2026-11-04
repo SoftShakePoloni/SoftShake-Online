@@ -74,7 +74,7 @@ export function resumoPagamento(e: Pick<Entrega, "meio_pagamento" | "total" | "t
   const forma = NOMES_PAGAMENTO[e.meio_pagamento] ?? e.meio_pagamento;
   const total = Number(e.total) || 0;
   if (e.meio_pagamento !== "dinheiro") {
-    return { forma, valor: dinheiro(total), troco: null as string | null, levarTroco: false };
+    return { forma, valor: dinheiro(total), troco: null as string | null, levarTroco: false, valorTroco: null as string | null };
   }
   const para = parseTroco(e.troco_para);
   if (para && para > total) {
@@ -83,9 +83,10 @@ export function resumoPagamento(e: Pick<Entrega, "meio_pagamento" | "total" | "t
       valor: dinheiro(total),
       troco: `Levar ${dinheiro(para - total)} de troco (cliente paga com ${dinheiro(para)})`,
       levarTroco: true,
+      valorTroco: dinheiro(para - total) as string | null,
     };
   }
-  return { forma, valor: dinheiro(total), troco: "Sem troco", levarTroco: false };
+  return { forma, valor: dinheiro(total), troco: "Sem troco", levarTroco: false, valorTroco: null };
 }
 
 export function formatarTelefone(tel: string | null | undefined) {
