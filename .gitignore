@@ -35,3 +35,10 @@ supabase/.temp
 AGENTS.md
 .vercel/
 coverage/
+
+# Backups do banco e chave de criptografia (nunca versionar: o repositório é público)
+backup-key.txt
+*.key
+softshake-*.tar.gz
+softshake-*.tar.gz.enc
+softshake-*.zip
