@@ -49,6 +49,14 @@ test('the real IPC handler validates the sender and requests silent native print
   assert.equal(fullscreen, true); assert.equal(prevented, 1);
   windowEvents['before-input-event']({ preventDefault() { prevented++; } }, { type: 'keyDown', key: 'F11' });
   assert.equal(fullscreen, false);
+  // F5 / Ctrl+R recarregam o painel (sem menu não há atalho nativo).
+  let reloads = 0;
+  contents.reloadIgnoringCache = () => { reloads++; };
+  const key = (input) => windowEvents['before-input-event']({ preventDefault() { prevented++; } }, { type: 'keyDown', ...input });
+  key({ key: 'F5' }); key({ key: 'r', control: true }); key({ key: 'R', control: true, shift: true });
+  assert.equal(reloads, 3);
+  key({ key: 'F5', isAutoRepeat: true }); key({ key: 'r' }); key({ key: 'r', control: true, alt: true });
+  assert.equal(reloads, 3, 'auto-repeat, plain r and Ctrl+Alt+R do not reload');
   assert.equal(startup[1].url, 'https://softshake.com.br/admin/pedidos');
   assert.match(startup[1].config.extraHeaders, /Pragma: no-cache/);
   await assert.rejects(() => handler({ sender: {}, senderFrame: frame }), /Origem/);

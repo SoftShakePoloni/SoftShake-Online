@@ -58,9 +58,15 @@ async function createWindow() {
   // Janela normal maximizada: mantém a barra do Windows com minimizar, restaurar e fechar.
   mainWindow.once('ready-to-show', () => { mainWindow.maximize(); mainWindow.show(); });
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type === 'keyDown' && input.key === 'F11' && !input.isAutoRepeat) {
+    if (input.type !== 'keyDown' || input.isAutoRepeat) return;
+    if (input.key === 'F11') {
       event.preventDefault();
       mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    } else if (input.key === 'F5' || ((input.control || input.meta) && !input.alt && input.key.toLowerCase() === 'r')) {
+      // Sem menu não há atalho nativo de recarregar: sem isso o painel ficava preso
+      // na versão de antes de uma publicação nova, e as ações do servidor falhavam.
+      event.preventDefault();
+      mainWindow.webContents.reloadIgnoringCache();
     }
   });
   mainWindow.webContents.on('page-title-updated', event => { event.preventDefault(); mainWindow.setTitle('Softshake'); });
