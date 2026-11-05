@@ -28,7 +28,7 @@ test('only successful public catalog writes schedule invalidation; payload conta
   }
   assert.equal(callbacks.length, 10);
   await callbacks[0]();
-  assert.deepEqual(invalidated, ['/', '/promocoes']);
+  assert.deepEqual(invalidated, ['/']);
   const payload = JSON.parse(requests.at(-1).init.body);
   assert.deepEqual(payload.messages, [{ topic: 'public-catalog', event: 'changed', payload: {}, private: false }]);
 });

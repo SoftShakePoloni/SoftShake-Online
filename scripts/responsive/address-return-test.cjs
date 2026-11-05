@@ -4,7 +4,7 @@ const location={href:''};let pushed='';
 const router={push:value=>pushed=value,refresh(){},back(){}};
 function load(file,states,imports){let index=0;const native=createRequire(path.resolve(file)),react={...native('react'),useState:initial=>[states(index++,initial),()=>{}],useEffect(){},useRef:initial=>({current:initial})};
  const mocks={'@/context/AuthContext':{useAuth:()=>({refreshCliente:async()=>{}})},'@/actions/cliente-enderecos':{salvarEnderecoExistente:async()=>({sucesso:true})},'react':react,'next/navigation':{useRouter:()=>router},'sonner':{toast:{success(){},error(){},info(){}}},...imports};
- const req=name=>name === '@/lib/customer-resource' ? { invalidateCustomerResources() {} } : mocks[name]??(name.startsWith('@/components/ui/')?new Proxy({},{get:(_,key)=>String(key)}):name.startsWith('@/lib/utils/pedido')?{resolveSelectionsFromProduct:()=>[]}:native(name));
+ const req=name=>name === '@/lib/customer-resource' ? { invalidateCustomerResources() {} } : name === '@/lib/cupom-pendente' ? { CUPOM_PENDENTE_KEY: 'cupom-pendente' } : mocks[name]??(name.startsWith('@/components/ui/')?new Proxy({},{get:(_,key)=>String(key)}):name.startsWith('@/lib/utils/pedido')?{resolveSelectionsFromProduct:()=>[]}:native(name));
  const mod={exports:{}};
  new Function('require','module','exports','window','sessionStorage','fetch',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText)(req,mod,mod.exports,{location},storage,async()=>({ok:true,json:async()=>({})}));
  return mod.exports;
