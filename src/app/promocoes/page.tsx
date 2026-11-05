@@ -1,11 +1,6 @@
-import type { Metadata } from "next";
-import PaginaPromocoes from "@/components/paginas/PaginaPromocoes";
+import { permanentRedirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Promoções — SoftShake",
-  description: "Confira as promoções da semana no SoftShake.",
-};
-
+// A página de promoções foi removida: as ofertas ficam em destaque no cardápio.
 export default function Promocoes() {
-  return <PaginaPromocoes />;
+  permanentRedirect("/?categoria=ofertas-promocoes");
 }

@@ -52,3 +52,38 @@ export async function validarCupom(codigoEntrada: string, subtotal: number) {
     desconto: Math.round(desconto * 100) / 100,
   } satisfies CupomPublico;
 }
+
+export type CupomVitrine = {
+  codigo: string;
+  nome: string;
+  tipo: "percentual" | "valor_fixo";
+  valor: number;
+  valor_minimo: number;
+  data_fim: string | null;
+};
+
+/** Cupons ativos, dentro da validade e com usos disponíveis — para a vitrine do cliente. */
+export async function listarCuponsDisponiveis(): Promise<CupomVitrine[]> {
+  const hoje = getSaoPauloDateTime().date;
+  const { data, error } = await createServiceRoleClient()
+    .from("cupons")
+    .select("codigo, nome, tipo, valor, valor_minimo, limite_usos, usos, data_inicio, data_fim")
+    .eq("ativo", true)
+    .lte("data_inicio", hoje)
+    .or(`data_fim.is.null,data_fim.gte.${hoje}`)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error("Não foi possível carregar os cupons agora.");
+
+  return (data ?? [])
+    .filter((cupom) => cupom.limite_usos == null || cupom.usos < cupom.limite_usos)
+    .map((cupom) => ({
+      codigo: cupom.codigo,
+      nome: cupom.nome,
+      tipo: cupom.tipo as CupomVitrine["tipo"],
+      valor: Number(cupom.valor),
+      valor_minimo: Number(cupom.valor_minimo),
+      data_fim: cupom.data_fim,
+    }));
+}

@@ -16,7 +16,7 @@ export function RouteConditionalLayout({
   const showStoreNavigation = !isAdminRoute && !isStandaloneAuth;
 
   return (
-    <div className={`min-h-screen bg-background ${showStoreNavigation ? "pb-20 md:pb-0" : ""}`}>
+    <div className={`min-h-screen bg-background ${showStoreNavigation ? "pb-[calc(6rem+env(safe-area-inset-bottom,0px))] md:pb-0" : ""}`}>
       {showStoreNavigation && <Header />}
       {children}
       {showStoreNavigation && (

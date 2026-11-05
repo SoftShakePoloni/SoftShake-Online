@@ -33,7 +33,6 @@ async function notifyCatalogChanged() {
   try {
     revalidateTag("public-catalog");
     revalidatePath("/");
-    revalidatePath("/promocoes");
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) return;

@@ -39,7 +39,7 @@ export function BarraSacola() {
   return (
     <>
       {!open && (
-        <div className="fixed bottom-16 inset-x-0 z-[60] px-4 pb-2 md:bottom-4 md:z-50">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] inset-x-0 z-[60] px-4 pb-2 md:bottom-4 md:z-50">
           {lojaConfirmada ? (
             <button
               onClick={handleOpen}

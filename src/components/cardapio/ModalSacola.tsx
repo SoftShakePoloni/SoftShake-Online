@@ -3,7 +3,7 @@ import { invalidateCustomerResources } from "@/lib/customer-resource";
 
 import { useMenu } from "@/hooks/useCardapio";
 
-import { ShoppingBag, Trash2, X, Clock, ChevronRight, User, Phone, MapPin, CreditCard, Banknote, Home, Truck } from "lucide-react";
+import { ShoppingBag, Trash2, X, Clock, ChevronRight, User, Phone, MapPin, CreditCard, Banknote, Store, Truck } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +18,7 @@ import { customerAddresses } from "@/lib/enderecos-cliente";
 import type { Endereco } from "@/types/endereco";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { CUPOM_PENDENTE_KEY } from "@/lib/cupom-pendente";
 
 type Props = {
   open: boolean;
@@ -84,7 +85,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     return () => { active = false; };
   }, [subtotal, cupomAplicado?.codigo, open, setCupomAplicado]);
 
-  const aplicarCupom = async () => {
+  const aplicarCupom = async (codigo: string = codigoCupom) => {
     const request = ++cupomRequest.current;
     setValidandoCupom(true);
     setErroCupom("");
@@ -92,7 +93,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       const resposta = await fetch("/api/cupons/validar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigo: codigoCupom, subtotal }),
+        body: JSON.stringify({ codigo, subtotal }),
       });
       const dados = await resposta.json();
       if (request !== cupomRequest.current) return;
@@ -107,6 +108,23 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       if (request === cupomRequest.current) setValidandoCupom(false);
     }
   };
+
+  // Cupom escolhido na página /cupons com a sacola vazia: aplica ao abrir a sacola.
+  const aplicarCupomRef = useRef(aplicarCupom);
+  aplicarCupomRef.current = aplicarCupom;
+  useEffect(() => {
+    if (!open || itens.length === 0 || cupomAplicado) return;
+    let pendente: string | null = null;
+    try {
+      pendente = sessionStorage.getItem(CUPOM_PENDENTE_KEY);
+      sessionStorage.removeItem(CUPOM_PENDENTE_KEY);
+    } catch {
+      return;
+    }
+    if (!pendente) return;
+    setCodigoCupom(pendente);
+    void aplicarCupomRef.current(pendente);
+  }, [open, itens.length, cupomAplicado]);
 
   const removerCupom = () => {
     cupomRequest.current++;
@@ -148,10 +166,13 @@ export function ModalSacola({ open, onOpenChange }: Props) {
         if (!resumeChecked.current) { resumeChecked.current = true; void refreshLoja(); return; }
         sessionStorage.removeItem('reopenCart');
         sessionStorage.removeItem('cartStep');
-        
+        const savedTipo = sessionStorage.getItem('cartTipoEntrega');
+        sessionStorage.removeItem('cartTipoEntrega');
+
         // Pequeno delay para garantir que o contexto está pronto
         setTimeout(() => {
           onOpenChange(true);
+          if (savedTipo === 'retirada') setTipoEntrega('retirada');
           if (savedStep === 'info') {
             setStep('info');
           }
@@ -211,6 +232,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const adicionarEndereco = () => {
     sessionStorage.setItem('reopenCart', 'true');
     sessionStorage.setItem('cartStep', 'info');
+    sessionStorage.setItem('cartTipoEntrega', tipoEntrega);
     window.location.href = '/perfil/enderecos/novo';
   };
 
@@ -352,7 +374,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               <span className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-primary" />
                 <span>
-                  Entrega em <span className="font-semibold text-foreground">{loja.tempo_entrega_min}–{loja.tempo_entrega_max} min</span>
+                  {tipoEntrega === 'retirada' ? 'Pronto para retirar em' : 'Entrega em'} <span className="font-semibold text-foreground">{loja.tempo_entrega_min}–{loja.tempo_entrega_max} min</span>
                 </span>
               </span>
               <ChevronRight className="h-4 w-4" />
@@ -434,7 +456,40 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                     })}
                   </ul>
 
-                  {/* Adicionar mais */}
+                  {/* Como receber o pedido */}
+                  <fieldset className="mx-5 mt-4 mb-3 rounded-xl border border-border bg-card p-3.5">
+                    <legend className="sr-only">Como você quer receber o pedido?</legend>
+                    <p aria-hidden="true" className="text-xs font-semibold">Como você quer receber?</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {([
+                        { valor: 'entrega', rotulo: 'Entrega', Icone: Truck },
+                        { valor: 'retirada', rotulo: 'Retirar no local', Icone: Store },
+                      ] as const).map(({ valor, rotulo, Icone }) => (
+                        <button
+                          key={valor}
+                          type="button"
+                          aria-pressed={tipoEntrega === valor}
+                          onClick={() => setTipoEntrega(valor)}
+                          className={`min-h-11 rounded-lg border-2 p-2.5 text-sm font-medium transition ${
+                            tipoEntrega === valor
+                              ? 'border-primary bg-primary/5 text-primary'
+                              : 'border-border hover:border-primary/50'
+                          }`}
+                        >
+                          <Icone className="mx-auto mb-1 h-5 w-5" />
+                          {rotulo}
+                        </button>
+                      ))}
+                    </div>
+                    {tipoEntrega === 'retirada' && (
+                      <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        <span>{loja?.endereco ? <>Retire em: <span className="font-medium text-foreground">{loja.endereco}</span></> : 'Você retira o pedido no estabelecimento, sem taxa de entrega.'}</span>
+                      </p>
+                    )}
+                  </fieldset>
+
+                  {/* Cupom */}
                   <div className="mx-5 mb-3 rounded-xl border border-border bg-card p-3.5">
                     <Label htmlFor="cupom-pedido" className="text-xs font-semibold">Cupom de desconto</Label>
                     {cupomAplicado ? (
@@ -506,6 +561,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                     onClick={() => {
                       sessionStorage.setItem('reopenCart', 'true');
                       sessionStorage.setItem('cartStep', 'info');
+    sessionStorage.setItem('cartTipoEntrega', tipoEntrega);
                       onOpenChange(false);
                       router.push('/entrar');
                     }}
@@ -517,6 +573,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                     onClick={() => {
                       sessionStorage.setItem('reopenCart', 'true');
                       sessionStorage.setItem('cartStep', 'info');
+    sessionStorage.setItem('cartTipoEntrega', tipoEntrega);
                       onOpenChange(false);
                       router.push('/cadastrar');
                     }}
@@ -555,39 +612,22 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                       />
                     </div>
 
-                    {/* Tipo de Entrega */}
-                    <div className="space-y-2">
-                      <Label className="flex items-center gap-2">
-                        <Truck className="h-4 w-4" />
-                        Tipo de Entrega
-                      </Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setTipoEntrega('entrega')}
-                          className={`p-3 rounded-lg border-2 transition text-sm font-medium ${
-                            tipoEntrega === 'entrega'
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-border hover:border-primary/50'
-                          }`}
-                        >
-                          <Truck className="h-5 w-5 mx-auto mb-1" />
-                          Entrega
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTipoEntrega('retirada')}
-                          className={`p-3 rounded-lg border-2 transition text-sm font-medium ${
-                            tipoEntrega === 'retirada'
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-border hover:border-primary/50'
-                          }`}
-                        >
-                          <Home className="h-5 w-5 mx-auto mb-1" />
-                          Retirada
-                        </button>
+                    {/* Retirada no local: mostra onde retirar */}
+                    {tipoEntrega === 'retirada' && (
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <Store className="h-4 w-4" />
+                          Retirar no local
+                        </Label>
+                        <div className="rounded-lg border-2 border-primary bg-primary/5 p-3 text-sm">
+                          <p className="font-semibold">{loja?.nome || 'Estabelecimento'}</p>
+                          {loja?.endereco && <p className="mt-1 text-xs text-muted-foreground">{loja.endereco}</p>}
+                          <button type="button" onClick={() => setTipoEntrega('entrega')} className="mt-2 min-h-9 text-xs font-medium text-primary underline">
+                            Prefiro receber em casa
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Endereço (apenas se entrega) */}
                     {tipoEntrega === 'entrega' && (
@@ -739,7 +779,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Tipo:</span>
-                      <span className="font-medium capitalize">{tipoEntrega}</span>
+                      <span className="font-medium">{tipoEntrega === 'retirada' ? 'Retirar no local' : 'Entrega'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Pagamento:</span>
