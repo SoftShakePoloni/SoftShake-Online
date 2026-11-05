@@ -18,7 +18,9 @@ import { customerAddresses } from "@/lib/enderecos-cliente";
 import type { Endereco } from "@/types/endereco";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { CUPOM_PENDENTE_KEY } from "@/lib/cupom-pendente";
+import { guardarCupomPendente, lerCupomPendente, limparCupomPendente } from "@/lib/cupom-pendente";
+
+const AVISO_AUTOMATICO = "Ele será aplicado automaticamente quando a sacola atingir esse valor.";
 
 type Props = {
   open: boolean;
@@ -55,34 +57,52 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const descontoCupom = cupomAplicado?.desconto ?? 0;
   const total = Math.max(0, subtotal - descontoCupom) + frete;
 
+  // Última combinação cupom+subtotal já confirmada pelo servidor (evita revalidar à toa).
+  const cupomValidado = useRef("");
+
   useEffect(() => {
     const code = cupomAplicado?.codigo;
     if (!code || !open) { setValidandoCupom(false); return; }
+    if (cupomValidado.current === `${code}:${subtotal}`) { setValidandoCupom(false); return; }
     const request = ++cupomRequest.current;
     setValidandoCupom(true);
     setErroCupom("");
     let active = true;
-    void fetch("/api/cupons/validar", {
+    // Espera o subtotal parar de mudar (ex.: remover vários itens) antes de revalidar.
+    const timer = window.setTimeout(() => void fetch("/api/cupons/validar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ codigo: code, subtotal }),
     }).then(async (resposta) => {
       const dados = await resposta.json();
       if (!active || request !== cupomRequest.current) return;
-      if (!resposta.ok) {
-        setCupomAplicado(null);
-        setCodigoCupom("");
-        setErroCupom(dados.erro || "O cupom não se aplica mais ao valor da sacola.");
+      if (resposta.status === 429) {
+        // Limite de tentativas: mantém o cupom; o pedido é validado de novo no servidor.
+        setErroCupom("Muitas tentativas seguidas. Aguarde alguns segundos para atualizar o desconto.");
         return;
       }
+      if (!resposta.ok) {
+        setCupomAplicado(null);
+        if (dados.codigo === "MINIMO") {
+          // Abaixo do mínimo: o cupom espera e volta sozinho quando o subtotal atingir o valor.
+          guardarCupomPendente(code);
+          setCodigoCupom(code);
+          setErroCupom(`${dados.erro} ${AVISO_AUTOMATICO}`);
+        } else {
+          setCodigoCupom("");
+          setErroCupom(dados.erro || "O cupom não se aplica mais ao valor da sacola.");
+        }
+        return;
+      }
+      cupomValidado.current = `${dados.cupom.codigo}:${subtotal}`;
       setCupomAplicado(dados.cupom);
     }).catch(() => {
+      // Falha de rede: mantém o cupom e avisa; o servidor confere tudo ao finalizar.
       if (active && request === cupomRequest.current) {
-        setErroCupom("Não foi possível atualizar o desconto. Tente aplicar o cupom novamente.");
-        setCupomAplicado(null);
+        setErroCupom("Não foi possível atualizar o desconto agora. Confira sua conexão.");
       }
-    }).finally(() => { if (active && request === cupomRequest.current) setValidandoCupom(false); });
-    return () => { active = false; };
+    }).finally(() => { if (active && request === cupomRequest.current) setValidandoCupom(false); }), 350);
+    return () => { active = false; window.clearTimeout(timer); };
   }, [subtotal, cupomAplicado?.codigo, open, setCupomAplicado]);
 
   const aplicarCupom = async (codigo: string = codigoCupom) => {
@@ -97,37 +117,49 @@ export function ModalSacola({ open, onOpenChange }: Props) {
       });
       const dados = await resposta.json();
       if (request !== cupomRequest.current) return;
-      if (!resposta.ok) throw new Error(dados.erro || "Não foi possível validar o cupom.");
+      if (resposta.status === 429) {
+        setErroCupom("Muitas tentativas seguidas. Aguarde alguns segundos e tente de novo.");
+        return;
+      }
+      if (!resposta.ok) {
+        setCupomAplicado(null);
+        if (dados.codigo === "MINIMO") {
+          guardarCupomPendente(codigo.trim().toUpperCase());
+          setErroCupom(`${dados.erro} ${AVISO_AUTOMATICO}`);
+        } else {
+          limparCupomPendente();
+          setErroCupom(dados.erro || "Não foi possível validar o cupom.");
+        }
+        return;
+      }
+      limparCupomPendente();
+      cupomValidado.current = `${dados.cupom.codigo}:${subtotal}`;
       setCupomAplicado(dados.cupom);
       setCodigoCupom(dados.cupom.codigo);
-    } catch (error) {
+    } catch {
       if (request !== cupomRequest.current) return;
       setCupomAplicado(null);
-      setErroCupom(error instanceof Error ? error.message : "Cupom inválido.");
+      setErroCupom("Não foi possível validar o cupom. Tente novamente.");
     } finally {
       if (request === cupomRequest.current) setValidandoCupom(false);
     }
   };
 
-  // Cupom escolhido na página /cupons com a sacola vazia: aplica ao abrir a sacola.
+  // Cupom em espera (escolhido em /cupons ou abaixo do mínimo): tenta de novo ao abrir
+  // a sacola e sempre que o subtotal muda, até ser aplicado ou recusado por outro motivo.
   const aplicarCupomRef = useRef(aplicarCupom);
   aplicarCupomRef.current = aplicarCupom;
   useEffect(() => {
     if (!open || itens.length === 0 || cupomAplicado) return;
-    let pendente: string | null = null;
-    try {
-      pendente = sessionStorage.getItem(CUPOM_PENDENTE_KEY);
-      sessionStorage.removeItem(CUPOM_PENDENTE_KEY);
-    } catch {
-      return;
-    }
+    const pendente = lerCupomPendente();
     if (!pendente) return;
     setCodigoCupom(pendente);
     void aplicarCupomRef.current(pendente);
-  }, [open, itens.length, cupomAplicado]);
+  }, [open, itens.length, subtotal, cupomAplicado]);
 
   const removerCupom = () => {
     cupomRequest.current++;
+    limparCupomPendente();
     setValidandoCupom(false);
     setCupomAplicado(null);
     setCodigoCupom("");

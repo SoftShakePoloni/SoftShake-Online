@@ -64,6 +64,11 @@ export const RATE_LIMITS = {
   eventosUsuario: { bucket: "api:order-events:owner", limit: 30, windowSec: 60 },
   apiStrict: { bucket: "api:strict", limit: 30, windowSec: 60 },
   checkout: { bucket: "api:checkout", limit: 10, windowSec: 60 },
+  /** Leituras públicas e cacheadas do cardápio/loja (opções do produto, loja, contagens).
+   *  Separado de apiStrict para a navegação normal não esgotar a cota e travar "adicionar à sacola". */
+  catalogo: { bucket: "api:catalog", limit: 120, windowSec: 60 },
+  /** Validação de cupom: própria cota, para não consumir a de criar pedido (checkout). */
+  cupom: { bucket: "api:coupon", limit: 30, windowSec: 60 },
   imagem: { bucket: "api:imagem", limit: 600, windowSec: 60 },
   admin: { bucket: "api:admin", limit: 100, windowSec: 60 },
   search: { bucket: "api:search", limit: 40, windowSec: 60 },

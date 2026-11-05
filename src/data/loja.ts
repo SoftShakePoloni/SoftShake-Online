@@ -7,7 +7,7 @@ async function readData() {
   const { data, error } = await createServerClient()
     .from("configuracoes_loja")
     .select(
-      "id,nome,logo_url,banner_url,cidade,estado,horario_abertura,taxa_entrega,tempo_entrega_min,tempo_entrega_max,esta_aberto",
+      "id,nome,logo_url,banner_url,endereco,cidade,estado,horario_abertura,taxa_entrega,pedido_minimo,tempo_entrega_min,tempo_entrega_max,esta_aberto",
     )
     .limit(1)
     .maybeSingle();
@@ -21,3 +21,17 @@ async function readData() {
 }
 
 export function fetchLojaResumo() { return publicRead("store", readData); }
+
+/** Campos públicos extras da loja (mesmos de /api/loja/detalhes). */
+export const CAMPOS_DETALHES_LOJA =
+  "descricao,endereco,telefone,whatsapp,instagram,facebook,horario_fechamento,dias_funcionamento,pedido_minimo";
+
+export async function fetchLojaDetalhes() {
+  const { data, error } = await createServerClient()
+    .from("configuracoes_loja")
+    .select(CAMPOS_DETALHES_LOJA)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}

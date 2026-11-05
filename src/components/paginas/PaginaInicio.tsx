@@ -43,6 +43,7 @@ export default function PaginaInicio() {
     null
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [buscando, setBuscando] = useState(false);
   const searchRef = useRef(searchQuery);
   searchRef.current = searchQuery;
   useEffect(() => {
@@ -56,6 +57,11 @@ export default function PaginaInicio() {
     window.addEventListener("popstate", restore);
     return () => window.removeEventListener("popstate", restore);
   }, []);
+
+  // Busca restaurada pelo histórico mantém o campo aberto.
+  useEffect(() => {
+    if (searchQuery) setBuscando(true);
+  }, [searchQuery]);
 
   useEffect(() => {
     history.replaceState({ ...history.state, softshakeMenu: { ...history.state?.softshakeMenu, search: searchQuery } }, "", location.href);
@@ -116,16 +122,14 @@ export default function PaginaInicio() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 lg:px-6">
-      <main className="space-y-8">
+    <div className="mx-auto max-w-6xl px-4 py-4 lg:px-6">
+      <main className="space-y-5">
         <h1 className="sr-only">SoftShake — Cardápio</h1>
-        <StoreHero />
+        <StoreHero busca={{ buscando, onBuscandoChange: setBuscando, searchQuery, onSearchChange: setSearchQuery }} />
         <CategoryBar
           categories={orderedCategories}
           selectedCategoryId={selectedCategoryId}
-          searchQuery={searchQuery}
           onSelectCategory={handleSelectCategory}
-          onSearchChange={setSearchQuery}
         />
         {isLoading && (
           <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">

@@ -38,12 +38,15 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const lojaAberta = isLoading ? true : Boolean(loja?.esta_aberto);
   const [loadedOptionGroups, setLoadedOptionGroups] = useState<OptionGroup[] | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
+  // Falha ao buscar opções: bloqueia "Adicionar" (senão iria sem os complementos) e oferece tentar de novo.
+  const [optionsError, setOptionsError] = useState(false);
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
   const groups = loadedOptionGroups ?? product?.optionGroups ?? [notesOptionGroup];
 
   const productId = product?.id;
   const needsOptions = Boolean(product && !product.comboId && /^\d+$/.test(product.id) && !(product.optionGroups ?? []).some(group => group.id !== "obs"));
   useEffect(() => {
-    setLoadedOptionGroups(null); setOptionsLoading(false);
+    setLoadedOptionGroups(null); setOptionsLoading(false); setOptionsError(false);
     if (!open || !productId || !needsOptions) return;
     let controller: AbortController | undefined;
     const load = (force = false) => {
@@ -53,7 +56,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
       }
       controller?.abort(); controller = new AbortController();
       const signal = controller.signal, version = getCatalogVersion();
-      setOptionsLoading(true);
+      setOptionsLoading(true); setOptionsError(false);
       void fetch("/api/cardapio/produto/" + productId + "/opcoes", { cache: "no-store", signal })
         .then(async response => { if (!response.ok) throw new Error("Não foi possível carregar as opções do produto."); return response.json() as Promise<{ optionGroups: OptionGroup[] }>; })
         .then(data => {
@@ -62,13 +65,13 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
           optionCache.set(productId, { at: Date.now(), version, groups: data.optionGroups });
           setLoadedOptionGroups(data.optionGroups);
         })
-        .catch((error: unknown) => { if (!signal.aborted) toast.error(error instanceof Error ? error.message : "Falha ao carregar opções."); })
+        .catch((error: unknown) => { if (!signal.aborted) { setOptionsError(true); toast.error(error instanceof Error ? error.message : "Falha ao carregar opções."); } })
         .finally(() => { if (!signal.aborted) setOptionsLoading(false); });
     };
     load();
     const unsubscribe = subscribeCatalogUpdates(reason => { if (reason !== "initial") load(true); });
     return () => { controller?.abort(); unsubscribe(); };
-  }, [open, productId, needsOptions]);
+  }, [open, productId, needsOptions, optionsAttempt]);
 
   // Fecha ao trocar de aba na bottom nav
   useEffect(() => {
@@ -178,7 +181,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   if (product.comboOptionsMode === "cliente") {
     try { resolveComboChoices(groups.filter(group => group.id !== "obs"), selections); } catch { comboValid = false; }
   }
-  const canAdd = comboValid && !optionsLoading && product.disponivel !== false && groups.every((g) => {
+  const canAdd = comboValid && !optionsLoading && !optionsError && product.disponivel !== false && groups.every((g) => {
     if (!g.required) return true;
     const count = (selections[g.id] ?? []).length;
     return count >= (g.min ?? 1);
@@ -489,6 +492,15 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
               <Plus className="h-4 w-4" />
             </button>
           </div>
+          {optionsError ? (
+          <button
+            type="button"
+            onClick={() => setOptionsAttempt((n) => n + 1)}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary transition hover:bg-primary/5"
+          >
+            Não carregou as opções · Tentar novamente
+          </button>
+          ) : (
           <button
             type="button"
             disabled={!canAdd || !lojaAberta}
@@ -498,6 +510,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
             <span>{lojaAberta ? "Adicionar" : "Loja fechada"}</span>
             <span>{formatBRL(total)}</span>
           </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
