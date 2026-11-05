@@ -12,7 +12,7 @@ const helperForGroup = (min: number, max: number) => {
 };
 
 export const GET = withApiGuard(
-  { methods: ["GET"], rateLimit: RATE_LIMITS.apiStrict, checkOrigin: false },
+  { methods: ["GET"], rateLimit: RATE_LIMITS.catalogo, checkOrigin: false },
   async (request: NextRequest) => {
     const rawId = request.nextUrl.pathname.split("/").at(-2);
     const productId = Number(rawId);

@@ -27,6 +27,8 @@ const SECURITY_HEADERS: Record<string, string> = {
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in wss://*.supabase.in",
+      // Mapa da página /loja (Google Maps embed, sem chave de API).
+      "frame-src https://www.google.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

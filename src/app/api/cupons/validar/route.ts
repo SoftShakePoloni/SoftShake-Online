@@ -3,7 +3,7 @@ import { z } from "zod";
 import { withApiGuard } from "@/lib/security/with-api-guard";
 import { RATE_LIMITS } from "@/lib/security/rate-limit";
 import { apiError, apiOk, apiValidation } from "@/lib/security/api-response";
-import { validarCupom } from "@/lib/cupons";
+import { CupomErro, validarCupom } from "@/lib/cupons";
 
 const schema = z.object({
   codigo: z.string().min(3).max(32),
@@ -11,7 +11,7 @@ const schema = z.object({
 });
 
 export const POST = withApiGuard(
-  { methods: ["POST"], rateLimit: RATE_LIMITS.checkout, checkOrigin: true },
+  { methods: ["POST"], rateLimit: RATE_LIMITS.cupom, checkOrigin: true },
   async (request: NextRequest) => {
     let body: unknown;
     try {
@@ -26,7 +26,11 @@ export const POST = withApiGuard(
       const cupom = await validarCupom(parsed.data.codigo, parsed.data.subtotal);
       return apiOk({ cupom });
     } catch (error) {
-      return apiError(error instanceof Error ? error.message : "Não foi possível validar o cupom.", 400);
+      return apiError(
+        error instanceof Error ? error.message : "Não foi possível validar o cupom.",
+        400,
+        error instanceof CupomErro ? { codigo: error.codigo } : undefined,
+      );
     }
   }
 );

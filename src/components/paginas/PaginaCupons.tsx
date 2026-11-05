@@ -9,7 +9,7 @@ import { formatBRL } from "@/data/tipos";
 import { cn } from "@/lib/utils";
 import type { CupomVitrine } from "@/lib/cupons";
 
-import { CUPOM_PENDENTE_KEY } from "@/lib/cupom-pendente";
+import { guardarCupomPendente, limparCupomPendente } from "@/lib/cupom-pendente";
 
 function formatarData(iso: string) {
   const [ano, mes, dia] = iso.split("-");
@@ -92,7 +92,10 @@ function CartaoCupom({ cupom }: { cupom: CupomVitrine }) {
   const [copiado, setCopiado] = useState(false);
   const [detalhes, setDetalhes] = useState(false);
   const [aplicando, setAplicando] = useState(false);
-  const aplicado = cupomAplicado?.codigo === cupom.codigo;
+  // Pode esgotar enquanto a página está aberta (outro cliente usou o último).
+  const [esgotouAgora, setEsgotouAgora] = useState(false);
+  const esgotado = cupom.esgotado || esgotouAgora;
+  const aplicado = !esgotado && cupomAplicado?.codigo === cupom.codigo;
   const detalhesId = `cupom-detalhes-${cupom.codigo}`;
 
   const copiar = async () => {
@@ -121,13 +124,9 @@ function CartaoCupom({ cupom }: { cupom: CupomVitrine }) {
   };
 
   const aplicar = async () => {
-    if (aplicado) return;
+    if (aplicado || esgotado) return;
     if (itens.length === 0) {
-      try {
-        sessionStorage.setItem(CUPOM_PENDENTE_KEY, cupom.codigo);
-      } catch {
-        // sem storage: o cliente ainda pode digitar o código na sacola
-      }
+      guardarCupomPendente(cupom.codigo);
       toast.success(`Cupom ${cupom.codigo} guardado!`, {
         description: "Escolha seus itens — ele será aplicado ao abrir a sacola.",
       });
@@ -143,7 +142,17 @@ function CartaoCupom({ cupom }: { cupom: CupomVitrine }) {
         body: JSON.stringify({ codigo: cupom.codigo, subtotal }),
       });
       const dados = await resposta.json();
-      if (!resposta.ok) throw new Error(dados.erro || "Não foi possível aplicar o cupom.");
+      if (!resposta.ok) {
+        if (dados.codigo === "MINIMO") {
+          // Fica guardado: a sacola aplica sozinha quando atingir o pedido mínimo.
+          guardarCupomPendente(cupom.codigo);
+          toast.info(dados.erro, { description: "Ele será aplicado automaticamente quando a sacola atingir esse valor." });
+          return;
+        }
+        if (dados.codigo === "ESGOTADO") setEsgotouAgora(true);
+        throw new Error(dados.erro || "Não foi possível aplicar o cupom.");
+      }
+      limparCupomPendente();
       setCupomAplicado(dados.cupom);
       toast.success(`Cupom ${cupom.codigo} aplicado!`, {
         description: `Você economizou ${formatBRL(dados.cupom.desconto)}. Abra a sacola para finalizar.`,
@@ -159,8 +168,8 @@ function CartaoCupom({ cupom }: { cupom: CupomVitrine }) {
     "flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground/80 transition hover:bg-muted active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="flex">
+    <article className={cn("overflow-hidden rounded-2xl border border-border bg-card shadow-sm", esgotado && "bg-muted/40")}>
+      <div className={cn("flex", esgotado && "opacity-60 grayscale")}>
         {/* Lado do desconto */}
         <div className="relative flex w-[38%] shrink-0 flex-col items-center justify-center bg-primary/[0.07] px-2 py-5 text-center">
           <span className="text-2xl font-extrabold leading-none tracking-tight text-primary">{rotuloDesconto(cupom)}</span>
@@ -173,7 +182,14 @@ function CartaoCupom({ cupom }: { cupom: CupomVitrine }) {
 
         {/* Lado das ações */}
         <div className="min-w-0 flex-1 p-3.5">
-          <p className="truncate text-sm font-bold uppercase tracking-wide text-foreground">{cupom.codigo}</p>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-bold uppercase tracking-wide text-foreground">{cupom.codigo}</p>
+            {esgotado && (
+              <span className="shrink-0 rounded-full bg-foreground/80 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-background">
+                Esgotado
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {cupom.data_fim ? `Válido até ${formatarData(cupom.data_fim)}` : "Sem data de validade"}
           </p>
@@ -200,15 +216,17 @@ function CartaoCupom({ cupom }: { cupom: CupomVitrine }) {
           <button
             type="button"
             onClick={() => void aplicar()}
-            disabled={aplicando || aplicado}
+            disabled={aplicando || aplicado || esgotado}
             className={cn(
               "mt-3 min-h-11 w-full rounded-xl text-sm font-semibold shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed",
-              aplicado
-                ? "bg-primary/10 text-primary"
-                : "bg-primary text-primary-foreground hover:opacity-95 disabled:opacity-60",
+              esgotado
+                ? "bg-muted text-muted-foreground shadow-none"
+                : aplicado
+                  ? "bg-primary/10 text-primary"
+                  : "bg-primary text-primary-foreground hover:opacity-95 disabled:opacity-60",
             )}
           >
-            {aplicado ? "Aplicado na sacola" : aplicando ? "Aplicando…" : "Aplicar"}
+            {esgotado ? "Cupom esgotado" : aplicado ? "Aplicado na sacola" : aplicando ? "Aplicando…" : "Aplicar"}
           </button>
         </div>
       </div>
