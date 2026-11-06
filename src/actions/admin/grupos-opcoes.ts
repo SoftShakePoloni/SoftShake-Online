@@ -209,7 +209,7 @@ export async function createOpcaoInGrupo(input: {
           ? null
           : toId(input.tag_id),
     } as never)
-    .select("*, grupo:grupos_opcoes(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)")
+    .select("*, grupo:grupos_opcoes(id, nome), tag:tags(*)")
     .single();
 
   if (error || !data) {

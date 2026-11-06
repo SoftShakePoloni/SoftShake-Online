@@ -8,7 +8,21 @@ export type TagRow = {
   nome: string;
   cor_fundo: string;
   cor_texto: string | null;
+  /** Carrossel do topo do cardápio (no máximo uma tag). */
+  destaque_cardapio?: boolean;
+  /** Chave do ícone (TAG_ICONES); null = automático pelo nome. */
+  icone?: string | null;
 };
+
+const ICONE_RE = /^[a-z_]{1,32}$/;
+function sanitizeIcone(icone: string | null | undefined) {
+  return icone && ICONE_RE.test(icone) ? icone : null;
+}
+
+/** Erro de coluna inexistente (migration 0021 ainda não aplicada). */
+function semColunaIcone(error: { message?: string } | null) {
+  return Boolean(error?.message?.includes("icone"));
+}
 
 function toId(id: string | number): number {
   const n = typeof id === "string" ? parseInt(id, 10) : id;
@@ -33,7 +47,8 @@ export async function listTags(): Promise<TagRow[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("tags")
-    .select("id, nome, cor_fundo, cor_texto")
+    // "*" funciona antes e depois da migration 0021 (destaque_cardapio).
+    .select("*")
     .order("nome", { ascending: true });
 
   if (error) {
@@ -47,6 +62,7 @@ export async function createTag(input: {
   nome: string;
   cor_fundo?: string;
   cor_texto?: string | null;
+  icone?: string | null;
 }): Promise<TagRow> {
   await requirePermission("catalogo:write");
   const supabase = createServiceRoleClient();
@@ -56,7 +72,7 @@ export async function createTag(input: {
   // evita duplicata por nome (case-insensitive)
   const { data: existing } = await supabase
     .from("tags")
-    .select("id, nome, cor_fundo, cor_texto")
+    .select("*")
     .ilike("nome", nome)
     .limit(1)
     .maybeSingle();
@@ -66,16 +82,26 @@ export async function createTag(input: {
   }
 
   const id = await getNextTagId(supabase);
-  const { data, error } = await supabase
+  const row = {
+    id,
+    nome,
+    cor_fundo: input.cor_fundo?.trim() || "#F3EEFA",
+    cor_texto: input.cor_texto?.trim() || "#4C258C",
+  };
+  const icone = sanitizeIcone(input.icone);
+  let { data, error } = await supabase
     .from("tags")
-    .insert({
-      id,
-      nome,
-      cor_fundo: input.cor_fundo?.trim() || "#F3EEFA",
-      cor_texto: input.cor_texto?.trim() || "#4C258C",
-    } as never)
-    .select("id, nome, cor_fundo, cor_texto")
+    .insert((icone ? { ...row, icone } : row) as never)
+    .select("*")
     .single();
+  // Antes da migration 0021 a coluna "icone" não existe: salva sem ela.
+  if (icone && semColunaIcone(error)) {
+    ({ data, error } = await supabase
+      .from("tags")
+      .insert(row as never)
+      .select("*")
+      .single());
+  }
 
   if (error || !data) {
     console.error("createTag", error);
@@ -90,6 +116,7 @@ export async function updateTag(
     nome?: string;
     cor_fundo?: string;
     cor_texto?: string | null;
+    icone?: string | null;
   }
 ): Promise<TagRow> {
   await requirePermission("catalogo:write");
@@ -98,6 +125,7 @@ export async function updateTag(
   if (updates.nome !== undefined) payload.nome = updates.nome.trim();
   if (updates.cor_fundo !== undefined) payload.cor_fundo = updates.cor_fundo;
   if (updates.cor_texto !== undefined) payload.cor_texto = updates.cor_texto;
+  if (updates.icone !== undefined) payload.icone = sanitizeIcone(updates.icone);
 
   if (Object.keys(payload).length === 0) {
     throw new Error("Nenhum campo para atualizar");
@@ -107,9 +135,12 @@ export async function updateTag(
     .from("tags")
     .update(payload as never)
     .eq("id", toId(id))
-    .select("id, nome, cor_fundo, cor_texto")
+    .select("*")
     .maybeSingle();
 
+  if (semColunaIcone(error)) {
+    throw new Error("Aplique a migration 0021 para escolher o ícone da tag");
+  }
   if (error || !data) {
     throw new Error("Não foi possível atualizar a tag");
   }
@@ -130,6 +161,38 @@ export async function deleteTag(id: string | number) {
   const { error } = await supabase.from("tags").delete().eq("id", tagId);
   if (error) {
     throw new Error("Não foi possível excluir a tag");
+  }
+  return { success: true };
+}
+
+/**
+ * Escolhe a tag que vira o carrossel do topo do cardápio. Só uma por vez:
+ * desmarca as demais antes de marcar a nova. `null` remove o destaque.
+ */
+export async function setTagDestaque(id: string | number | null) {
+  await requirePermission("catalogo:write");
+  const supabase = createServiceRoleClient();
+  const tagId = id == null ? null : toId(id);
+
+  const clear = await supabase
+    .from("tags")
+    .update({ destaque_cardapio: false } as never)
+    .eq("destaque_cardapio", true);
+  if (clear.error) {
+    console.error("setTagDestaque", clear.error);
+    throw new Error(
+      "Não foi possível alterar o destaque. A migration 0021 já foi aplicada?",
+    );
+  }
+  if (tagId == null) return { success: true };
+
+  const { error } = await supabase
+    .from("tags")
+    .update({ destaque_cardapio: true } as never)
+    .eq("id", tagId);
+  if (error) {
+    console.error("setTagDestaque", error);
+    throw new Error("Não foi possível marcar o destaque");
   }
   return { success: true };
 }

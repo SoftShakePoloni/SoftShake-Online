@@ -38,7 +38,7 @@ export const GET = withApiGuard(
         ...(options ?? []).map((option) => option.tag_id),
       ].filter((tagId): tagId is number => tagId != null))];
       const { data: tags, error: tagsError } = tagIds.length
-        ? await supabase.from("tags").select("id,nome,cor_fundo,cor_texto").in("id", tagIds)
+        ? await supabase.from("tags").select("*").in("id", tagIds)
         : { data: [], error: null };
       if (tagsError) throw tagsError;
       const tagById = new Map<number, Tag>((tags ?? []).map((tag) => [tag.id, tag as Tag]));

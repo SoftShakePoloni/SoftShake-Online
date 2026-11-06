@@ -54,7 +54,8 @@ async function readData() {
       .select("produto_id, data_inicio, data_fim, hora_inicio, hora_fim")
       .eq("ativa", true)
       .gte("data_fim", agoraBrasil.date),
-    supabase.from("tags").select("id, nome, cor_fundo, cor_texto"),
+    // "*" mantém o cardápio funcionando antes da migration 0021 (destaque_cardapio).
+    supabase.from("tags").select("*"),
   ]);
   const { data: categorias, error: catError } = categoriesResult;
   const { data: produtos, error: prodError } = productsResult;
@@ -114,7 +115,21 @@ async function readData() {
   );
   const tags = tagsResult.data;
   const tagsMap = new Map<number, Tag>(
-    (tags ?? []).map((t) => [t.id, t as Tag]),
+    (tags ?? []).map((t) => [
+      t.id,
+      {
+        id: t.id,
+        nome: t.nome,
+        cor_fundo: t.cor_fundo,
+        cor_texto: t.cor_texto ?? "",
+        ...((t as { destaque_cardapio?: boolean }).destaque_cardapio
+          ? { destaque: true }
+          : {}),
+        ...((t as { icone?: string | null }).icone
+          ? { icone: (t as { icone: string }).icone }
+          : {}),
+      } satisfies Tag,
+    ]),
   );
 
   const menuCategories = (categorias ?? []).map((cat) => {
@@ -275,7 +290,7 @@ async function readData() {
 
 const cachedMenu = unstable_cache(
   readData,
-  ["public-menu-v3", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""],
+  ["public-menu-v4", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""],
   { tags: ["public-catalog"], revalidate: 120 },
 );
 export function fetchMenuSnapshot() {

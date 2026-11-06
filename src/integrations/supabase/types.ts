@@ -498,18 +498,24 @@ export type Database = {
         Row: {
           cor_fundo: string
           cor_texto: string | null
+          destaque_cardapio: boolean
+          icone: string | null
           id: number
           nome: string
         }
         Insert: {
           cor_fundo: string
           cor_texto?: string | null
+          destaque_cardapio?: boolean
+          icone?: string | null
           id?: number
           nome: string
         }
         Update: {
           cor_fundo?: string
           cor_texto?: string | null
+          destaque_cardapio?: boolean
+          icone?: string | null
           id?: number
           nome?: string
         }

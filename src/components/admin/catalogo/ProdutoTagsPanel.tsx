@@ -1,39 +1,144 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Plus, Tag, Trash2, Check } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, Plus, Tag, Trash2, Check, Wand2 } from "lucide-react";
 import {
   listTags,
   createTag,
   deleteTag,
+  updateTag,
   type TagRow,
 } from "@/actions/admin/tags";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  TAG_ICONES,
+  TAG_ICONE_KEYS,
+  TagIcone,
+  resolverTagIcone,
+  type TagIconeKey,
+} from "@/components/ui/TagIcone";
 import { cn } from "@/lib/utils";
 
-/** Atalhos alinhados às tags já usadas na SoftShake (tabela `tags`). */
-const PRESETS: { nome: string; cor_fundo: string; cor_texto: string }[] = [
-  { nome: "Mais Pedido", cor_fundo: "#EF4444", cor_texto: "#FFFFFF" },
-  { nome: "10% Cashback", cor_fundo: "#DCFCE7", cor_texto: "#15803D" },
-  { nome: "Premium", cor_fundo: "#F59E0B", cor_texto: "#000000" },
-  { nome: "Novidade", cor_fundo: "#7F00FF", cor_texto: "#000000" },
-  { nome: "Promoção", cor_fundo: "#FFEDD5", cor_texto: "#C2410C" },
-  { nome: "Recomendado", cor_fundo: "#F3EEFA", cor_texto: "#4C258C" },
+type Sugestao = {
+  nome: string;
+  cor_fundo: string;
+  cor_texto: string;
+  icone: TagIconeKey;
+};
+
+/** Sugestões ao criar tag: nome, cores e ícone prontos. */
+const SUGESTOES: Sugestao[] = [
+  { nome: "Mais vendidos", cor_fundo: "#EF4444", cor_texto: "#FFFFFF", icone: "mais_vendido" },
+  { nome: "Promoção", cor_fundo: "#EF4444", cor_texto: "#FFFFFF", icone: "promocao" },
+  { nome: "Ofertas da casa", cor_fundo: "#F97316", cor_texto: "#FFFFFF", icone: "oferta" },
+  { nome: "Mais pedido", cor_fundo: "#DC2626", cor_texto: "#FFFFFF", icone: "mais_pedido" },
+  { nome: "Novidade", cor_fundo: "#7C3AED", cor_texto: "#FFFFFF", icone: "novidade" },
+  { nome: "Favoritas da casa", cor_fundo: "#E11D48", cor_texto: "#FFFFFF", icone: "favorito" },
+  { nome: "Premium", cor_fundo: "#F59E0B", cor_texto: "#000000", icone: "premium" },
+  { nome: "Recomendado", cor_fundo: "#4C258C", cor_texto: "#FFFFFF", icone: "recomendado" },
+  { nome: "Escolha do chef", cor_fundo: "#111827", cor_texto: "#FFFFFF", icone: "chef" },
+  { nome: "Por tempo limitado", cor_fundo: "#0284C7", cor_texto: "#FFFFFF", icone: "limitado" },
+  { nome: "Oferta relâmpago", cor_fundo: "#FACC15", cor_texto: "#000000", icone: "rapido" },
+  { nome: "10% Cashback", cor_fundo: "#16A34A", cor_texto: "#FFFFFF", icone: "cashback" },
+  { nome: "Frete grátis", cor_fundo: "#059669", cor_texto: "#FFFFFF", icone: "frete" },
+  { nome: "Combo da galera", cor_fundo: "#EA580C", cor_texto: "#FFFFFF", icone: "combo" },
+  { nome: "Ganhe um brinde", cor_fundo: "#DB2777", cor_texto: "#FFFFFF", icone: "presente" },
+  { nome: "Vegano", cor_fundo: "#15803D", cor_texto: "#FFFFFF", icone: "vegano" },
+  { nome: "Saudável", cor_fundo: "#65A30D", cor_texto: "#FFFFFF", icone: "saudavel" },
+  { nome: "Fit", cor_fundo: "#0891B2", cor_texto: "#FFFFFF", icone: "fit" },
+  { nome: "Sem lactose", cor_fundo: "#2563EB", cor_texto: "#FFFFFF", icone: "sem_lactose" },
+  { nome: "Sem glúten", cor_fundo: "#A16207", cor_texto: "#FFFFFF", icone: "sem_gluten" },
+  { nome: "Kids", cor_fundo: "#EC4899", cor_texto: "#FFFFFF", icone: "kids" },
+  { nome: "Gelado", cor_fundo: "#38BDF8", cor_texto: "#000000", icone: "gelado" },
+  { nome: "Shake da semana", cor_fundo: "#A855F7", cor_texto: "#FFFFFF", icone: "sorvete" },
+  { nome: "Destaque", cor_fundo: "#4C258C", cor_texto: "#FFFFFF", icone: "destaque" },
 ];
 
 const COLOR_SWATCHES = [
   { cor_fundo: "#EF4444", cor_texto: "#FFFFFF" },
+  { cor_fundo: "#F97316", cor_texto: "#FFFFFF" },
   { cor_fundo: "#F59E0B", cor_texto: "#000000" },
-  { cor_fundo: "#7F00FF", cor_texto: "#000000" },
+  { cor_fundo: "#16A34A", cor_texto: "#FFFFFF" },
+  { cor_fundo: "#0284C7", cor_texto: "#FFFFFF" },
+  { cor_fundo: "#7C3AED", cor_texto: "#FFFFFF" },
+  { cor_fundo: "#4C258C", cor_texto: "#FFFFFF" },
+  { cor_fundo: "#E11D48", cor_texto: "#FFFFFF" },
+  { cor_fundo: "#111827", cor_texto: "#FFFFFF" },
   { cor_fundo: "#F3EEFA", cor_texto: "#4C258C" },
   { cor_fundo: "#FEF3C7", cor_texto: "#B45309" },
-  { cor_fundo: "#DBEAFE", cor_texto: "#1D4ED8" },
-  { cor_fundo: "#D1FAE5", cor_texto: "#047857" },
   { cor_fundo: "#F3F4F6", cor_texto: "#374151" },
 ];
+
+function normalizar(texto: string) {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/** Grade de ícones; `null` = automático pelo nome. */
+function IconePicker({
+  nome,
+  value,
+  onChange,
+  cor,
+  corSimbolo,
+  disabled,
+}: {
+  nome: string;
+  value: TagIconeKey | null;
+  onChange: (icone: TagIconeKey | null) => void;
+  cor: string;
+  corSimbolo: string;
+  disabled?: boolean;
+}) {
+  const auto = resolverTagIcone(nome);
+  return (
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Ícone da tag">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={value == null}
+        disabled={disabled}
+        title={`Automático pelo nome (${TAG_ICONES[auto].label})`}
+        onClick={() => onChange(null)}
+        className={cn(
+          "inline-flex h-9 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold transition-colors",
+          value == null
+            ? "border-[#4C258C] bg-[#F3EEFA] text-[#4C258C]"
+            : "border-[#E5E7EB] bg-white text-[#6B7280] hover:border-[#D4C4F0]",
+        )}
+      >
+        <Wand2 className="h-3.5 w-3.5" />
+        Auto
+      </button>
+      {TAG_ICONE_KEYS.map((key) => (
+        <button
+          key={key}
+          type="button"
+          role="radio"
+          aria-checked={value === key}
+          aria-label={TAG_ICONES[key].label}
+          title={TAG_ICONES[key].label}
+          disabled={disabled}
+          onClick={() => onChange(key)}
+          className={cn(
+            "flex h-9 w-9 items-center justify-center rounded-lg border transition-colors",
+            value === key
+              ? "border-[#4C258C] bg-[#F3EEFA] ring-2 ring-[#4C258C]/20"
+              : "border-[#E5E7EB] bg-white hover:border-[#D4C4F0]",
+          )}
+        >
+          <TagIcone nome={nome} icone={key} cor={cor} corSimbolo={corSimbolo} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /**
  * Seleção de tag do produto (FK `produtos.tag_id`) + criação de novas tags.
@@ -53,8 +158,10 @@ export function ProdutoTagsPanel({
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [newNome, setNewNome] = useState("");
-  const [newFundo, setNewFundo] = useState("#F3EEFA");
-  const [newTexto, setNewTexto] = useState("#4C258C");
+  const [newFundo, setNewFundo] = useState("#EF4444");
+  const [newTexto, setNewTexto] = useState("#FFFFFF");
+  const [newIcone, setNewIcone] = useState<TagIconeKey | null>(null);
+  const [editandoIcone, setEditandoIcone] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,13 +179,42 @@ export function ProdutoTagsPanel({
     void load();
   }, [load]);
 
+  /** Sugestões que ainda não existem, filtradas pelo que o admin digitou. */
+  const sugestoes = useMemo(() => {
+    const existentes = new Set(tags.map((t) => normalizar(t.nome)));
+    const busca = normalizar(newNome);
+    return SUGESTOES.filter(
+      (s) =>
+        !existentes.has(normalizar(s.nome)) &&
+        (!busca ||
+          normalizar(s.nome).includes(busca) ||
+          normalizar(TAG_ICONES[s.icone].label).includes(busca)),
+    );
+  }, [tags, newNome]);
+
+  const selectedTag = tags.find((t) => String(t.id) === selectedTagId) ?? null;
+
   const selectTag = (id: string) => {
     if (readOnly) return;
+    setEditandoIcone(false);
     if (selectedTagId === id) {
       onChange(null);
     } else {
       onChange(id);
     }
+  };
+
+  const aplicarSugestao = (s: Sugestao) => {
+    setNewNome(s.nome);
+    setNewFundo(s.cor_fundo);
+    setNewTexto(s.cor_texto);
+    setNewIcone(s.icone);
+  };
+
+  const fecharCriacao = () => {
+    setCreating(false);
+    setNewNome("");
+    setNewIcone(null);
   };
 
   const handleCreate = async () => {
@@ -89,6 +225,7 @@ export function ProdutoTagsPanel({
         nome: newNome.trim(),
         cor_fundo: newFundo,
         cor_texto: newTexto,
+        icone: newIcone,
       });
       setTags((prev) => {
         if (prev.some((t) => t.id === tag.id)) return prev;
@@ -97,8 +234,7 @@ export function ProdutoTagsPanel({
         );
       });
       onChange(String(tag.id));
-      setNewNome("");
-      setCreating(false);
+      fecharCriacao();
       toast.success("Tag criada e selecionada");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao criar tag");
@@ -107,22 +243,15 @@ export function ProdutoTagsPanel({
     }
   };
 
-  const handlePreset = async (preset: (typeof PRESETS)[0]) => {
-    if (readOnly) return;
+  const handleIconeExistente = async (icone: TagIconeKey | null) => {
+    if (!selectedTag || readOnly) return;
     setBusy(true);
     try {
-      const tag = await createTag(preset);
-      setTags((prev) => {
-        if (prev.some((t) => t.id === tag.id)) return prev;
-        return [...prev, tag].sort((a, b) =>
-          a.nome.localeCompare(b.nome, "pt-BR"),
-        );
-      });
-      onChange(String(tag.id));
-      toast.success(`Tag “${tag.nome}” pronta`);
-      await load();
+      const tag = await updateTag(selectedTag.id, { icone });
+      setTags((prev) => prev.map((t) => (t.id === tag.id ? { ...t, ...tag } : t)));
+      toast.success("Ícone atualizado");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao criar tag");
+      toast.error(e instanceof Error ? e.message : "Erro ao trocar ícone");
     } finally {
       setBusy(false);
     }
@@ -162,15 +291,43 @@ export function ProdutoTagsPanel({
       <div>
         <p className="text-sm font-medium text-[#111827]">Tag do produto</p>
         <p className="text-xs text-[#6B7280] mt-0.5 leading-relaxed">
-          Destaque no cardápio (ex.: Mais vendido, Novidade, Promoção). Clique
-          de novo na tag selecionada para remover.
+          Mini tag no produto (ex.: Mais vendido, Novidade, Promoção). Clique
+          de novo na tag selecionada para remover. Qual tag fica no topo do
+          cardápio é escolhido em “Topo do cardápio”, na lista de produtos.
         </p>
       </div>
 
-      {selectedTagId && (
-        <p className="text-[11px] font-medium text-[#4C258C] bg-[#F3EEFA] rounded-lg px-3 py-2">
-          1 tag selecionada — aparece no cardápio e na lista do admin
-        </p>
+      {selectedTag && (
+        <div className="rounded-lg bg-[#F3EEFA] px-3 py-2 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-medium text-[#4C258C]">
+              1 tag selecionada — aparece no cardápio e na lista do admin
+            </p>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setEditandoIcone((v) => !v)}
+                className="shrink-0 text-[11px] font-semibold text-[#4C258C] underline-offset-2 hover:underline"
+              >
+                {editandoIcone ? "Fechar" : "Trocar ícone"}
+              </button>
+            )}
+          </div>
+          {editandoIcone && !readOnly && (
+            <IconePicker
+              nome={selectedTag.nome}
+              value={
+                selectedTag.icone && selectedTag.icone in TAG_ICONES
+                  ? (selectedTag.icone as TagIconeKey)
+                  : null
+              }
+              onChange={(icone) => void handleIconeExistente(icone)}
+              cor={selectedTag.cor_fundo}
+              corSimbolo={selectedTag.cor_texto || "#FFFFFF"}
+              disabled={busy}
+            />
+          )}
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -207,7 +364,11 @@ export function ProdutoTagsPanel({
                   color: tag.cor_texto || "#111827",
                 }}
               >
-                {selected && <Check className="w-3 h-3" />}
+                {selected ? (
+                  <Check className="w-3 h-3" />
+                ) : (
+                  <TagIcone nome={tag.nome} icone={tag.icone} variante="glifo" />
+                )}
                 {tag.nome}
               </button>
               {!readOnly && (
@@ -229,126 +390,155 @@ export function ProdutoTagsPanel({
         <div className="rounded-xl border border-dashed border-[#E5E7EB] p-4 text-center">
           <Tag className="w-6 h-6 text-[#9CA3AF] mx-auto mb-2" />
           <p className="text-xs text-[#6B7280]">
-            Nenhuma tag ainda. Use um atalho ou crie a sua.
+            Nenhuma tag ainda. Crie a sua ou escolha uma sugestão.
           </p>
         </div>
       )}
 
       {!readOnly && (
-        <>
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF]">
-              Atalhos
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.nome}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handlePreset(p)}
-                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-dashed border-[#D4C4F0] text-[#4C258C] hover:bg-[#F3EEFA] transition-colors"
-                  style={{ backgroundColor: `${p.cor_fundo}99` }}
-                >
-                  + {p.nome}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div className="rounded-xl border border-dashed border-[#D4C4F0] bg-[#FBF9FE] p-3 space-y-3">
+          {!creating ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full rounded-xl border-[#D4C4F0] text-[#4C258C] hover:bg-[#F3EEFA]"
+              onClick={() => setCreating(true)}
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Criar nova tag
+            </Button>
+          ) : (
+            <>
+              <p className="text-xs font-semibold text-[#4C258C]">Nova tag</p>
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Nome</Label>
+                <Input
+                  value={newNome}
+                  onChange={(e) => setNewNome(e.target.value)}
+                  placeholder="Ex.: Mais vendidos, Promoção, Vegano…"
+                  className="h-9 rounded-lg text-sm"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleCreate();
+                    }
+                  }}
+                />
+              </div>
 
-          <div className="rounded-xl border border-dashed border-[#D4C4F0] bg-[#FBF9FE] p-3 space-y-3">
-            {!creating ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full rounded-xl border-[#D4C4F0] text-[#4C258C] hover:bg-[#F3EEFA]"
-                onClick={() => setCreating(true)}
-              >
-                <Plus className="w-4 h-4 mr-1.5" />
-                Criar nova tag
-              </Button>
-            ) : (
-              <>
-                <p className="text-xs font-semibold text-[#4C258C]">Nova tag</p>
+              {sugestoes.length > 0 && (
                 <div className="space-y-1.5">
-                  <Label className="text-[11px]">Nome</Label>
-                  <Input
-                    value={newNome}
-                    onChange={(e) => setNewNome(e.target.value)}
-                    placeholder="Ex.: Edição limitada"
-                    className="h-9 rounded-lg text-sm"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void handleCreate();
-                      }
-                    }}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px]">Cores</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {COLOR_SWATCHES.map((c) => {
-                      const active =
-                        newFundo === c.cor_fundo && newTexto === c.cor_texto;
-                      return (
-                        <button
-                          key={c.cor_fundo + c.cor_texto}
-                          type="button"
-                          onClick={() => {
-                            setNewFundo(c.cor_fundo);
-                            setNewTexto(c.cor_texto);
-                          }}
-                          className={cn(
-                            "w-8 h-8 rounded-full border-2 transition-transform",
-                            active
-                              ? "border-[#4C258C] scale-110"
-                              : "border-white shadow-sm",
-                          )}
-                          style={{ backgroundColor: c.cor_fundo }}
-                          title={c.cor_fundo}
-                        />
-                      );
-                    })}
+                  <Label className="text-[11px]">Sugestões</Label>
+                  <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto pr-1">
+                    {sugestoes.map((s) => (
+                      <button
+                        key={s.nome}
+                        type="button"
+                        onClick={() => aplicarSugestao(s)}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold transition-opacity hover:opacity-90",
+                          normalizar(newNome) === normalizar(s.nome) &&
+                            "ring-2 ring-[#4C258C]/35",
+                        )}
+                        style={{ backgroundColor: s.cor_fundo, color: s.cor_texto }}
+                      >
+                        <TagIcone nome={s.nome} icone={s.icone} variante="glifo" />
+                        {s.nome}
+                      </button>
+                    ))}
                   </div>
-                  <div
-                    className="inline-flex mt-1 rounded-full px-3 py-1 text-xs font-bold"
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Cores</Label>
+                <div className="flex flex-wrap gap-2">
+                  {COLOR_SWATCHES.map((c) => {
+                    const active =
+                      newFundo === c.cor_fundo && newTexto === c.cor_texto;
+                    return (
+                      <button
+                        key={c.cor_fundo + c.cor_texto}
+                        type="button"
+                        onClick={() => {
+                          setNewFundo(c.cor_fundo);
+                          setNewTexto(c.cor_texto);
+                        }}
+                        className={cn(
+                          "w-8 h-8 rounded-full border-2 transition-transform",
+                          active
+                            ? "border-[#4C258C] scale-110"
+                            : "border-white shadow-sm",
+                        )}
+                        style={{ backgroundColor: c.cor_fundo }}
+                        title={c.cor_fundo}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Ícone</Label>
+                <IconePicker
+                  nome={newNome}
+                  value={newIcone}
+                  onChange={setNewIcone}
+                  cor={newFundo}
+                  corSimbolo={newTexto}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-[11px]">Prévia</Label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold"
                     style={{ backgroundColor: newFundo, color: newTexto }}
                   >
+                    <TagIcone nome={newNome} icone={newIcone} variante="glifo" />
                     {newNome.trim() || "Prévia"}
-                  </div>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-sm font-bold uppercase text-[#111827]">
+                    <TagIcone
+                      nome={newNome}
+                      icone={newIcone}
+                      cor={newFundo}
+                      corSimbolo={newTexto}
+                    />
+                    {newNome.trim() || "Título no cardápio"}
+                  </span>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 rounded-lg"
-                    onClick={() => {
-                      setCreating(false);
-                      setNewNome("");
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={busy || !newNome.trim()}
-                    className="flex-1 rounded-lg bg-[#4C258C] hover:bg-[#5E35B1]"
-                    onClick={() => void handleCreate()}
-                  >
-                    {busy && (
-                      <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                    )}
-                    Criar e usar
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 rounded-lg"
+                  onClick={fecharCriacao}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy || !newNome.trim()}
+                  className="flex-1 rounded-lg bg-[#4C258C] hover:bg-[#5E35B1]"
+                  onClick={() => void handleCreate()}
+                >
+                  {busy && (
+                    <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                  )}
+                  Criar e usar
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );

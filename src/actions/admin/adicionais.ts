@@ -93,7 +93,7 @@ export async function updateOpcao(id: string | number, updates: OpcaoUpdate) {
       `
       *,
       grupo:grupos_opcoes(id, nome),
-      tag:tags(id, nome, cor_fundo, cor_texto)
+      tag:tags(*)
     `
     )
     .maybeSingle();
