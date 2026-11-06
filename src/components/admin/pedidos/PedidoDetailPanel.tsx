@@ -301,6 +301,19 @@ export function PedidoDetailPanel({
                         </div>
                       ))}
 
+                      {typeof item.colher === "boolean" && (
+                        <p
+                          className={cn(
+                            "mt-1 inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold",
+                            item.colher
+                              ? "bg-[#F3EEFA] text-[#4C258C]"
+                              : "bg-[#F3F4F6] text-[#6B7280]",
+                          )}
+                        >
+                          {item.colher ? "Com colher" : "Sem colher"}
+                        </p>
+                      )}
+
                       {item.observacoes && (
                         <p className="mt-0.5 text-xs text-[#6B7280] italic">
                           {item.observacoes}

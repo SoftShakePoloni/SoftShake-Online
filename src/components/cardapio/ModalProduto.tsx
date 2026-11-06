@@ -82,6 +82,8 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
+  /** "Deseja colher?" — null até o cliente responder (obrigatório quando o produto pergunta). */
+  const [colher, setColher] = useState<boolean | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
@@ -90,6 +92,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
     setSelections({});
     setQty(1);
     setNotes("");
+    setColher(null);
     sectionRefs.current = {};
   }, [product?.id]);
 
@@ -181,11 +184,56 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
   if (product.comboOptionsMode === "cliente") {
     try { resolveComboChoices(groups.filter(group => group.id !== "obs"), selections); } catch { comboValid = false; }
   }
-  const canAdd = comboValid && !optionsLoading && !optionsError && product.disponivel !== false && groups.every((g) => {
+  const perguntaColher = product.perguntaColher === true;
+  const canAdd = comboValid && (!perguntaColher || colher !== null) && !optionsLoading && !optionsError && product.disponivel !== false && groups.every((g) => {
     if (!g.required) return true;
     const count = (selections[g.id] ?? []).length;
     return count >= (g.min ?? 1);
   });
+
+  // "Deseja colher?" — entre as opções do produto e as observações.
+  const colherSection = perguntaColher ? (
+    <section aria-labelledby="pergunta-colher">
+      <header className="flex items-center justify-between gap-3 bg-muted px-5 py-3">
+        <div>
+          <h3 id="pergunta-colher" className="text-sm font-semibold text-foreground">Deseja colher?</h3>
+          <p className="text-xs text-muted-foreground">Escolha uma opção</p>
+        </div>
+        <span className="rounded bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">
+          Obrigatório
+        </span>
+      </header>
+      <div role="radiogroup" aria-labelledby="pergunta-colher" className="divide-y divide-border bg-card">
+        {([true, false] as const).map((valor) => {
+          const marcado = colher === valor;
+          return (
+            <button
+              key={String(valor)}
+              type="button"
+              role="radio"
+              aria-checked={marcado}
+              onClick={() => setColher(valor)}
+              className={[
+                "flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left transition hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary",
+                marcado ? "bg-primary/5" : "",
+              ].join(" ")}
+            >
+              <span className="text-sm font-medium text-foreground">{valor ? "Sim, quero colher" : "Não, obrigado"}</span>
+              <span
+                className={[
+                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition",
+                  marcado ? "border-primary bg-primary" : "border-muted-foreground/40 bg-card",
+                ].join(" ")}
+              >
+                {marcado && <span className="h-2 w-2 rounded-full bg-primary-foreground" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  ) : null;
+  const temObservacoes = groups.some((g) => g.id === "obs");
 
   const handleAdicionar = () => {
     if (!lojaAberta) {
@@ -201,13 +249,15 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
       qty,
       selections,
       observacoes: notes,
+      ...(perguntaColher && colher !== null ? { colher } : {}),
       total,
     });
-    
+
     // Limpar todas as seleções após adicionar
     setSelections({});
     setQty(1);
     setNotes("");
+    setColher(null);
     
     onOpenChange(false);
   };
@@ -255,8 +305,9 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
               
               if (g.id === "obs") {
                 return (
-                  <section 
-                    key={g.id} 
+                  <div key={g.id} className="space-y-3">
+                  {colherSection}
+                  <section
                     ref={(el) => { sectionRefs.current[g.id] = el; }}
                   >
                     <header className="flex items-center justify-between bg-muted px-5 py-3">
@@ -276,6 +327,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                       />
                     </div>
                   </section>
+                  </div>
                 );
               }
               return (
@@ -467,6 +519,7 @@ export function ProductDetailDialog({ product, open, onOpenChange }: Props) {
                 </section>
               );
             })}
+            {!temObservacoes && colherSection}
           </div>
         </div>
 

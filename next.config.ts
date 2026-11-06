@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
+import { version } from "./package.json";
 
 const nextConfig: NextConfig = {
+  // Versão exibida no rodapé "Desenvolvido por" do perfil.
+  env: { NEXT_PUBLIC_APP_VERSION: version },
   // Private Storage originals are streamed server-side; Next caches resized variants.
   images: {
     minimumCacheTTL: 2592000,

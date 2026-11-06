@@ -10,6 +10,7 @@ export type ProdutoUpdate = {
   preco_promocional?: number | null;
   categoria_id?: number | string | null;
   esta_disponivel?: boolean;
+  pergunta_colher?: boolean;
   ordem?: number;
   imagem_url?: string | null;
   tag_id?: number | string | null;
@@ -22,6 +23,7 @@ export type ProdutoCreate = {
   preco_promocional?: number | null;
   categoria_id?: number | string | null;
   esta_disponivel?: boolean;
+  pergunta_colher?: boolean;
   ordem?: number;
   imagem_url?: string | null;
   tag_id?: number | string | null;
@@ -75,6 +77,9 @@ function sanitizeProdutoUpdate(updates: ProdutoUpdate) {
   }
   if (updates.esta_disponivel !== undefined) {
     payload.esta_disponivel = Boolean(updates.esta_disponivel);
+  }
+  if (updates.pergunta_colher !== undefined) {
+    payload.pergunta_colher = Boolean(updates.pergunta_colher);
   }
   if (updates.ordem !== undefined) payload.ordem = Number(updates.ordem);
   if (updates.imagem_url !== undefined) payload.imagem_url = updates.imagem_url;
@@ -170,6 +175,7 @@ export async function createProduto(input: ProdutoCreate) {
           ? null
           : toId(input.categoria_id),
       esta_disponivel: input.esta_disponivel ?? true,
+      pergunta_colher: input.pergunta_colher ?? true,
       ordem,
       imagem_url: input.imagem_url || null,
       tag_id:
@@ -312,6 +318,7 @@ export async function duplicateProduto(id: string | number) {
         : null,
     categoria_id: original.categoria_id,
     esta_disponivel: false,
+    pergunta_colher: original.pergunta_colher !== false,
     imagem_url: original.imagem_url,
     tag_id: original.tag_id,
   });

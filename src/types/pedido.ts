@@ -26,6 +26,8 @@ export interface PedidoItem {
   qty: number;
   total: number;
   observacoes?: string;
+  /** "Deseja colher?": true/false; ausente = produto não pergunta (ou pedido antigo). */
+  colher?: boolean;
   produto: {
     id: string;
     name: string;

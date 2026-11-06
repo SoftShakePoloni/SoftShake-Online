@@ -8,6 +8,7 @@ export type SecurityEvent =
   | "auth.login.fail"
   | "auth.register"
   | "auth.logout"
+  | "auth.account_deleted"
   | "auth.admin.denied"
   | "pedido.create"
   | "pedido.status"

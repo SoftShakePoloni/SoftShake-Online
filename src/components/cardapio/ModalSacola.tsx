@@ -323,6 +323,7 @@ export function ModalSacola({ open, onOpenChange }: Props) {
             selections: item.selections,
             adicionais,
             observacoes: item.observacoes,
+            ...(typeof item.colher === "boolean" ? { colher: item.colher } : {}),
             total: item.total,
           };
         }),
@@ -470,6 +471,11 @@ export function ModalSacola({ open, onOpenChange }: Props) {
                                 Inclui {item.produto.comboItems.map((part) => `${part.quantity}× ${part.name}`).join(" · ")}
                               </p>
                             ) : null}
+                            {typeof item.colher === "boolean" && (
+                              <p className="text-xs text-muted-foreground">
+                                {item.colher ? "Com colher" : "Sem colher"}
+                              </p>
+                            )}
                             {item.observacoes && (
                               <p className="text-xs text-muted-foreground">
                                 OBS: {item.observacoes}

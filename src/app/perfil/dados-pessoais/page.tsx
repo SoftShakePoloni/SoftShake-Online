@@ -40,7 +40,7 @@ function PersonalForm({
   const back = () => {
     if (busy.current) return;
     if (dirty) setDiscard(true);
-    else router.push("/perfil");
+    else router.push("/perfil/cadastro");
   };
   useEffect(() => {
     if (!dirty) return;
@@ -72,7 +72,7 @@ function PersonalForm({
       }
       toast.success("Dados atualizados");
       await onRefresh();
-      router.push("/perfil");
+      router.push("/perfil/cadastro");
     } catch {
       setError(
         "Não foi possível concluir. Confira sua conexão e tente novamente.",
@@ -89,7 +89,7 @@ function PersonalForm({
           type="button"
           onClick={back}
           disabled={saving}
-          aria-label="Voltar para o perfil"
+          aria-label="Voltar para Meu cadastro"
           className="-ml-2 flex h-11 w-11 items-center justify-center rounded-lg hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <ArrowLeft size={20} />
@@ -157,7 +157,7 @@ function PersonalForm({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Continuar editando</AlertDialogCancel>
-            <AlertDialogAction onClick={() => router.push("/perfil")}>
+            <AlertDialogAction onClick={() => router.push("/perfil/cadastro")}>
               Descartar
             </AlertDialogAction>
           </AlertDialogFooter>

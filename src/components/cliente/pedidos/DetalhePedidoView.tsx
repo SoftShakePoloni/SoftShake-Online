@@ -242,6 +242,11 @@ export function DetalhePedidoView({
                         {grupo.items.map((opcao) => opcao.name).join(" · ")}
                       </p>
                     ))}
+                    {typeof item.colher === "boolean" && (
+                      <p className="mt-1 text-xs text-[#7B668C]">
+                        {item.colher ? "Com colher" : "Sem colher"}
+                      </p>
+                    )}
                     {item.observacoes && (
                       <p className="mt-1 text-xs text-[#7B668C]">
                         Obs: {item.observacoes}

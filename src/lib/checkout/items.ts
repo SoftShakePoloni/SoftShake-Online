@@ -15,6 +15,8 @@ export const checkoutItemSchema = z.object({
     .record(z.string(), z.array(z.string().min(1).max(64)).max(100))
     .default({}),
   observacoes: z.string().max(500).optional().default(""),
+  /** "Deseja colher?" — não altera preço; ausente quando o produto não pergunta. */
+  colher: z.boolean().optional(),
 });
 export type CheckoutItem = z.infer<typeof checkoutItemSchema>;
 export type CatalogProduct = {
@@ -70,6 +72,7 @@ export function resolveProductItem(
     qty: item.qty,
     selections: item.selections,
     observacoes: sanitizeText(item.observacoes, 500),
+    ...(typeof item.colher === "boolean" ? { colher: item.colher } : {}),
     total,
     adicionais: choices.resolved,
   };

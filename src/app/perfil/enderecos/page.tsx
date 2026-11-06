@@ -131,8 +131,8 @@ export default function PaginaEnderecos() {
     <main className="mx-auto min-h-[70vh] max-w-lg px-5 pb-28 pt-5 sm:pt-8">
       <header className="mb-6 flex items-center gap-2">
         <Link prefetch={false}
-          href="/perfil"
-          aria-label="Voltar para o perfil"
+          href="/perfil/cadastro"
+          aria-label="Voltar para Meu cadastro"
           className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-muted"
         >
           <ArrowLeft size={20} />

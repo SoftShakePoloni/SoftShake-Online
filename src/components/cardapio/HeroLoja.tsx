@@ -48,7 +48,7 @@ export function StoreHero({ busca }: { busca?: BuscaProps } = {}) {
 
   return (
     <section className="relative">
-      <div className="relative h-40 overflow-hidden rounded-[22px] bg-primary/15 sm:h-52 md:h-64">
+      <div className="relative h-32 overflow-hidden rounded-[22px] bg-primary/15 sm:h-44 md:h-52">
         {banner ? (
           <Image
             preset="storeBanner"
@@ -76,23 +76,23 @@ export function StoreHero({ busca }: { busca?: BuscaProps } = {}) {
         )}
       </div>
 
-      <div className="relative z-10 mx-3 -mt-7 flex items-center gap-1.5 rounded-2xl border border-border/70 bg-card p-3 shadow-[0_8px_22px_rgba(31,20,43,0.10)] sm:mx-5">
+      <div className="relative z-10 mx-3 -mt-8 flex items-center gap-2 rounded-2xl border border-border/70 bg-card p-4 shadow-[0_8px_22px_rgba(31,20,43,0.10)] sm:mx-5">
         <Link
           href="/loja"
           prefetch={false}
           aria-label={`Ver informações de ${nome}`}
-          className="group flex min-w-0 flex-1 items-center gap-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="group flex min-w-0 flex-1 items-center gap-3.5 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
-          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-card bg-card shadow ring-1 ring-border">
+          <span className="relative flex h-16 w-16 shrink-0 sm:h-[72px] sm:w-[72px] items-center justify-center overflow-hidden rounded-full border-2 border-card bg-card shadow ring-1 ring-border">
             {logo ? (
-              <Image preset="storeLogo" src={logo} alt="" fill sizes="48px" className="object-cover" />
+              <Image preset="storeLogo" src={logo} alt="" fill sizes="72px" className="object-cover" />
             ) : (
-              <span className="text-lg font-bold text-primary">{nome.charAt(0)}</span>
+              <span className="text-2xl font-bold text-primary">{nome.charAt(0)}</span>
             )}
           </span>
           <span className="min-w-0">
             <span className="flex items-center gap-0.5">
-              <span className="truncate text-[17px] font-bold leading-tight tracking-[-0.02em] text-foreground sm:text-lg">
+              <span className="truncate text-lg font-bold leading-tight tracking-[-0.02em] text-foreground sm:text-xl">
                 {nome}
               </span>
               <ChevronRight
@@ -101,7 +101,7 @@ export function StoreHero({ busca }: { busca?: BuscaProps } = {}) {
               />
             </span>
             {(estaAberto || minimo > 0) && (
-              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+              <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-muted-foreground">
                 {estaAberto && (
                   <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
                     <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -168,7 +168,7 @@ function AcoesCartao({ busca, onCompartilhar }: { busca?: BuscaProps; onComparti
       </button>
 
       {busca && buscando && (
-        <div className="absolute inset-0 flex items-center rounded-2xl bg-card p-3">
+        <div className="absolute inset-0 flex items-center rounded-2xl bg-card p-4">
           <div className="relative w-full">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-primary" />
             <input

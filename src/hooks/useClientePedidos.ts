@@ -16,6 +16,8 @@ export type ClientePedidoItem = {
   };
   total: number;
   observacoes?: string;
+  /** "Deseja colher?" — ausente quando o produto não pergunta. */
+  colher?: boolean;
   adicionais?: Array<{
     name: string;
     price: number;

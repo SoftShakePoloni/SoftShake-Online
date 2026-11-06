@@ -1,21 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import {
-  User,
-  MapPin,
-  ShoppingBag,
-  LogOut,
-  Pencil,
-  Settings2,
-  ChevronRight,
-  Phone,
-} from "lucide-react";
+import { ClipboardList, LogOut, Ticket, User, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import type { Endereco } from "@/types/endereco";
 import { useClientePedidosCount } from "@/hooks/useClientePedidos";
+import { DesenvolvidoPor, ItemMenu, TituloSecao } from "./MenuPerfil";
 
 type ClienteFull = {
   id: string;
@@ -27,25 +17,7 @@ type ClienteFull = {
   email?: string | null;
 };
 
-function initials(nome: string | null) {
-  if (!nome) return "CL";
-  return nome
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
-    .join("");
-}
-
-type MenuItem = {
-  href?: string;
-  label: string;
-  description?: string;
-  icon: React.ElementType;
-  onClick?: () => void;
-  danger?: boolean;
-};
-
+/** Tela "Conta": saudação, atalhos da conta, pedidos/cupons, sair e "Desenvolvido por". */
 export function MeuPerfilView({
   cliente,
   onSignOut,
@@ -56,156 +28,61 @@ export function MeuPerfilView({
 }) {
   const router = useRouter();
   const { count: pedidosCount, loading: loadingPedidos } = useClientePedidosCount(cliente.id);
+  const pedidosDescricao = loadingPedidos
+    ? undefined
+    : pedidosCount === 0
+      ? "Nenhum pedido ainda"
+      : `${pedidosCount} pedido${pedidosCount === 1 ? "" : "s"}`;
 
-  const menuItems: MenuItem[] = [
-    {
-      label: "Dados pessoais",
-      description: "Nome e telefone",
-      icon: User,
-      onClick: () => router.push("/perfil/dados-pessoais"),
-    },
-    {
-      href: "/perfil/enderecos",
-      label: "Endereços",
-      description: "Onde receber seus pedidos",
-      icon: MapPin,
-    },
-    {
-      href: "/pedidos",
-      label: "Meus pedidos",
-      description: loadingPedidos
-        ? "Carregando…"
-        : pedidosCount === 0
-          ? "Nenhum pedido ainda"
-          : `${pedidosCount} pedido${pedidosCount === 1 ? "" : "s"}`,
-      icon: ShoppingBag,
-    },
-    {
-      href: "/perfil/preferencias",
-      label: "Preferências",
-      description: "Notificações e promoções",
-      icon: Settings2,
-    },
-  ];
+  const sair = async () => {
+    await onSignOut();
+    toast.success("Você saiu da conta");
+    router.push("/");
+  };
 
   return (
-    <div className="min-h-[70vh] bg-gradient-to-b from-primary/[0.04] via-background to-background">
-      <div className="mx-auto max-w-lg px-4 py-8 pb-28 space-y-6">
-        {/* Header compacto */}
-        <motion.section
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center text-center"
-        >
-          <div className="relative mb-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-violet-500 text-2xl font-bold text-primary-foreground shadow-lg shadow-primary/20 ring-4 ring-background">
-              {initials(cliente.nome)}
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push("/perfil/dados-pessoais")}
-              className="absolute -bottom-0.5 -right-0.5 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-foreground"
-              aria-label="Editar perfil"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+    <div className="min-h-[70vh] bg-background">
+      <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-lg flex-col pb-24 md:pb-8">
+        {/* Saudação */}
+        <section className="flex items-center gap-3.5 px-4 pb-5 pt-6 sm:px-5">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <User aria-hidden="true" className="h-6 w-6" strokeWidth={1.6} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-primary">Olá,</p>
+            <h1 className="truncate text-lg font-bold tracking-[-0.02em] text-foreground">
+              {cliente.nome || "Cliente"}
+            </h1>
           </div>
+        </section>
 
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
-            {cliente.nome || "Cliente"}
-          </h1>
-          {cliente.telefone ? (
-            <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Phone className="h-3.5 w-3.5" />
-              {cliente.telefone}
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => router.push("/perfil/dados-pessoais")}
-              className="mt-1 text-sm font-medium text-primary"
-            >
-              Adicionar telefone
-            </button>
-          )}
-        </motion.section>
+        <div className="border-t border-border" />
 
-        {/* Menu */}
-        <motion.section
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
+        <TituloSecao>Sua conta</TituloSecao>
+        <ul>
+          <ItemMenu href="/perfil/cadastro" label="Meu cadastro" icon={UserCog} />
+        </ul>
+
+        <TituloSecao>Pedidos &amp; vantagens</TituloSecao>
+        <ul>
+          <ItemMenu href="/pedidos" label="Meus pedidos" descricao={pedidosDescricao} icon={ClipboardList} />
+          <ItemMenu href="/cupons" label="Cupons de desconto" icon={Ticket} />
+        </ul>
+
+        <div className="mt-3 border-t border-border" />
+
+        <button
+          type="button"
+          onClick={() => void sair()}
+          className="flex min-h-[52px] items-center gap-3.5 px-4 py-3 text-left text-sm font-medium text-primary transition hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary sm:px-5"
         >
-          <ul className="divide-y divide-border">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const content = (
-                <>
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1 text-left">
-                    <p className="text-sm font-semibold text-foreground">
-                      {item.label}
-                    </p>
-                    {item.description && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {item.description}
-                      </p>
-                    )}
-                  </div>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </>
-              );
+          <LogOut aria-hidden="true" className="h-5 w-5 shrink-0" strokeWidth={1.6} />
+          Sair
+        </button>
 
-              const className =
-                "flex w-full items-center gap-3 px-4 py-3.5 transition hover:bg-muted/50 active:bg-muted/70";
-
-              if (item.href) {
-                return (
-                  <li key={item.label}>
-                    <Link prefetch={false} href={item.href} className={className}>
-                      {content}
-                    </Link>
-                  </li>
-                );
-              }
-
-              return (
-                <li key={item.label}>
-                  <button
-                    type="button"
-                    onClick={item.onClick}
-                    className={className}
-                  >
-                    {content}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </motion.section>
-
-        {/* Sair */}
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <button
-            type="button"
-            onClick={async () => {
-              await onSignOut();
-              toast.success("Você saiu da conta");
-              router.push("/");
-            }}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/15 bg-destructive/5 px-4 py-3.5 text-sm font-semibold text-destructive transition hover:bg-destructive/10"
-          >
-            <LogOut className="h-4 w-4" />
-            Sair da conta
-          </button>
-        </motion.div>
+        <div className="mt-auto">
+          <DesenvolvidoPor />
+        </div>
       </div>
     </div>
   );
