@@ -6,7 +6,7 @@ import { CategoryBar } from "@/components/cardapio/BarraCategorias";
 import { FeaturedCarousel } from "@/components/cardapio/CarrosselDestaques";
 import { ProductSection } from "@/components/cardapio/SecaoProdutos";
 import { useMenu } from "@/hooks/useCardapio";
-import { getFeaturedProducts, hasProductPromo, type Category } from "@/data/tipos";
+import { type Category, type Product, type Tag } from "@/data/tipos";
 
 function normalize(text: string) {
   return text
@@ -72,23 +72,38 @@ export default function PaginaInicio() {
     const combos = products.filter(product => product.disponivel !== false &&
       (product.comboId != null || normalize(product.name).includes("combo do dia")));
     const comboIds = new Set(combos.map(product => product.id));
-    const promotions = products.filter(product => product.disponivel !== false &&
-      !comboIds.has(product.id) && (hasProductPromo(product) || product.freteGratis));
-    const highlightedIds = new Set([...combos, ...promotions].map(product => product.id));
+    // Produtos em promoção ficam na própria categoria, com a mini tag "Promoção".
+    // O topo do cardápio é só a tag escolhida pelo admin.
+    const highlightedIds = comboIds;
     const remaining = categories.map(category => ({ ...category,
       products: category.products.filter(product => !highlightedIds.has(product.id)),
     })).filter(category => category.products.length > 0);
     return [
       ...(combos.length ? [{ id: "ofertas-combos", name: "Combo do dia", products: combos }] : []),
-      ...(promotions.length ? [{ id: "ofertas-promocoes", name: "Promoções", products: promotions }] : []),
       ...remaining,
     ];
   }, [categories]);
 
-  const featuredProducts = useMemo(
-    () => getFeaturedProducts(orderedCategories.filter(category => !category.id.startsWith("ofertas-"))),
-    [orderedCategories]
-  );
+  // Destaque único do topo: a tag marcada pelo admin (tags.destaque_cardapio).
+  // Só entram os produtos com essa tag (quantos o admin quiser). Tag de
+  // promoção/oferta usa o card horizontal com preço riscado; as demais, a vitrine.
+  const destaque = useMemo(() => {
+    const products = orderedCategories
+      .filter(category => !category.id.startsWith("ofertas-"))
+      .flatMap(category => category.products)
+      .concat(orderedCategories.filter(category => category.id.startsWith("ofertas-")).flatMap(category => category.products));
+    const tag: Tag | undefined = products.find(product => product.tag?.destaque)?.tag;
+    if (!tag) return null;
+    const variant: "promo" | "vitrine" = /promo|oferta/.test(normalize(tag.nome)) ? "promo" : "vitrine";
+    const seen = new Set<string>();
+    const items: Product[] = products.filter(product => {
+      if (product.disponivel === false || seen.has(product.id)) return false;
+      const match = product.tag?.id === tag.id;
+      if (match) seen.add(product.id);
+      return match;
+    });
+    return items.length ? { tag, variant, products: items } : null;
+  }, [orderedCategories]);
 
   const filteredCategories = useMemo(
     () => filterCategories(orderedCategories, selectedCategoryId, searchQuery),
@@ -122,7 +137,7 @@ export default function PaginaInicio() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-4 lg:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-4 font-cardapio lg:px-6">
       <main className="space-y-5">
         <h1 className="sr-only">SoftShake — Cardápio</h1>
         <StoreHero busca={{ buscando, onBuscandoChange: setBuscando, searchQuery, onSearchChange: setSearchQuery }} />
@@ -152,11 +167,8 @@ export default function PaginaInicio() {
             Cardápio sincronizado em tempo real
           </p>
         )}
-        {!isFiltering && featuredProducts.length > 0 && (
-          <>
-            {filteredCategories.filter(category => category.id.startsWith("ofertas-")).map(category => <ProductSection key={category.id} category={category} />)}
-            <FeaturedCarousel products={featuredProducts} />
-          </>
+        {!isFiltering && destaque && (
+          <FeaturedCarousel tag={destaque.tag} products={destaque.products} variant={destaque.variant} />
         )}
         {!isLoading &&
           !error &&
@@ -168,7 +180,7 @@ export default function PaginaInicio() {
                 : "Nenhum produto nesta categoria."}
             </div>
           )}
-        {filteredCategories.filter(category => isFiltering || featuredProducts.length === 0 || !category.id.startsWith("ofertas-")).map((c) => (
+        {filteredCategories.map((c) => (
           <ProductSection key={c.id} category={c} />
         ))}
       </main>

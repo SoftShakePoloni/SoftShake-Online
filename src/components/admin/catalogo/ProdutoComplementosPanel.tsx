@@ -84,12 +84,12 @@ export function ProdutoComplementosPanel({
       const [{ data: gs }, { data: ops }] = await Promise.all([
         supabase
           .from("grupos_opcoes")
-          .select("*, tag:tags(id, nome, cor_fundo, cor_texto)")
+          .select("*, tag:tags(*)")
           .order("nome", { ascending: true }),
         supabase
           .from("opcoes")
           .select(
-            "id, nome, preco_adicional, grupo_id, ordem, tag_id, tag:tags(id, nome, cor_fundo, cor_texto)"
+            "id, nome, preco_adicional, grupo_id, ordem, tag_id, tag:tags(*)"
           )
           .order("ordem", { ascending: true }),
       ]);

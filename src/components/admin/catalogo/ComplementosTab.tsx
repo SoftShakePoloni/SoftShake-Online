@@ -338,12 +338,12 @@ export function ComplementosTab({
       const [{ data: gs }, { data: ops }] = await Promise.all([
         supabase
           .from("grupos_opcoes")
-          .select("*, tag:tags(id, nome, cor_fundo, cor_texto)")
+          .select("*, tag:tags(*)")
           .order("id", { ascending: true }),
         supabase
           .from("opcoes")
           .select(
-            "*, grupo:grupos_opcoes(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)",
+            "*, grupo:grupos_opcoes(id, nome), tag:tags(*)",
           )
           .order("ordem", { ascending: true }),
       ]);

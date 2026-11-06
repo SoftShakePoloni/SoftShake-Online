@@ -3,6 +3,10 @@ export type Tag = {
   nome: string;
   cor_fundo: string;
   cor_texto: string;
+  /** Tag escolhida pelo admin como carrossel do topo do cardápio. */
+  destaque?: boolean;
+  /** Chave do ícone (TAG_ICONES); ausente = automático pelo nome. */
+  icone?: string;
 };
 
 export type OptionItem = {
@@ -82,12 +86,6 @@ export type Category = {
   subtitle?: string;
   products: Product[];
 };
-
-export function getFeaturedProducts(categories: Category[]) {
-  const products = categories.flatMap((category) => category.products);
-  const highlighted = products.filter((product) => product.tag);
-  return (highlighted.length ? highlighted : products).slice(0, 6);
-}
 
 export const notesOptionGroup: OptionGroup = {
   id: "obs",

@@ -35,6 +35,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --font-sans: "Inter", system-ui, sans-serif;
+  --font-cardapio: var(--font-poppins), system-ui, sans-serif;
+  --font-titulo: var(--font-bebas), var(--font-poppins), system-ui, sans-serif;
 }
 
 :root {

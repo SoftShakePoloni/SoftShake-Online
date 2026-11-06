@@ -33,6 +33,7 @@ import { CatalogoHeader } from "./CatalogoHeader";
 import { CatalogoTabs } from "./CatalogoTabs";
 import { CategoriasSidebar } from "./CategoriasSidebar";
 import { ProdutosArea } from "./ProdutosArea";
+import { DestaqueTopoCard } from "./DestaqueTopoCard";
 import { ProdutoDrawer, type ProdutoFormValues } from "./ProdutoDrawer";
 import { ComplementosTab } from "./ComplementosTab";
 import { CombosTab } from "./CombosTab";
@@ -104,7 +105,7 @@ export function CatalogoManager({
           const { data } = await supabase
             .from("produtos")
             .select(
-              `*, categoria:categorias(id, nome), tag:tags(id, nome, cor_fundo, cor_texto)`,
+              `*, categoria:categorias(id, nome), tag:tags(*)`,
             )
             .eq("id", row.id)
             .maybeSingle();
@@ -412,6 +413,7 @@ export function CatalogoManager({
       />
 
       <CatalogoTabs active={tab} onChange={setTab} />
+      {tab === "produtos" && <DestaqueTopoCard produtos={produtos} />}
       {loadError && tab === "produtos" && <div role="alert" className="my-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Não foi possível carregar o catálogo. <button type="button" className="underline" onClick={() => window.location.reload()}>Tentar novamente</button></div>}
 
       {tab === "produtos" && (

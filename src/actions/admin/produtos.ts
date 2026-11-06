@@ -32,7 +32,7 @@ export type ProdutoCreate = {
 const PRODUTO_SELECT = `
   *,
   categoria:categorias(id, nome),
-  tag:tags(id, nome, cor_fundo, cor_texto)
+  tag:tags(*)
 `;
 
 function toId(id: string | number): number {

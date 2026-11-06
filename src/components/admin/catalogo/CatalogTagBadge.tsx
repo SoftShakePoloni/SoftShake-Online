@@ -1,12 +1,14 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { TagIcone } from "@/components/ui/TagIcone";
 
 export type CatalogTagLike = {
   id?: string | number;
   nome: string;
   cor_fundo?: string | null;
   cor_texto?: string | null;
+  icone?: string | null;
 } | null | undefined;
 
 /** Badge igual ao do cardápio (cliente) — cores da tabela tags */
@@ -23,7 +25,7 @@ export function CatalogTagBadge({
   return (
     <span
       className={cn(
-        "inline-flex w-fit rounded-md font-bold tracking-wide shrink-0",
+        "inline-flex w-fit items-center gap-1 rounded-md font-bold tracking-wide shrink-0",
         size === "sm" ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-0.5 text-[11px]",
         className
       )}
@@ -32,6 +34,7 @@ export function CatalogTagBadge({
         color: tag.cor_texto || "#4C258C",
       }}
     >
+      <TagIcone nome={tag.nome} icone={tag.icone} variante="glifo" className={size === "sm" ? "h-2.5 w-2.5" : "h-3 w-3"} />
       {tag.nome}
     </span>
   );
