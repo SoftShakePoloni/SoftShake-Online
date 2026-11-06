@@ -41,9 +41,9 @@ export function PreferenciasView() {
       <div className="mx-auto max-w-lg px-4 py-6 pb-28 space-y-6">
         <div className="flex items-center gap-3">
           <Link prefetch={false}
-            href="/perfil"
+            href="/perfil/cadastro"
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            aria-label="Voltar ao perfil"
+            aria-label="Voltar para Meu cadastro"
           >
             <ArrowLeft className="h-5 w-5" />
           </Link>
