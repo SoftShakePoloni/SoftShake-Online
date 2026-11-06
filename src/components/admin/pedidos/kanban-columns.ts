@@ -208,13 +208,8 @@ export function paymentBadgeLabel(meio: string | undefined): string {
   const m = (meio || "").toLowerCase();
   if (m.includes("pix")) return "PIX";
   if (m.includes("débito") || m.includes("debito")) return "Débito";
-  if (
-    m.includes("crédito") ||
-    m.includes("credito") ||
-    m.includes("cartão") ||
-    m.includes("cartao")
-  )
-    return "Cartão";
+  if (m.includes("crédito") || m.includes("credito")) return "Crédito";
+  if (m.includes("cartão") || m.includes("cartao")) return "Cartão";
   if (m.includes("dinheiro")) return "Dinheiro";
   if (!meio) return "—";
   return meio.length > 12 ? meio.slice(0, 12) + "…" : meio;

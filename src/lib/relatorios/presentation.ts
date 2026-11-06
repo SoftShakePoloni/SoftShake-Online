@@ -53,6 +53,8 @@ const labels: Record<string, string> = {
   pix: "Pix",
   dinheiro: "Dinheiro",
   cartao: "Cartão",
+  debito: "Cartão de débito",
+  credito: "Cartão de crédito",
   entrega: "Entrega",
   delivery: "Entrega",
   retirada: "Retirada",

@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloPagamento } from "@/lib/pagamento";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 
 import Link from "next/link";
@@ -321,7 +322,7 @@ export function DetalhePedidoView({
             <div>
               <p className="text-sm font-medium">Pagamento</p>
               <p className="mt-0.5 text-sm text-[#7B668C]">
-                {pedido.meio_pagamento}
+                {rotuloPagamento(pedido.meio_pagamento)}
               </p>
             </div>
           </div>

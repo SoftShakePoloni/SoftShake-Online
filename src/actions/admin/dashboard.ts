@@ -1,5 +1,6 @@
 "use server";
 
+import { rotuloPagamento } from "@/lib/pagamento";
 import { createServiceRoleClient } from "@/integrations/supabase/client.server";
 import { requirePageAccess } from "@/lib/admin/auth";
 
@@ -98,7 +99,7 @@ function mapRecentOrder(order: PedidoRow) {
   return {
     id: String(order.id),
     cliente: order.cliente_nome || "Cliente",
-    pagamento: order.meio_pagamento || "—",
+    pagamento: rotuloPagamento(order.meio_pagamento),
     status: order.status || "pendente",
     createdAt: order.created_at,
     valor: Number(order.total || 0),
@@ -248,7 +249,7 @@ export async function getDashboardData(
   // Pagamentos
   const payMap: Record<string, number> = {};
   for (const o of current) {
-    const key = (o.meio_pagamento || "Outro").trim() || "Outro";
+    const key = o.meio_pagamento?.trim() ? rotuloPagamento(o.meio_pagamento.trim()) : "Outro";
     payMap[key] = (payMap[key] || 0) + Number(o.total || 0);
   }
   const payTotal = Object.values(payMap).reduce((a, b) => a + b, 0);

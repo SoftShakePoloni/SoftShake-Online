@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 import type { Endereco } from "@/types/endereco";
 import { salvarEnderecoExistente } from "@/actions/cliente-enderecos";
 
-export function FormularioEndereco({ endereco }: { endereco?: Endereco } = {}) {
+export function FormularioEndereco({ endereco, cepInicial }: { endereco?: Endereco; cepInicial?: string } = {}) {
   const router = useRouter();
   const { refreshCliente } = useAuth();
   const [carregando, setCarregando] = useState(false);
@@ -87,19 +87,21 @@ export function FormularioEndereco({ endereco }: { endereco?: Endereco } = {}) {
     if (cep.length !== 8) return;
     setBuscandoCep(true);
     try {
-      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-      const data = await response.json();
+      // Pelo próprio servidor: a CSP do site bloqueia chamar o ViaCEP direto do navegador.
+      const response = await fetch(`/api/cep/${cep}`);
+      const data = await response.json().catch(() => ({}));
       if (request !== cepRequest.current) return;
-      if (data.erro) {
+      if (response.status === 404) {
         toast.error("CEP não encontrado");
         return;
       }
+      if (!response.ok) throw new Error(data.erro);
       setFormData((prev) => ({
         ...prev,
         logradouro: data.logradouro || prev.logradouro,
         bairro: data.bairro || prev.bairro,
-        cidade: data.localidade || prev.cidade,
-        estado: data.uf || prev.estado,
+        cidade: data.cidade || prev.cidade,
+        estado: data.estado || prev.estado,
       }));
       toast.success("CEP encontrado!");
     } catch {
@@ -111,6 +113,16 @@ export function FormularioEndereco({ endereco }: { endereco?: Endereco } = {}) {
       if (request === cepRequest.current) setBuscandoCep(false);
     }
   };
+  // CEP digitado na sacola ("Buscar CEP"): preenche e busca ao abrir.
+  const cepInicialBuscado = useRef(false);
+  useEffect(() => {
+    if (endereco || cepInicialBuscado.current) return;
+    const digitos = (cepInicial ?? "").replace(/\D/g, "");
+    if (digitos.length !== 8) return;
+    cepInicialBuscado.current = true;
+    void handleCepChange(digitos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só na abertura
+  }, []);
   const fieldStyle = "h-11 rounded-lg border-input text-base shadow-none";
   return (
     <main className="mx-auto max-w-lg px-5 pb-28 pt-5 sm:pt-8">
