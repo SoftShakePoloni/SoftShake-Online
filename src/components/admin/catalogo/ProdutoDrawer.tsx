@@ -41,6 +41,7 @@ const schema = z
     preco_promocional: z.union([z.coerce.number<number>().min(0), z.literal("")]).optional(),
     categoria_id: z.string().optional(),
     esta_disponivel: z.boolean(),
+    pergunta_colher: z.boolean(),
     imagem_url: z.string().optional(),
   })
   .superRefine((data, ctx) => {
@@ -106,6 +107,7 @@ export function ProdutoDrawer({
       preco_promocional: "",
       categoria_id: "",
       esta_disponivel: true,
+      pergunta_colher: true,
       imagem_url: "",
     },
   });
@@ -150,6 +152,7 @@ export function ProdutoDrawer({
         categoria_id:
           produto.categoria_id != null ? String(produto.categoria_id) : "",
         esta_disponivel: produto.esta_disponivel !== false,
+        pergunta_colher: produto.pergunta_colher !== false,
         imagem_url: produto.imagem_url || "",
       });
 
@@ -186,6 +189,7 @@ export function ProdutoDrawer({
           ? defaultCategoriaId
           : "",
       esta_disponivel: true,
+      pergunta_colher: true,
       imagem_url: "",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só open + id do produto
@@ -460,6 +464,27 @@ export function ProdutoDrawer({
                       })
                     }
                     disabled={readOnly}
+                    className="data-[state=checked]:bg-[#4C258C]"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-xl border border-[#E5E7EB] p-4">
+                  <div>
+                    <p className="text-sm font-medium text-[#111827]">
+                      Perguntar se deseja colher
+                    </p>
+                    <p className="text-xs text-[#6B7280]">
+                      O cliente responde Sim ou Não ao adicionar o produto
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.watch("pergunta_colher")}
+                    onCheckedChange={(v) =>
+                      form.setValue("pergunta_colher", v, {
+                        shouldDirty: true,
+                      })
+                    }
+                    disabled={readOnly}
+                    aria-label="Perguntar se deseja colher"
                     className="data-[state=checked]:bg-[#4C258C]"
                   />
                 </div>

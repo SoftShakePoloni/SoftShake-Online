@@ -221,6 +221,7 @@ export function CatalogoManager({
           preco_promocional: precoPromocional,
           categoria_id: values.categoria_id || null,
           esta_disponivel: values.esta_disponivel,
+          pergunta_colher: values.pergunta_colher,
           imagem_url: values.imagem_url || null,
           tag_id: values.tagId,
         });
@@ -242,6 +243,7 @@ export function CatalogoManager({
           preco_promocional: precoPromocional,
           categoria_id: values.categoria_id || null,
           esta_disponivel: values.esta_disponivel,
+          pergunta_colher: values.pergunta_colher,
           imagem_url: values.imagem_url || null,
           tag_id: values.tagId,
         });

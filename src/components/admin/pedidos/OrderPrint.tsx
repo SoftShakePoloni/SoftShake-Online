@@ -242,6 +242,19 @@ function Ticket({
                 </div>
               )}
 
+              {typeof item.colher === "boolean" && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: isCozinha ? 13 : 11,
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {item.colher ? "COM COLHER" : "SEM COLHER"}
+                </div>
+              )}
+
               {item.observacoes && (
                 <div
                   style={{

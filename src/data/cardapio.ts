@@ -39,7 +39,7 @@ async function readData() {
     supabase
       .from("produtos")
       .select(
-        "id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id",
+        "id, nome, descricao, preco_base, preco_promocional, esta_disponivel, ordem, imagem_url, categoria_id, tag_id, pergunta_colher",
       )
       .order("ordem", { ascending: true }),
     supabase
@@ -146,6 +146,7 @@ async function readData() {
           // Opções e adicionais são carregados só quando o cliente abre este produto.
           optionGroups: [notesOptionGroup],
           disponivel: prod.esta_disponivel ?? undefined,
+          perguntaColher: prod.pergunta_colher !== false,
         };
       }),
     };
@@ -252,6 +253,10 @@ async function readData() {
         disponivel:
           options.available &&
           selected.every(({ product }) => product.esta_disponivel !== false),
+        // Combo pergunta se algum produto dele pergunta.
+        perguntaColher: selected.some(
+          ({ product }) => product.pergunta_colher !== false,
+        ),
       } satisfies Product,
     ];
   });
@@ -270,7 +275,7 @@ async function readData() {
 
 const cachedMenu = unstable_cache(
   readData,
-  ["public-menu-v2", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""],
+  ["public-menu-v3", process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""],
   { tags: ["public-catalog"], revalidate: 120 },
 );
 export function fetchMenuSnapshot() {

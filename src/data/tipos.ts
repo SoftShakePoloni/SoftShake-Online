@@ -45,6 +45,8 @@ export type Product = {
   tag?: Tag;
   optionGroups?: OptionGroup[];
   disponivel?: boolean;
+  /** Pergunta "Deseja colher?" (Sim/Não, obrigatório) ao adicionar. */
+  perguntaColher?: boolean;
 };
 
 /** Preço unitário efetivo (promo se ativa, senão base) */

@@ -405,6 +405,7 @@ export type Database = {
           imagem_url: string | null
           nome: string
           ordem: number | null
+          pergunta_colher: boolean
           preco_base: number
           preco_promocional: number | null
           tag_id: number | null
@@ -417,6 +418,7 @@ export type Database = {
           imagem_url?: string | null
           nome: string
           ordem?: number | null
+          pergunta_colher?: boolean
           preco_base: number
           preco_promocional?: number | null
           tag_id?: number | null
@@ -429,6 +431,7 @@ export type Database = {
           imagem_url?: string | null
           nome?: string
           ordem?: number | null
+          pergunta_colher?: boolean
           preco_base?: number
           preco_promocional?: number | null
           tag_id?: number | null

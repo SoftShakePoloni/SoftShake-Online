@@ -7,6 +7,8 @@ export type ItemCarrinho = {
   qty: number;
   selections: Record<string, string[]>;
   observacoes: string;
+  /** Resposta a "Deseja colher?" (só quando o produto pergunta). */
+  colher?: boolean;
   total: number;
 };
 
