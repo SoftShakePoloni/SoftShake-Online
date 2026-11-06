@@ -382,7 +382,8 @@ export function RelatoriosManager() {
               ...new Set([
                 "pix",
                 "dinheiro",
-                "cartao",
+                "debito",
+                "credito",
                 ...(data?.meiosPagamento ?? []),
               ]),
             ].map((value) => (

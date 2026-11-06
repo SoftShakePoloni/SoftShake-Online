@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import { rotuloPagamento } from "@/lib/pagamento";
 import { useEffect, useState } from "react";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 import {
@@ -462,7 +463,7 @@ export function PedidoDetailPanel({
               </div>
             </dl>
             <p className="text-sm text-muted-foreground">
-              {pedido.meio_pagamento}
+              {rotuloPagamento(pedido.meio_pagamento)}
               {Number(pedido.troco_para) > 0 &&
                 ` · troco para ${formatCurrency(pedido.troco_para)}`}
             </p>

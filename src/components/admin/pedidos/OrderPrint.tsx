@@ -1,5 +1,6 @@
 "use client";
 
+import { rotuloPagamento } from "@/lib/pagamento";
 import { Pedido, statusConfig } from "@/types/pedido";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -348,7 +349,7 @@ function Ticket({
           >
             <div style={{ fontWeight: 900, marginBottom: 2 }}>PAGAMENTO</div>
             <div style={{ textTransform: "uppercase" }}>
-              {pedido.meio_pagamento}
+              {rotuloPagamento(pedido.meio_pagamento)}
             </div>
             {pedido.troco_para != null && Number(pedido.troco_para) > 0 && (
               <div style={{ marginTop: 2 }}>

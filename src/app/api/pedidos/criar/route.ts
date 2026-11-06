@@ -37,6 +37,7 @@ import {
 } from "@/lib/checkout/items";
 
 import { checkoutIdentity, previousCheckout } from "@/lib/checkout/idempotency";
+import { MEIOS_PAGAMENTO_ACEITOS } from "@/lib/pagamento";
 
 const criarPedidoSchema = z.object({
   cliente_nome: z
@@ -52,12 +53,13 @@ const criarPedidoSchema = z.object({
   tipo_entrega: z.enum(["entrega", "delivery", "retirada", "mesa"]),
   endereco_id: z.string().max(64).optional().nullable(),
   endereco_completo: z.unknown().optional().nullable(),
-  meio_pagamento: z
-    .string()
-    .min(2)
-    .max(40)
-    .transform((s) => sanitizeText(s, 40)),
-  troco_para: z.union([z.string(), z.number()]).optional().nullable(),
+  // Só pagamento na entrega: dinheiro, pix, débito ou crédito ("cartao" = sacolas antigas).
+  meio_pagamento: z.enum(MEIOS_PAGAMENTO_ACEITOS),
+  troco_para: z
+    .union([z.string().max(20), z.number()])
+    .optional()
+    .nullable()
+    .transform((t) => (typeof t === "string" ? sanitizeText(t, 20) : t)),
   subtotal: z.number().min(0).max(100_000),
   taxa_entrega: z.number().min(0).max(1_000),
   total: z.number().min(0).max(100_000),

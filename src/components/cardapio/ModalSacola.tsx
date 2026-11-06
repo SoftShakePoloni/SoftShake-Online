@@ -3,47 +3,89 @@ import { invalidateCustomerResources } from "@/lib/customer-resource";
 
 import { useMenu } from "@/hooks/useCardapio";
 
-import { ShoppingBag, Trash2, X, Clock, ChevronRight, User, Phone, MapPin, CreditCard, Banknote, Store, Truck } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import {
+  ArrowLeft,
+  Banknote,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  CreditCard,
+  Hash,
+  MapPin,
+  QrCode,
+  ShoppingBag,
+  Store,
+  Trash2,
+  Truck,
+  User,
+  X,
+} from "lucide-react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { StorageImage as Image } from "@/components/ui/storage-image";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { useCarrinho, resumoOpcoes } from "@/context/CarrinhoContext";
+import { useCarrinho, type ItemCarrinho } from "@/context/CarrinhoContext";
 import { resolveSelectionsFromProduct } from "@/lib/utils/pedido";
 import { useLoja } from "@/hooks/useLoja";
 import { formatBRL, getProductUnitPrice } from "@/data/tipos";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { customerAddresses } from "@/lib/enderecos-cliente";
 import type { Endereco } from "@/types/endereco";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { guardarCupomPendente, lerCupomPendente, limparCupomPendente } from "@/lib/cupom-pendente";
+import { MEIOS_PAGAMENTO, rotuloPagamento, type MeioPagamento } from "@/lib/pagamento";
 
 const AVISO_AUTOMATICO = "Ele será aplicado automaticamente quando a sacola atingir esse valor.";
+
+type Etapa = "cart" | "entrega" | "payment";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
+const ICONE_PAGAMENTO: Record<MeioPagamento, { Icone: typeof Banknote; cor: string }> = {
+  dinheiro: { Icone: Banknote, cor: "bg-emerald-100 text-emerald-700" },
+  pix: { Icone: QrCode, cor: "bg-teal-100 text-teal-700" },
+  debito: { Icone: CreditCard, cor: "bg-sky-100 text-sky-700" },
+  credito: { Icone: CreditCard, cor: "bg-violet-100 text-violet-700" },
+};
+
+/** "R$ 50,00" / "50" / "50.5" → 50 / 50.5; vazio ou inválido → null. */
+function valorTroco(texto: string): number | null {
+  const limpo = texto.replace(/[^\d,.]/g, "");
+  if (!limpo) return null;
+  // Vírgula é o separador decimal; pontos antes dela são milhar.
+  const normalizado = limpo.includes(",") ? limpo.replace(/\./g, "").replace(",", ".") : limpo;
+  const valor = Number(normalizado);
+  return Number.isFinite(valor) && valor > 0 ? Math.round(valor * 100) / 100 : null;
+}
+
+function linhaEndereco(endereco: Endereco) {
+  return [
+    `${endereco.logradouro}, ${endereco.numero}${endereco.complemento ? ` - ${endereco.complemento}` : ""}`,
+    [endereco.bairro, [endereco.cidade, endereco.estado].filter(Boolean).join("/")].filter(Boolean).join(" - "),
+  ];
+}
+
 export function ModalSacola({ open, onOpenChange }: Props) {
-  const { itens, removerItem, limpar, subtotal, cupomAplicado, setCupomAplicado } = useCarrinho();
+  const { itens, adicionarItem, removerItem, limpar, subtotal, cupomAplicado, setCupomAplicado } = useCarrinho();
   const { loja, isLoading: lojaLoading, error: lojaError, refresh: refreshLoja } = useLoja();
   const { cliente, session, loading } = useAuth();
-  const [step, setStep] = useState<'cart' | 'info' | 'payment'>('cart');
+  const [step, setStep] = useState<Etapa>("cart");
   const router = useRouter();
-  
-  // Dados do formulário
-  const [nome, setNome] = useState("");
-  const [telefone, setTelefone] = useState("");
+
   const [enderecoSelecionado, setEnderecoSelecionado] = useState<string>("");
   const [enderecosDisponiveis, setEnderecosDisponiveis] = useState<Endereco[]>([]);
-  const [tipoEntrega, setTipoEntrega] = useState<'entrega' | 'retirada'>('entrega');
-  const [meioPagamento, setMeioPagamento] = useState<'dinheiro' | 'pix' | 'cartao'>('dinheiro');
+  const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">("entrega");
+  const [meioPagamento, setMeioPagamento] = useState<MeioPagamento | null>(null);
   const [trocoPara, setTrocoPara] = useState("");
+  const [cep, setCep] = useState("");
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [codigoCupom, setCodigoCupom] = useState("");
+  const [cupomAberto, setCupomAberto] = useState(false);
   const cupomRequest = useRef(0);
   const checkoutLock = useRef(false);
   const checkoutAttempt = useRef<{ body: string; key: string } | null>(null);
@@ -51,11 +93,16 @@ export function ModalSacola({ open, onOpenChange }: Props) {
   const [validandoCupom, setValidandoCupom] = useState(false);
   const [erroCupom, setErroCupom] = useState("");
 
+  const nome = cliente?.nome ?? "";
+  const telefone = cliente?.telefone ?? "";
+
   const { categories: currentCategories, isLoading: menuLoading } = useMenu();
   const temFreteGratis = itens.some(item => menuLoading ? item.produto.freteGratis : currentCategories.some(category => category.products.some(product => product.id === item.produto.id && product.disponivel !== false && product.freteGratis)));
-  const frete = tipoEntrega === 'entrega' && !temFreteGratis ? (loja?.taxa_entrega ?? 3) : 0;
+  const taxaEntrega = temFreteGratis ? 0 : (loja?.taxa_entrega ?? 3);
+  const frete = tipoEntrega === "entrega" ? taxaEntrega : 0;
   const descontoCupom = cupomAplicado?.desconto ?? 0;
-  const total = Math.max(0, subtotal - descontoCupom) + frete;
+  const totalProdutos = Math.max(0, subtotal - descontoCupom);
+  const total = totalProdutos + frete;
 
   // Última combinação cupom+subtotal já confirmada pelo servidor (evita revalidar à toa).
   const cupomValidado = useRef("");
@@ -157,6 +204,11 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     void aplicarCupomRef.current(pendente);
   }, [open, itens.length, subtotal, cupomAplicado]);
 
+  // Cupom aplicado, em espera ou com aviso: mostra a seção aberta.
+  useEffect(() => {
+    if (cupomAplicado || erroCupom) setCupomAberto(true);
+  }, [cupomAplicado, erroCupom]);
+
   const removerCupom = () => {
     cupomRequest.current++;
     limparCupomPendente();
@@ -166,140 +218,162 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     setErroCupom("");
   };
 
-  // Address edits refresh AuthContext before returning to the bag.
+  // Endereços salvos (atualizados no AuthContext ao voltar do cadastro de endereço).
   useEffect(() => {
-    if (!open || step !== "info" || loading || !cliente) return;
-    setNome(cliente.nome || "");
-    setTelefone(cliente.telefone || "");
+    if (!open || step !== "entrega" || loading || !cliente) return;
     const enderecos = customerAddresses(cliente);
     setEnderecosDisponiveis(enderecos);
     setEnderecoSelecionado(current => enderecos.some(address => address.id === current) ? current : (enderecos.find(address => address.principal)?.id || enderecos[0]?.id || ""));
   }, [open, step, loading, cliente]);
 
-  // Reset step quando fechar modal
+  // Reset ao fechar a sacola
   useEffect(() => {
     if (!open) {
-      setStep('cart');
+      setStep("cart");
       setEnderecosDisponiveis([]);
       setEnderecoSelecionado("");
-      setTipoEntrega('entrega');
-      setMeioPagamento('dinheiro');
+      setTipoEntrega("entrega");
+      setMeioPagamento(null);
       setTrocoPara("");
+      setCep("");
     }
   }, [open]);
 
-  // Reabre modal após login se necessário
+  // Reabre a sacola após login/cadastro de endereço
   useEffect(() => {
     if (!loading && !lojaLoading && loja && !lojaError && session && !open) {
-      const shouldReopen = sessionStorage.getItem('reopenCart');
-      const savedStep = sessionStorage.getItem('cartStep');
-      
-      if (shouldReopen === 'true') {
+      const shouldReopen = sessionStorage.getItem("reopenCart");
+      const savedStep = sessionStorage.getItem("cartStep");
+
+      if (shouldReopen === "true") {
         if (!resumeChecked.current) { resumeChecked.current = true; void refreshLoja(); return; }
-        sessionStorage.removeItem('reopenCart');
-        sessionStorage.removeItem('cartStep');
-        const savedTipo = sessionStorage.getItem('cartTipoEntrega');
-        sessionStorage.removeItem('cartTipoEntrega');
+        sessionStorage.removeItem("reopenCart");
+        sessionStorage.removeItem("cartStep");
+        sessionStorage.removeItem("cartTipoEntrega");
 
         // Pequeno delay para garantir que o contexto está pronto
         setTimeout(() => {
           onOpenChange(true);
-          if (savedTipo === 'retirada') setTipoEntrega('retirada');
-          if (savedStep === 'info') {
-            setStep('info');
-          }
+          if (savedStep === "info" || savedStep === "entrega") setStep("entrega");
         }, 100);
       }
     }
   }, [loading, lojaLoading, loja, lojaError, session, open, onOpenChange, refreshLoja]);
 
-  const handleVoltar = () => {
-    if (step === 'payment') {
-      setStep('info');
-    } else if (step === 'info') {
-      setStep('cart');
-    }
-  };
-
-  const handleConfirmarInfo = () => {
-    if (lojaLoading || !loja || lojaError) {
-      toast.info(lojaLoading ? "Aguarde, verificando o funcionamento da loja…" : "Não foi possível verificar a loja. Tente novamente.");
-      if (!lojaLoading) void refreshLoja();
-      return;
-    }
-
-    if (!lojaAberta) {
-      toast.error('Loja fechada', {
-        description: 'No momento não estamos aceitando pedidos.',
-      });
-      return;
-    }
-
-    // Se ainda está carregando, não faz nada
-    if (loading) {
-      toast.info('Aguarde, carregando suas informações...');
-      return;
-    }
-    
-    // Se não está logado, avança para tela de info de qualquer forma
-    // A tela já tem o tratamento para mostrar opções de login
-    setStep('info');
-  };
-
-  const handleAvancarParaPagamento = () => {
-    // Valida se preencheu os campos obrigatórios
-    if (!nome || !telefone) {
-      toast.error('Preencha nome e telefone');
-      return;
-    }
-    
-    if (tipoEntrega === 'entrega' && !enderecoSelecionado) {
-      toast.error('Selecione um endereço de entrega');
-      return;
-    }
-    
-    setStep('payment');
-  };
-
-  const adicionarEndereco = () => {
-    sessionStorage.setItem('reopenCart', 'true');
-    sessionStorage.setItem('cartStep', 'info');
-    sessionStorage.setItem('cartTipoEntrega', tipoEntrega);
-    window.location.href = '/perfil/enderecos/novo';
-  };
-
   const lojaConfirmada = !lojaLoading && !!loja && !lojaError;
   const lojaAberta = lojaConfirmada && Boolean(loja?.esta_aberto);
 
-  const handleFinalizarPedido = async () => {
+  const conferirLoja = () => {
     if (lojaLoading || !loja || lojaError) {
       toast.info(lojaLoading ? "Aguarde, verificando o funcionamento da loja…" : "Não foi possível verificar a loja. Tente novamente.");
       if (!lojaLoading) void refreshLoja();
+      return false;
+    }
+    if (!lojaAberta) {
+      toast.error("Loja fechada", { description: "No momento não estamos aceitando pedidos." });
+      return false;
+    }
+    return true;
+  };
+
+  const handleContinuar = () => {
+    if (!conferirLoja()) return;
+    if (loading) {
+      toast.info("Aguarde, carregando suas informações...");
       return;
     }
+    setStep("entrega");
+  };
 
-    if (!lojaAberta) {
-      toast.error("Loja fechada", {
-        description: "No momento não estamos aceitando pedidos.",
-      });
+  const escolherEndereco = (id: string) => {
+    setTipoEntrega("entrega");
+    setEnderecoSelecionado(id);
+    setStep("payment");
+  };
+
+  const escolherRetirada = () => {
+    setTipoEntrega("retirada");
+    setStep("payment");
+  };
+
+  const guardarRetorno = () => {
+    sessionStorage.setItem("reopenCart", "true");
+    sessionStorage.setItem("cartStep", "entrega");
+  };
+
+  const adicionarEndereco = (cepInformado?: string) => {
+    guardarRetorno();
+    const digitos = (cepInformado ?? "").replace(/\D/g, "");
+    window.location.href = digitos.length === 8 ? `/perfil/enderecos/novo?cep=${digitos}` : "/perfil/enderecos/novo";
+  };
+
+  // "Buscar CEP": se o CEP já é de um endereço salvo, usa esse endereço em vez de cadastrar outro.
+  const buscarCep = () => {
+    const digitos = cep.replace(/\D/g, "");
+    if (digitos.length !== 8) return;
+    const salvos = enderecosDisponiveis.filter((endereco) => (endereco.cep ?? "").replace(/\D/g, "") === digitos);
+    if (salvos.length === 1) {
+      toast.success("Esse CEP já está cadastrado", { description: `Usando o endereço ${salvos[0].apelido || linhaEndereco(salvos[0])[0]}.` });
+      setCep("");
+      escolherEndereco(salvos[0].id);
+      return;
+    }
+    if (salvos.length > 1) {
+      toast.info("Você tem mais de um endereço com esse CEP", { description: "Escolha um dos endereços salvos acima." });
+      return;
+    }
+    adicionarEndereco(digitos);
+  };
+
+  const irParaLogin = (destino: "/entrar" | "/cadastrar") => {
+    guardarRetorno();
+    onOpenChange(false);
+    router.push(destino);
+  };
+
+  const duplicarItem = (item: ItemCarrinho) => {
+    const { uid: _uid, ...copia } = item;
+    void _uid;
+    adicionarItem(copia);
+    toast.success("Item duplicado");
+  };
+
+  const handleVoltar = () => {
+    if (step === "payment") setStep("entrega");
+    else if (step === "entrega") setStep("cart");
+  };
+
+  const enderecoAtual = enderecosDisponiveis.find(e => e.id === enderecoSelecionado);
+
+  const handleFinalizarPedido = async () => {
+    if (!conferirLoja()) return;
+    if (!meioPagamento) {
+      toast.error("Escolha a forma de pagamento");
+      return;
+    }
+    if (!nome || !telefone) {
+      toast.error("Complete seu nome e telefone no perfil");
+      return;
+    }
+    if (tipoEntrega === "entrega" && !enderecoAtual) {
+      toast.error("Selecione um endereço de entrega");
+      setStep("entrega");
       return;
     }
 
     if (checkoutLock.current) return;
     checkoutLock.current = true;
     setEnviandoPedido(true);
-    
+
     try {
-      const enderecoAtual = enderecosDisponiveis.find(e => e.id === enderecoSelecionado);
-      
       const pedidoData = {
         cliente_nome: nome,
         cliente_telefone: telefone,
         tipo_entrega: tipoEntrega,
-        endereco_id: tipoEntrega === 'entrega' ? enderecoSelecionado : null,
-        endereco_completo: tipoEntrega === 'entrega' ? enderecoAtual : null,
+        endereco_id: tipoEntrega === "entrega" ? enderecoSelecionado : null,
+        endereco_completo: tipoEntrega === "entrega" ? enderecoAtual : null,
         meio_pagamento: meioPagamento,
-        troco_para: meioPagamento === 'dinheiro' ? trocoPara : null,
+        troco_para: meioPagamento === "dinheiro" ? valorTroco(trocoPara) : null,
         subtotal,
         taxa_entrega: frete,
         total,
@@ -328,532 +402,394 @@ export function ModalSacola({ open, onOpenChange }: Props) {
           };
         }),
       };
-      
+
       const serializedOrder = JSON.stringify(pedidoData);
       if (checkoutAttempt.current?.body !== serializedOrder) checkoutAttempt.current = { body: serializedOrder, key: crypto.randomUUID() };
-      const resposta = await fetch('/api/pedidos/criar', {
-        method: 'POST',
+      const resposta = await fetch("/api/pedidos/criar", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Idempotency-Key': checkoutAttempt.current.key,
+          "Content-Type": "application/json",
+          "Idempotency-Key": checkoutAttempt.current.key,
         },
         body: serializedOrder,
       });
-      
+
       if (!resposta.ok) {
-        const erro = await resposta.json();
-        toast.error(erro.erro || 'Erro ao criar pedido');
+        const erro = await resposta.json().catch(() => ({}));
+        toast.error(erro.erro || "Erro ao criar pedido");
         return;
       }
-      
+
       const { pedido } = await resposta.json();
       checkoutAttempt.current = null;
       invalidateCustomerResources();
-      
-      toast.success('Pedido realizado com sucesso!', {
+
+      toast.success("Pedido realizado com sucesso!", {
         description: `Pedido #${pedido.id.slice(0, 8)} · Total confirmado: ${formatBRL(Number(pedido.total))}`,
       });
-      
+
       limpar();
       removerCupom();
       onOpenChange(false);
-      
+
       // Redireciona para pedidos após 1s
       setTimeout(() => {
-        router.push('/pedidos');
+        router.push("/pedidos");
       }, 1000);
-      
-    } catch (error) {
-      toast.error('Erro ao processar pedido');
+    } catch {
+      toast.error("Erro ao processar pedido");
     } finally {
       checkoutLock.current = false;
       setEnviandoPedido(false);
     }
   };
 
-  const enderecoAtual = enderecosDisponiveis.find(e => e.id === enderecoSelecionado);
+  const titulo = step === "cart" ? "Minha sacola" : step === "entrega" ? "Opções de entrega" : "Selecione a forma de pagamento";
+  const tempoEntrega = loja?.tempo_entrega_min || loja?.tempo_entrega_max
+    ? `${loja.tempo_entrega_min ?? ""}${loja.tempo_entrega_max ? `–${loja.tempo_entrega_max}` : ""} min`
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent overlayClassName="z-[80] max-md:bottom-0" className="z-[90] flex h-dvh max-h-dvh w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92dvh] md:max-h-[92dvh] md:rounded-2xl">
-        <DialogTitle className="sr-only">Sacola</DialogTitle>
+      <DialogContent hideClose overlayClassName="z-[80] max-md:bottom-0" className="z-[90] flex h-dvh max-h-dvh w-full max-w-md flex-col gap-0 overflow-hidden border-0 p-0 top-0 translate-y-0 rounded-none md:top-[50%] md:translate-y-[-50%] md:h-[92dvh] md:max-h-[92dvh] md:rounded-2xl">
+        <DialogTitle className="sr-only">{titulo}</DialogTitle>
 
-        {/* Header */}
-        <div className="shrink-0 flex items-center justify-between bg-card px-5 pb-4 pt-10 shadow-sm sm:pt-8">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-bold text-foreground">
-              {step === 'cart' && 'Sua sacola'}
-              {step === 'info' && 'Confirme seus dados'}
-              {step === 'payment' && 'Pagamento e entrega'}
-            </h2>
-          </div>
-          <div className="flex items-center gap-3 pr-8">
-            {itens.length > 0 && step === 'cart' && (
-              <button
-                onClick={() => { limpar(); removerCupom(); }}
-                className="text-xs font-semibold uppercase tracking-wide text-destructive hover:opacity-75"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Tempo de entrega */}
-        {loja && (loja.tempo_entrega_min || loja.tempo_entrega_max) && (
-          <div className="shrink-0 border-b border-border bg-muted/40 px-5 py-3">
-            <button className="flex w-full items-center justify-between text-sm text-muted-foreground hover:text-foreground">
-              <span className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-primary" />
-                <span>
-                  {tipoEntrega === 'retirada' ? 'Pronto para retirar em' : 'Entrega em'} <span className="font-semibold text-foreground">{loja.tempo_entrega_min}–{loja.tempo_entrega_max} min</span>
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4" />
+        {/* Cabeçalho */}
+        {step === "cart" ? (
+          <header className="relative flex shrink-0 items-center justify-center border-b border-border bg-card px-14 pb-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
+            <h2 className="text-lg font-bold tracking-[-0.02em] text-foreground">Minha sacola</h2>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label="Fechar sacola"
+              className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-muted text-foreground transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <X aria-hidden="true" className="h-5 w-5" />
             </button>
-          </div>
+          </header>
+        ) : (
+          <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card px-4 pb-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
+            <button
+              type="button"
+              onClick={handleVoltar}
+              disabled={enviandoPedido}
+              aria-label="Voltar"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm transition hover:opacity-95 active:scale-95 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              <ArrowLeft aria-hidden="true" className="h-5 w-5" />
+            </button>
+            <h2 className="min-w-0 truncate text-base font-bold tracking-[-0.01em] text-foreground">{titulo}</h2>
+          </header>
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background">
-          {step === 'cart' ? (
-            // TELA 1: Carrinho
-            <>
-              {itens.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-                  <div className="rounded-full bg-muted p-6">
-                    <ShoppingBag className="h-12 w-12" strokeWidth={1.25} />
-                  </div>
-                  <p className="mt-4 font-medium">Sua sacola está vazia</p>
-                  <p className="mt-1 text-xs">Adicione produtos para continuar</p>
+          {step === "cart" ? (
+            itens.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-5 py-24 text-center text-muted-foreground">
+                <div className="rounded-full bg-muted p-6">
+                  <ShoppingBag className="h-12 w-12" strokeWidth={1.25} />
+                </div>
+                <p className="mt-4 font-medium text-foreground">Sua sacola está vazia</p>
+                <p className="mt-1 text-xs">Adicione produtos para continuar</p>
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="mt-6 rounded-xl border border-primary px-5 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
+                >
+                  Ver cardápio
+                </button>
+              </div>
+            ) : (
+              <>
+                <ul className="divide-y divide-border px-4">
+                  {itens.map((item) => (
+                    <ItemSacola
+                      key={item.uid}
+                      item={item}
+                      onRemover={() => removerItem(item.uid)}
+                      onDuplicar={() => duplicarItem(item)}
+                    />
+                  ))}
+                </ul>
+
+                <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2">
                   <button
+                    type="button"
                     onClick={() => onOpenChange(false)}
-                    className="mt-6 rounded-xl border border-primary px-5 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
+                    className="min-h-11 text-sm font-semibold text-primary hover:underline"
                   >
-                    Ver cardápio
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Lista de itens */}
-                  <ul className="divide-y divide-border">
-                    {itens.map((item) => {
-                      const resumo = resumoOpcoes(item.produto, item.selections);
-                      return (
-                        <li key={item.uid} className="flex gap-3 bg-card px-5 py-4">
-                          {item.produto.image ? (
-                            <Image preset="thumbnail"
-                              src={item.produto.image}
-                              alt={item.produto.name}
-                              width={64}
-                              height={64}
-                              className="h-16 w-16 shrink-0 rounded-xl object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-muted">
-                              <ShoppingBag className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                          <div className="flex flex-1 flex-col gap-0.5 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="text-sm font-bold text-foreground">
-                                {item.qty}x {item.produto.name}
-                              </span>
-                              <span className="shrink-0 text-sm font-bold text-foreground">
-                                {formatBRL(item.total)}
-                              </span>
-                            </div>
-                            {resumo && (
-                              <p className="truncate text-xs text-muted-foreground">{resumo}</p>
-                            )}
-                            {item.produto.comboItems?.length ? (
-                              <p className="text-xs text-muted-foreground">
-                                Inclui {item.produto.comboItems.map((part) => `${part.quantity}× ${part.name}`).join(" · ")}
-                              </p>
-                            ) : null}
-                            {typeof item.colher === "boolean" && (
-                              <p className="text-xs text-muted-foreground">
-                                {item.colher ? "Com colher" : "Sem colher"}
-                              </p>
-                            )}
-                            {item.observacoes && (
-                              <p className="text-xs text-muted-foreground">
-                                OBS: {item.observacoes}
-                              </p>
-                            )}
-                            <button
-                              onClick={() => removerItem(item.uid)}
-                              className="mt-1.5 flex w-fit items-center gap-1 text-xs font-semibold text-destructive hover:opacity-75"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              Remover
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-
-                  {/* Como receber o pedido */}
-                  <fieldset className="mx-5 mt-4 mb-3 rounded-xl border border-border bg-card p-3.5">
-                    <legend className="sr-only">Como você quer receber o pedido?</legend>
-                    <p aria-hidden="true" className="text-xs font-semibold">Como você quer receber?</p>
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      {([
-                        { valor: 'entrega', rotulo: 'Entrega', Icone: Truck },
-                        { valor: 'retirada', rotulo: 'Retirar no local', Icone: Store },
-                      ] as const).map(({ valor, rotulo, Icone }) => (
-                        <button
-                          key={valor}
-                          type="button"
-                          aria-pressed={tipoEntrega === valor}
-                          onClick={() => setTipoEntrega(valor)}
-                          className={`min-h-11 rounded-lg border-2 p-2.5 text-sm font-medium transition ${
-                            tipoEntrega === valor
-                              ? 'border-primary bg-primary/5 text-primary'
-                              : 'border-border hover:border-primary/50'
-                          }`}
-                        >
-                          <Icone className="mx-auto mb-1 h-5 w-5" />
-                          {rotulo}
-                        </button>
-                      ))}
-                    </div>
-                    {tipoEntrega === 'retirada' && (
-                      <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        <span>{loja?.endereco ? <>Retire em: <span className="font-medium text-foreground">{loja.endereco}</span></> : 'Você retira o pedido no estabelecimento, sem taxa de entrega.'}</span>
-                      </p>
-                    )}
-                  </fieldset>
-
-                  {/* Cupom */}
-                  <div className="mx-5 mb-3 rounded-xl border border-border bg-card p-3.5">
-                    <Label htmlFor="cupom-pedido" className="text-xs font-semibold">Cupom de desconto</Label>
-                    {cupomAplicado ? (
-                      <div role="status" className="mt-2 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                        <span className="min-w-0 truncate"><strong>{cupomAplicado.codigo}</strong> aplicado · você economizou {formatBRL(descontoCupom)}</span>
-                        <button type="button" onClick={removerCupom} className="shrink-0 text-xs font-semibold underline">Remover</button>
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex gap-2">
-                        <Input
-                          id="cupom-pedido"
-                          value={codigoCupom}
-                          onChange={(event) => { cupomRequest.current++; setValidandoCupom(false); setCodigoCupom(event.target.value.toUpperCase()); setErroCupom(""); }}
-                          placeholder="Digite seu código…"
-                          autoCapitalize="characters"
-                          spellCheck={false}
-                          autoComplete="off"
-                          name="cupom"
-                          className="h-10 min-w-0 uppercase"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void aplicarCupom()}
-                          disabled={validandoCupom || codigoCupom.trim().length < 3}
-                          className="h-10 shrink-0 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                        >
-                          {validandoCupom ? "Verificando" : "Aplicar"}
-                        </button>
-                      </div>
-                    )}
-                    {erroCupom && <p role="alert" className="mt-2 text-xs text-destructive">{erroCupom}</p>}
-                  </div>
-
-                  {/* Adicionar mais */}
-                  <div className="px-5 py-3">
-                    <button
-                      onClick={() => onOpenChange(false)}
-                      className="w-full rounded-xl border border-primary py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
-                    >
-                      + Adicionar mais itens
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          ) : step === 'info' ? (
-            // TELA 2: Informações do Cliente
-            <>
-              {loading ? (
-                // Indicador de carregamento
-                <div className="flex flex-col items-center justify-center py-24">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-                  <p className="mt-4 text-sm text-muted-foreground">Carregando...</p>
-                </div>
-              ) : !session || !session.user ? (
-                // Mensagem quando não há sessão
-                <div className="flex flex-col items-center justify-center py-24 px-5 text-center">
-                  <div className="rounded-full bg-muted p-6">
-                    <User className="h-12 w-12 text-muted-foreground" strokeWidth={1.25} />
-                  </div>
-                  <p className="mt-4 font-medium text-foreground">Você precisa estar logado</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Para finalizar seu pedido, faça login ou crie uma conta
-                  </p>
-                  <p className="mt-2 text-xs text-primary font-medium">
-                    Seu carrinho não será perdido
-                  </p>
-                  <button
-                    onClick={() => {
-                      sessionStorage.setItem('reopenCart', 'true');
-                      sessionStorage.setItem('cartStep', 'info');
-    sessionStorage.setItem('cartTipoEntrega', tipoEntrega);
-                      onOpenChange(false);
-                      router.push('/entrar');
-                    }}
-                    className="mt-6 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-                  >
-                    Fazer login
+                    + Adicionar mais itens
                   </button>
                   <button
-                    onClick={() => {
-                      sessionStorage.setItem('reopenCart', 'true');
-                      sessionStorage.setItem('cartStep', 'info');
-    sessionStorage.setItem('cartTipoEntrega', tipoEntrega);
-                      onOpenChange(false);
-                      router.push('/cadastrar');
-                    }}
-                    className="mt-3 rounded-xl border border-primary px-6 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
+                    type="button"
+                    onClick={() => { limpar(); removerCupom(); }}
+                    className="min-h-11 text-xs font-medium text-muted-foreground hover:text-destructive"
                   >
-                    Criar conta
+                    Limpar sacola
                   </button>
                 </div>
-              ) : (
-                // Formulário de informações do cliente
-                <div className="p-5 py-6 space-y-5">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nome" className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        Nome completo
-                      </Label>
-                      <Input
-                        id="nome"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        placeholder="Seu nome"
-                      />
-                    </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="telefone" className="flex items-center gap-2">
-                        <Phone className="h-4 w-4" />
-                        Telefone
-                      </Label>
-                      <Input
-                        id="telefone"
-                        value={telefone}
-                        onChange={(e) => setTelefone(e.target.value)}
-                        placeholder="(00) 00000-0000"
-                      />
-                    </div>
-
-                    {/* Retirada no local: mostra onde retirar */}
-                    {tipoEntrega === 'retirada' && (
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <Store className="h-4 w-4" />
-                          Retirar no local
-                        </Label>
-                        <div className="rounded-lg border-2 border-primary bg-primary/5 p-3 text-sm">
-                          <p className="font-semibold">{loja?.nome || 'Estabelecimento'}</p>
-                          {loja?.endereco && <p className="mt-1 text-xs text-muted-foreground">{loja.endereco}</p>}
-                          <button type="button" onClick={() => setTipoEntrega('entrega')} className="mt-2 min-h-9 text-xs font-medium text-primary underline">
-                            Prefiro receber em casa
-                          </button>
+                {/* Cupom */}
+                <section className="border-t border-border px-4 pb-4">
+                  <button
+                    type="button"
+                    onClick={() => setCupomAberto((aberto) => !aberto)}
+                    aria-expanded={cupomAberto}
+                    aria-controls="cupom-sacola"
+                    className="flex min-h-12 w-full items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    Cupom de desconto
+                    {cupomAplicado && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">{cupomAplicado.codigo}</span>}
+                    <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform motion-reduce:transition-none ${cupomAberto ? "rotate-180" : ""}`} />
+                  </button>
+                  {cupomAberto && (
+                    <div id="cupom-sacola">
+                      {cupomAplicado ? (
+                        <div role="status" className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                          <span className="min-w-0 truncate"><strong>{cupomAplicado.codigo}</strong> aplicado · você economizou {formatBRL(descontoCupom)}</span>
+                          <button type="button" onClick={removerCupom} className="shrink-0 text-xs font-semibold underline">Remover</button>
                         </div>
-                      </div>
-                    )}
-
-                    {/* Endereço (apenas se entrega) */}
-                    {tipoEntrega === 'entrega' && (
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          Endereço de entrega
-                        </Label>
-                        
-                        {enderecosDisponiveis.length > 0 ? (
-                          <div className="space-y-2">
-                            {enderecosDisponiveis.map((endereco) => (
-                              <button
-                                key={endereco.id}
-                                type="button"
-                                onClick={() => setEnderecoSelecionado(endereco.id)}
-                                className={`w-full text-left p-3 rounded-lg border-2 transition ${
-                                  enderecoSelecionado === endereco.id
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-border hover:border-primary/50'
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1">
-                                    <p className="font-semibold text-sm">{endereco.apelido}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      {endereco.logradouro}, {endereco.numero}
-                                      {endereco.complemento && ` - ${endereco.complemento}`}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {endereco.bairro} - {endereco.cidade}/{endereco.estado}
-                                    </p>
-                                  </div>
-                                  {endereco.principal && (
-                                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                                      Principal
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={adicionarEndereco}
-                              className="w-full text-center p-3 rounded-lg border-2 border-dashed border-border hover:border-primary text-sm text-muted-foreground hover:text-primary transition"
-                            >
-                              + Adicionar novo endereço
-                            </button>
-                          </div>
-                        ) : (
+                      ) : (
+                        <div className="flex gap-2">
+                          <Input
+                            id="cupom-pedido"
+                            aria-label="Código do cupom"
+                            value={codigoCupom}
+                            onChange={(event) => { cupomRequest.current++; setValidandoCupom(false); setCodigoCupom(event.target.value.toUpperCase()); setErroCupom(""); }}
+                            placeholder="Digite seu código…"
+                            autoCapitalize="characters"
+                            spellCheck={false}
+                            autoComplete="off"
+                            name="cupom"
+                            className="h-11 min-w-0 uppercase"
+                          />
                           <button
                             type="button"
-                            onClick={adicionarEndereco}
-                            className="w-full text-center p-4 rounded-lg border-2 border-dashed border-primary text-sm text-primary hover:bg-primary/5 transition"
+                            onClick={() => void aplicarCupom()}
+                            disabled={validandoCupom || codigoCupom.trim().length < 3}
+                            className="h-11 shrink-0 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                           >
-                            + Adicionar endereço
+                            {validandoCupom ? "Verificando" : "Aplicar"}
                           </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            // TELA 3: Pagamento
-            <div className="p-5 py-6 space-y-5">
-              {cupomAplicado && <section aria-label="Cupom aplicado" className="border-b border-border pb-4">
-                <p className="text-sm font-semibold text-primary">Cupom {cupomAplicado.codigo}</p>
-                <p className="mt-1 text-sm text-muted-foreground">Você economizou {formatBRL(descontoCupom)}</p>
-                <div className="mt-2 flex gap-4">
-                  <button type="button" onClick={() => setStep('cart')} className="min-h-11 text-sm font-medium text-primary underline">Alterar cupom</button>
-                  <button type="button" onClick={removerCupom} className="min-h-11 text-sm text-muted-foreground underline">Remover</button>
-                </div>
-              </section>}
-              {erroCupom && <p role="alert" className="text-sm text-destructive">{erroCupom}</p>}
-              <div className="space-y-4">
-                {/* Meio de Pagamento */}
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" />
-                    Meio de Pagamento
-                  </Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setMeioPagamento('dinheiro')}
-                      className={`p-3 rounded-lg border-2 transition text-xs font-medium ${
-                        meioPagamento === 'dinheiro'
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <Banknote className="h-5 w-5 mx-auto mb-1" />
-                      Dinheiro
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMeioPagamento('pix')}
-                      className={`p-3 rounded-lg border-2 transition text-xs font-medium ${
-                        meioPagamento === 'pix'
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <CreditCard className="h-5 w-5 mx-auto mb-1" />
-                      PIX
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMeioPagamento('cartao')}
-                      className={`p-3 rounded-lg border-2 transition text-xs font-medium ${
-                        meioPagamento === 'cartao'
-                          ? 'border-primary bg-primary/5 text-primary'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <CreditCard className="h-5 w-5 mx-auto mb-1" />
-                      Cartão
-                    </button>
-                  </div>
-                </div>
-
-                {/* Troco (se pagamento for dinheiro) */}
-                {meioPagamento === 'dinheiro' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="troco">Troco para quanto? (opcional)</Label>
-                    <Input
-                      id="troco"
-                      type="text"
-                      placeholder="Ex: R$ 50,00"
-                      value={trocoPara}
-                      onChange={(e) => setTrocoPara(e.target.value)}
-                    />
-                  </div>
-                )}
-
-                {/* Resumo do Pedido */}
-                <div className="mt-6 p-4 bg-muted/50 rounded-lg space-y-2">
-                  <h3 className="font-semibold text-sm mb-3">Resumo do Pedido</h3>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Cliente:</span>
-                      <span className="font-medium">{nome}</span>
+                        </div>
+                      )}
+                      {erroCupom && <p role="alert" className="mt-2 text-xs text-destructive">{erroCupom}</p>}
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Telefone:</span>
-                      <span className="font-medium">{telefone}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tipo:</span>
-                      <span className="font-medium">{tipoEntrega === 'retirada' ? 'Retirar no local' : 'Entrega'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pagamento:</span>
-                      <span className="font-medium capitalize">{meioPagamento}</span>
-                    </div>
-                  </div>
-                </div>
+                  )}
+                </section>
+              </>
+            )
+          ) : step === "entrega" ? (
+            loading ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary motion-reduce:animate-none" />
+                <p className="mt-4 text-sm text-muted-foreground">Carregando...</p>
               </div>
+            ) : !session || !session.user ? (
+              <div className="flex flex-col items-center justify-center px-5 py-24 text-center">
+                <div className="rounded-full bg-muted p-6">
+                  <User className="h-12 w-12 text-muted-foreground" strokeWidth={1.25} />
+                </div>
+                <p className="mt-4 font-medium text-foreground">Entre para finalizar o pedido</p>
+                <p className="mt-1 text-xs text-muted-foreground">Faça login ou crie uma conta. Sua sacola não será perdida.</p>
+                <button
+                  type="button"
+                  onClick={() => irParaLogin("/entrar")}
+                  className="mt-6 rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
+                >
+                  Fazer login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => irParaLogin("/cadastrar")}
+                  className="mt-3 rounded-xl border border-primary px-6 py-2.5 text-sm font-semibold text-primary hover:bg-primary/5"
+                >
+                  Criar conta
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-6 px-4 py-5">
+                {/* Entregar no meu endereço */}
+                <section aria-labelledby="titulo-entregar" className="space-y-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h3 id="titulo-entregar" className="text-base font-semibold text-foreground">Entregar no meu endereço</h3>
+                    {tempoEntrega && <span className="shrink-0 text-xs text-muted-foreground">{tempoEntrega}</span>}
+                  </div>
+
+                  {enderecosDisponiveis.length > 0 && (
+                    <ul className="space-y-2">
+                      {enderecosDisponiveis.map((endereco) => {
+                        const [linha1, linha2] = linhaEndereco(endereco);
+                        const selecionado = tipoEntrega === "entrega" && enderecoSelecionado === endereco.id;
+                        return (
+                          <li key={endereco.id}>
+                            <CartaoOpcao
+                              selecionado={selecionado}
+                              onClick={() => escolherEndereco(endereco.id)}
+                              icone={<MapPin aria-hidden="true" className="h-5 w-5" />}
+                              titulo={
+                                <>
+                                  {endereco.apelido || "Endereço"}
+                                  {endereco.principal && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">Principal</span>}
+                                </>
+                              }
+                              linhas={[linha1, linha2]}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  {/* Novo endereço por CEP */}
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                        <Hash aria-hidden="true" className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">
+                          {enderecosDisponiveis.length > 0 ? "Usar outro endereço" : "Digitar meu endereço"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Informar meu endereço por CEP</p>
+                      </div>
+                    </div>
+                    <form
+                      className="mt-3 flex gap-2 rounded-xl border border-dashed border-border p-2"
+                      onSubmit={(event) => { event.preventDefault(); buscarCep(); }}
+                    >
+                      <Input
+                        value={cep}
+                        onChange={(event) => setCep(event.target.value.replace(/\D/g, "").slice(0, 8).replace(/^(\d{5})(\d)/, "$1-$2"))}
+                        inputMode="numeric"
+                        autoComplete="postal-code"
+                        aria-label="CEP"
+                        placeholder="Digite o CEP"
+                        className="h-11 min-w-0 border-0 shadow-none focus-visible:ring-0"
+                      />
+                      <button
+                        type="submit"
+                        disabled={cep.replace(/\D/g, "").length !== 8}
+                        className="h-11 shrink-0 rounded-lg bg-primary px-4 text-xs font-bold uppercase tracking-wide text-primary-foreground transition hover:opacity-95 disabled:opacity-50"
+                      >
+                        Buscar CEP
+                      </button>
+                    </form>
+                    <button
+                      type="button"
+                      onClick={() => adicionarEndereco()}
+                      className="mt-2 min-h-9 text-xs font-medium text-primary underline"
+                    >
+                      Não sei meu CEP
+                    </button>
+                  </div>
+                </section>
+
+                {/* Ir até o estabelecimento */}
+                <section aria-labelledby="titulo-retirar" className="space-y-3">
+                  <h3 id="titulo-retirar" className="text-base font-semibold text-foreground">Ir até o estabelecimento</h3>
+                  <CartaoOpcao
+                    selecionado={tipoEntrega === "retirada"}
+                    onClick={escolherRetirada}
+                    icone={
+                      loja?.logo_url ? (
+                        <span className="relative block h-10 w-10 overflow-hidden rounded-full">
+                          <Image preset="storeLogo" src={loja.logo_url} alt="" fill sizes="40px" className="object-cover" />
+                        </span>
+                      ) : (
+                        <Store aria-hidden="true" className="h-5 w-5" />
+                      )
+                    }
+                    titulo={loja?.nome || "Estabelecimento"}
+                    linhas={[loja?.endereco || "Retire o pedido no balcão, sem taxa de entrega."]}
+                  />
+                </section>
+              </div>
+            )
+          ) : (
+            <div className="pb-4">
+              {/* Abas: só "Pague na entrega" */}
+              <div className="border-b border-border px-4">
+                <p className="inline-block border-b-[3px] border-primary px-1 pb-2.5 pt-4 text-sm font-semibold text-foreground">
+                  Pague na entrega
+                </p>
+              </div>
+
+              <div role="radiogroup" aria-label="Forma de pagamento" className="divide-y divide-border px-4">
+                {MEIOS_PAGAMENTO.map(({ valor, rotulo }) => {
+                  const marcado = meioPagamento === valor;
+                  const { Icone, cor } = ICONE_PAGAMENTO[valor];
+                  return (
+                    <div key={valor}>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={marcado}
+                        onClick={() => setMeioPagamento(valor)}
+                        className="flex min-h-[60px] w-full items-center gap-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                      >
+                        <span className={`flex h-8 w-10 shrink-0 items-center justify-center rounded-md ${cor}`}>
+                          <Icone aria-hidden="true" className="h-5 w-5" />
+                        </span>
+                        <span className="flex-1 text-sm text-foreground">{rotulo}</span>
+                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition ${marcado ? "border-primary bg-primary" : "border-muted-foreground/30"}`}>
+                          {marcado && <Check aria-hidden="true" className="h-3.5 w-3.5 text-primary-foreground" strokeWidth={3} />}
+                        </span>
+                      </button>
+                      {valor === "dinheiro" && marcado && (
+                        <div className="pb-3 pl-[52px]">
+                          <label htmlFor="troco" className="text-xs font-medium text-muted-foreground">Troco para quanto? (opcional)</label>
+                          <Input
+                            id="troco"
+                            inputMode="decimal"
+                            placeholder="Ex: R$ 50,00"
+                            value={trocoPara}
+                            onChange={(e) => setTrocoPara(e.target.value)}
+                            className="mt-1 h-11"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Resumo */}
+              <section aria-label="Resumo do pedido" className="mx-4 mt-4 space-y-2 rounded-2xl border border-border bg-card p-4 text-sm">
+                <div className="flex items-start gap-2.5">
+                  {tipoEntrega === "retirada" ? <Store aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : <Truck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-foreground">{tipoEntrega === "retirada" ? "Retirar no local" : "Entrega"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {tipoEntrega === "retirada"
+                        ? loja?.endereco || loja?.nome
+                        : enderecoAtual ? linhaEndereco(enderecoAtual).join(" · ") : "Selecione um endereço"}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setStep("entrega")} className="min-h-9 shrink-0 text-xs font-semibold text-primary">
+                    Trocar
+                  </button>
+                </div>
+                <div className="space-y-1 border-t border-border pt-2">
+                  <LinhaValor rotulo="Subtotal" valor={formatBRL(subtotal)} />
+                  {cupomAplicado && <LinhaValor rotulo={`Desconto (${cupomAplicado.codigo})`} valor={`− ${formatBRL(descontoCupom)}`} destaque />}
+                  {tipoEntrega === "entrega" && <LinhaValor rotulo="Taxa de entrega" valor={frete === 0 ? "Grátis" : formatBRL(frete)} destaque={frete === 0} />}
+                  {meioPagamento && <LinhaValor rotulo="Pagamento" valor={rotuloPagamento(meioPagamento)} />}
+                </div>
+                {erroCupom && <p role="alert" className="text-xs text-destructive">{erroCupom}</p>}
+              </section>
             </div>
           )}
         </div>
 
-        {/* Footer resumo + botões */}
-        {itens.length > 0 && (
-          <div className="shrink-0 border-t border-border bg-card px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-medium">{formatBRL(subtotal)}</span>
-            </div>
-            {cupomAplicado && (
-              <div className="flex justify-between text-sm text-emerald-700">
-                <span>Desconto ({cupomAplicado.codigo})</span>
-                <span className="font-medium">− {formatBRL(descontoCupom)}</span>
-              </div>
+        {/* Rodapé */}
+        {itens.length > 0 && step !== "entrega" && (
+          <div className="shrink-0 space-y-3 border-t border-border bg-card px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            {step === "cart" && temFreteGratis && (
+              <p className="rounded-lg bg-emerald-500 px-3 py-2 text-center text-sm text-white">
+                Sua sacola tem <strong>ENTREGA GRÁTIS</strong>
+              </p>
             )}
-            {tipoEntrega === 'entrega' && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{temFreteGratis ? 'Frete grátis na sua sacola!' : 'Taxa de entrega'}</span>
-                <span className={`font-medium ${temFreteGratis ? 'text-emerald-700' : ''}`}>{temFreteGratis ? 'GRÁTIS' : formatBRL(frete)}</span>
-              </div>
-            )}
-            <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
-              <span>Total</span>
-              <span className="text-primary">{formatBRL(total)}</span>
-            </div>
-            
             {!lojaConfirmada && <div role="status" className="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">{lojaLoading ? "Verificando o funcionamento da loja…" : <>Não foi possível consultar a loja. <button type="button" onClick={() => void refreshLoja()} className="min-h-9 font-medium text-primary underline">Tentar novamente</button></>}</div>}
             {lojaConfirmada && !lojaAberta && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
@@ -861,59 +797,145 @@ export function ModalSacola({ open, onOpenChange }: Props) {
               </div>
             )}
 
-            {step === 'cart' ? (
-              <button 
-                onClick={handleConfirmarInfo}
+            <div className="flex items-baseline justify-between">
+              <span className="text-lg font-bold text-foreground">Total:</span>
+              <span className="text-lg font-bold text-foreground">{formatBRL(step === "cart" ? totalProdutos : total)}</span>
+            </div>
+            {step === "cart" && cupomAplicado && (
+              <p className="-mt-2 text-right text-xs text-emerald-700">Você economizou {formatBRL(descontoCupom)}</p>
+            )}
+
+            {step === "cart" ? (
+              <button
+                type="button"
+                onClick={handleContinuar}
                 disabled={loading || validandoCupom || !lojaAberta}
-                className="mt-1 w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold uppercase tracking-wide text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading
-                  ? 'Carregando...'
-                  : !lojaConfirmada ? 'Verificando loja…' : !lojaAberta
-                    ? 'Loja fechada'
-                    : 'Confirmar informações'}
+                {loading ? "Carregando..." : !lojaConfirmada ? "Verificando loja…" : !lojaAberta ? "Loja fechada" : "Continuar"}
               </button>
-            ) : step === 'info' ? (
-              <div className="space-y-2 mt-2">
-                <button 
-                  onClick={handleAvancarParaPagamento}
-                  disabled={!lojaAberta || !nome || !telefone || (tipoEntrega === 'entrega' && !enderecoSelecionado)}
-                  className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Avançar para pagamento
-                </button>
-                <button 
-                  onClick={handleVoltar}
-                  className="w-full rounded-xl border border-border py-2.5 text-sm font-semibold text-foreground hover:bg-muted"
-                >
-                  Voltar para sacola
-                </button>
-              </div>
             ) : (
-              <div className="space-y-2 mt-2">
-                <button 
-                  onClick={handleFinalizarPedido}
-                  disabled={enviandoPedido || validandoCupom || !lojaAberta}
-                  className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {enviandoPedido
-                    ? 'Enviando pedido...'
-                    : !lojaConfirmada ? 'Verificando loja…' : !lojaAberta
-                      ? 'Loja fechada'
-                      : 'Finalizar pedido'}
-                </button>
-                <button 
-                  onClick={handleVoltar}
-                  disabled={enviandoPedido}
-                  className="w-full rounded-xl border border-border py-2.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
-                >
-                  Voltar
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => void handleFinalizarPedido()}
+                disabled={enviandoPedido || validandoCupom || !lojaAberta || !meioPagamento}
+                className="w-full rounded-xl bg-primary py-3.5 text-sm font-bold uppercase tracking-wide text-primary-foreground shadow-md transition hover:opacity-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {enviandoPedido ? "Enviando pedido..." : !lojaConfirmada ? "Verificando loja…" : !lojaAberta ? "Loja fechada" : !meioPagamento ? "Escolha o pagamento" : "Fazer pedido"}
+              </button>
             )}
           </div>
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Item da sacola: foto, nome, escolhas, lixeira, duplicar e preço. */
+function ItemSacola({ item, onRemover, onDuplicar }: { item: ItemCarrinho; onRemover: () => void; onDuplicar: () => void }) {
+  const escolhas = resolveSelectionsFromProduct(item.produto, item.selections);
+  const destaque = [
+    typeof item.colher === "boolean" ? (item.colher ? "Sim, quero colher" : "Não quero colher") : null,
+    item.observacoes ? `Obs: ${item.observacoes}` : null,
+  ].filter(Boolean).join(", ");
+
+  return (
+    <li className="py-4">
+      <div className="flex gap-3">
+        {item.produto.image ? (
+          <Image preset="thumbnail"
+            src={item.produto.image}
+            alt=""
+            width={56}
+            height={56}
+            className="h-14 w-14 shrink-0 rounded-xl object-cover"
+          />
+        ) : (
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted">
+            <ShoppingBag aria-hidden="true" className="h-6 w-6 text-muted-foreground" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 text-[15px] font-medium leading-snug text-foreground">
+              {item.qty > 1 && <span className="font-bold">{item.qty}x </span>}
+              {item.produto.name}
+            </p>
+            <button
+              type="button"
+              onClick={onRemover}
+              aria-label={`Remover ${item.produto.name}`}
+              className="-mr-2 -mt-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-destructive transition hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+            >
+              <Trash2 aria-hidden="true" className="h-5 w-5" strokeWidth={1.75} />
+            </button>
+          </div>
+          {destaque && <p className="mt-0.5 text-[13px] italic text-muted-foreground">{destaque}</p>}
+          {escolhas.length > 0 && (
+            <ul className="mt-0.5 space-y-0.5 text-[13px] text-muted-foreground">
+              {escolhas.map((escolha, index) => (
+                <li key={`${escolha.groupId}-${escolha.id}-${index}`}>
+                  <span className="font-semibold text-foreground/80">1x</span> {escolha.name}
+                </li>
+              ))}
+            </ul>
+          )}
+          {item.produto.comboItems?.length ? (
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              Inclui {item.produto.comboItems.map((part) => `${part.quantity}× ${part.name}`).join(" · ")}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between pl-[68px]">
+        <button
+          type="button"
+          onClick={onDuplicar}
+          className="flex min-h-10 items-center gap-2 rounded-lg bg-muted px-3.5 text-sm font-semibold text-foreground transition hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
+          <Copy aria-hidden="true" className="h-4 w-4" />
+          Duplicar
+        </button>
+        <span className="text-[15px] font-bold text-foreground">{formatBRL(item.total)}</span>
+      </div>
+    </li>
+  );
+}
+
+/** Cartão clicável de opção de entrega (endereço salvo ou loja). */
+function CartaoOpcao({ selecionado, onClick, icone, titulo, linhas }: {
+  selecionado: boolean;
+  onClick: () => void;
+  icone: ReactNode;
+  titulo: ReactNode;
+  linhas: string[];
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selecionado}
+      className={`flex w-full items-center gap-3 rounded-2xl border bg-card p-4 text-left transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selecionado ? "border-primary ring-1 ring-primary" : "border-border"}`}
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-primary">
+        {icone}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center text-sm font-semibold text-foreground">{titulo}</span>
+        {linhas.filter(Boolean).map((linha) => (
+          <span key={linha} className="block text-xs leading-relaxed text-muted-foreground">{linha}</span>
+        ))}
+      </span>
+      <ChevronRight aria-hidden="true" className="h-5 w-5 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+function LinhaValor({ rotulo, valor, destaque = false }: { rotulo: string; valor: string; destaque?: boolean }) {
+  return (
+    <div className={`flex justify-between gap-3 ${destaque ? "text-emerald-700" : ""}`}>
+      <span className={destaque ? "" : "text-muted-foreground"}>{rotulo}</span>
+      <span className="font-medium">{valor}</span>
+    </div>
   );
 }
