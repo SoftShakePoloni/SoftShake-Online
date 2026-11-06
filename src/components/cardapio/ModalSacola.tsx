@@ -331,11 +331,13 @@ export function ModalSacola({ open, onOpenChange }: Props) {
     router.push(destino);
   };
 
+  // Mais uma unidade igual: o carrinho junta na mesma linha ("2x"), sem repetir o item.
   const duplicarItem = (item: ItemCarrinho) => {
     const { uid: _uid, ...copia } = item;
     void _uid;
-    adicionarItem(copia);
-    toast.success("Item duplicado");
+    const unitario = Math.round((item.total / item.qty) * 100) / 100;
+    adicionarItem({ ...copia, qty: 1, total: unitario });
+    toast.success(`${item.qty + 1}x ${item.produto.name}`);
   };
 
   const handleVoltar = () => {

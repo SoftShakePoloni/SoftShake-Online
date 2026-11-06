@@ -29,6 +29,45 @@ const CarrinhoContext = createContext<CarrinhoContextType | null>(null);
 
 const STORAGE_KEY = 'carrinho-itens';
 
+/** Limite por linha aceito no checkout (servidor: qty ≤ 100). */
+const MAX_QTY_POR_ITEM = 100;
+const centavos = (valor: number) => Math.round(valor * 100);
+
+/**
+ * Identidade do item: mesmo produto, mesmo preço unitário, mesmas escolhas,
+ * mesma resposta da colher e mesma observação. Itens iguais viram uma linha "2x"
+ * (ocupa menos espaço na comanda da cozinha e da entrega).
+ */
+function chaveItem(item: Omit<ItemCarrinho, "uid">): string {
+  const escolhas = Object.keys(item.selections ?? {})
+    .filter((grupo) => (item.selections[grupo] ?? []).length > 0)
+    .sort()
+    .map((grupo) => `${grupo}:${[...item.selections[grupo]].sort().join(",")}`)
+    .join("|");
+  const unitario = item.qty > 0 ? centavos(item.total / item.qty) : centavos(item.total);
+  return [
+    item.produto.id,
+    unitario,
+    escolhas,
+    typeof item.colher === "boolean" ? String(item.colher) : "-",
+    (item.observacoes ?? "").trim().toLowerCase(),
+  ].join("#");
+}
+
+/** Soma o item a uma linha igual já existente; senão, cria uma linha nova. */
+export function juntarItem(itens: ItemCarrinho[], novo: ItemCarrinho): ItemCarrinho[] {
+  const chave = chaveItem(novo);
+  const index = itens.findIndex(
+    (item) => chaveItem(item) === chave && item.qty + novo.qty <= MAX_QTY_POR_ITEM,
+  );
+  if (index === -1) return [...itens, novo];
+  return itens.map((item, i) =>
+    i === index
+      ? { ...item, qty: item.qty + novo.qty, total: (centavos(item.total) + centavos(novo.total)) / 100 }
+      : item,
+  );
+}
+
 export function CarrinhoProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [cupomAplicado, setCupomAplicado] = useState<CupomCarrinho | null>(null);
@@ -44,8 +83,9 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
       }
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored);
-        setItens(parsed);
+        const parsed = JSON.parse(stored) as ItemCarrinho[];
+        // Sacolas salvas antes da junção podem ter linhas repetidas: junta ao carregar.
+        setItens(Array.isArray(parsed) ? parsed.reduce(juntarItem, [] as ItemCarrinho[]) : []);
       }
     } catch {
       // Erro ao carregar carrinho do localStorage
@@ -74,8 +114,8 @@ export function CarrinhoProvider({ children }: { children: ReactNode }) {
   }, [cupomAplicado, hydrated, itens.length]);
 
   const adicionarItem = (item: Omit<ItemCarrinho, "uid">) => {
-    const uid = `${item.produto.id}-${Date.now()}`;
-    setItens((prev) => [...prev, { ...item, uid }]);
+    const uid = `${item.produto.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setItens((prev) => juntarItem(prev, { ...item, uid }));
   };
 
   const removerItem = (uid: string) => setItens((prev) => prev.filter((i) => i.uid !== uid));
